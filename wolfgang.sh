@@ -15,6 +15,20 @@ debug() {
     echo "[DEBUG] $*" >&2
   fi
 }
+# Process keywords if file is provided
+process_keywords() {
+  local keywords_file="$1"
+  KEYWORDS=""
+  if [ -f "$keywords_file" ] && [ -r "$keywords_file" ]; then
+    while IFS= read -r line; do
+      trimmed=$(echo "$line" | xargs)
+      if [ -n "$trimmed" ]; then
+        KEYWORDS+="$trimmed-"
+      fi
+    done <"$keywords_file"
+    KEYWORDS=${KEYWORDS%?} # Remove trailing hyphen
+  fi
+}
 
 convert() {
   # Ensure input path is absolute
@@ -58,6 +72,9 @@ convert() {
     width=$(identify -format "%w" "$img")
     height=$(identify -format "%h" "$img")
 
+    # Generate timestamp (hhmmss)
+    TIMESTAMP=$(date +"%H%M%S")
+
     # Resize command based on aspect ratio
     if [ "$width" -gt "$height" ]; then
       convert_cmd="-resize ${MAX_SIZE}x\> -quality 90"
@@ -66,8 +83,8 @@ convert() {
     fi
 
     # Convert images
-    magick "$img" $convert_cmd "resized_jpg/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}${FILE_BASE}.jpg"
-    magick "$img" $convert_cmd "resized_webp/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}${FILE_BASE}.webp"
+    magick "$img" $convert_cmd "resized_jpg/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}-${TIMESTAMP}-${FILE_BASE}.jpg"
+    magick "$img" $convert_cmd "resized_webp/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}-${TIMESTAMP}-${FILE_BASE}.webp"
 
     echo "✔ Verarbeitet: $REL_PATH → resized_jpg/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}${FILE_BASE}.jpg & resized_webp/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}${FILE_BASE}.webp"
   done
@@ -90,6 +107,7 @@ wizard_mode() {
   fi
 
   # Benutzer fragt nach der maximalen Seitenlänge (nur Zahlen erlauben)
+  echo "---------------------------------------"
   while true; do
     read -rp "Gib nun die maximale Seitenlänge(quer oder hoch) der Bilder in Pixel ein (z. B. 1400): " MAX_SIZE
     if [[ "$MAX_SIZE" =~ ^[0-9]+$ ]]; then
@@ -99,6 +117,27 @@ wizard_mode() {
     fi
   done
 
+  echo "---------------------------------------"
+  # Benutzer gibt den Pfad zur Markdown-Datei ein
+  while true; do
+    read -rp "Gib den Pfad zur Keywords-Datei (.md) ein, leer lassen falls unerwünscht:" KEYWORD_FILE
+
+    # Prüfen, ob die Eingabe leer ist
+    if [[ -z "$KEYWORD_FILE" ]]; then
+      break
+    fi
+
+    # Prüfen, ob die Datei existiert und eine .md Datei ist
+    if [[ ! -f "$KEYWORD_FILE" || "${KEYWORD_FILE##*.}" != "md" ]]; then
+      echo "Fehler: Die Datei existiert nicht oder ist keine Markdown-Datei (.md)!" >&2
+      continue
+    fi
+
+    # Falls alles passt, aus der Schleife ausbrechen
+    break
+  done
+
+  echo "---------------------------------------"
   # Loop until the user enters 'y' or 'n'
   while true; do
     echo "Soll der alte Dateiname am Ende des neuen Dateinamens eingefügt werden? (y/n)"
@@ -201,9 +240,6 @@ elif [[ ${#POSITIONAL_ARGS[@]} -eq 1 ]]; then
   INPUT_PATH="${POSITIONAL_ARGS[0]}"
 fi
 
-# Ensure input path is absolute
-INPUT_PATH=$(readlink -f "$INPUT_PATH")
-
 # Debug final configuration
 debug "Final Configuration:"
 debug "  MAX_SIZE: $MAX_SIZE"
@@ -212,25 +248,5 @@ debug "  ADD_OLD_FILENAME: $ADD_OLD_FILENAME"
 debug "  INPUT_PATH: $INPUT_PATH"
 debug "  CUSTOM_BASE: $CUSTOM_BASE"
 debug "  DEBUG: $DEBUG"
-
-# Process keywords if file is provided
-if [[ -n "$KEYWORDS_FILE" ]]; then
-  process_keywords "$KEYWORDS_FILE"
-fi
-
-# Process keywords if file is provided
-process_keywords() {
-  local keywords_file="$1"
-  KEYWORDS=""
-  if [ -f "$keywords_file" ] && [ -r "$keywords_file" ]; then
-    while IFS= read -r line; do
-      trimmed=$(echo "$line" | xargs)
-      if [ -n "$trimmed" ]; then
-        KEYWORDS+="$trimmed-"
-      fi
-    done <"$keywords_file"
-    KEYWORDS=${KEYWORDS%?} # Remove trailing hyphen
-  fi
-}
 
 convert
