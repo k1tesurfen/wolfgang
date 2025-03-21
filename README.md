@@ -1,6 +1,15 @@
 # WOLFGANG - Web Optimized Lightweight Fast Graphics Analyser and Generator
 
-Ein Helfertool, das Bilder mit Hilfe von imagemagick für das Web optimiert.
+Small little tool to prepare images for web use with [imagemagick](https://imagemagick.org/)
+
+## Prerequisites
+
+- [imagemagick](https://imagemagick.org/):
+  for macos see: <https://formulae.brew.sh/formula/imagemagick#default>
+  for linux check your corresponding package managers
+  for windows, switch to either of the ones above
+
+## Installation
 
 USAGE: wolfgang [OPTIONS] [INPUT_PATH]
 
