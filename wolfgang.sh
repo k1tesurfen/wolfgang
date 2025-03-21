@@ -6,7 +6,7 @@ ADD_OLD_FILENAME="n"
 KEYWORDS=""
 KEYWORDS_FILE=""
 INPUT_PATH="."
-CUSTOM_BASE="wb"
+CUSTOM_BASE="image"
 DEBUG="false"
 
 # Debug function
@@ -40,7 +40,7 @@ convert() {
   fi
 
   # Resize and convert
-  echo "Verarbeitung startet mit Basisnamen '$CUSTOM_BASE' und maximaler Seitenlänge von $MAX_SIZE Pixel..."
+  echo "Start converting images - Prefix: '$CUSTOM_BASE', longer image side: $MAX_SIZE px..."
   echo "---------------------------------------"
 
   # Ensure output directories exist
@@ -90,57 +90,55 @@ convert() {
   done
 
   echo "---------------------------------------"
-  echo "✅ Alle Bilder wurden erfolgreich verarbeitet!"
+  echo "✅ All images converted successfully!"
 
 }
 
 # Placeholder for wizard mode (define it properly)
 wizard_mode() {
-  echo "Willkommen zum Bildoptimierer für's Web!"
+  echo "Welcome! Let's prepare some images for the web"
   echo "---------------------------------------"
 
   # Benutzer fragt nach dem Basisnamen für die Dateien
-  read -rp "Gib den Basisnamen für die Ausgabedateien ein (z. B. 'artismedia'): " CUSTOM_BASE
+  read -rp "Enter the base name for your output files (e. g. 'converted_'): " CUSTOM_BASE
   if [[ -z "$CUSTOM_BASE" ]]; then
     echo "Fehler: Basisname darf nicht leer sein!" >&2
     exit 1
   fi
 
-  # Benutzer fragt nach der maximalen Seitenlänge (nur Zahlen erlauben)
   echo "---------------------------------------"
   while true; do
-    read -rp "Gib nun die maximale Seitenlänge(quer oder hoch) der Bilder in Pixel ein (z. B. 1400): " MAX_SIZE
+    read -rp "Enter pixel value for the longer side of the image (e.g. 1400): " MAX_SIZE
     if [[ "$MAX_SIZE" =~ ^[0-9]+$ ]]; then
       break
     else
-      echo "Fehler: Bitte geben Sie eine gültige Zahl ein!"
+      echo "ERROR: Please enter a valid number!"
     fi
   done
 
   echo "---------------------------------------"
   # Benutzer gibt den Pfad zur Markdown-Datei ein
   while true; do
-    read -rp "Gib den Pfad zur Keywords-Datei (.md) ein, leer lassen falls unerwünscht:" KEYWORD_FILE
+    read -rp "Input the path to the markdown file (.md), leave empty to skip:" KEYWORD_FILE
 
     # Prüfen, ob die Eingabe leer ist
     if [[ -z "$KEYWORD_FILE" ]]; then
       break
     fi
 
-    # Prüfen, ob die Datei existiert und eine .md Datei ist
+    #Check if file is md file
     if [[ ! -f "$KEYWORD_FILE" || "${KEYWORD_FILE##*.}" != "md" ]]; then
-      echo "Fehler: Die Datei existiert nicht oder ist keine Markdown-Datei (.md)!" >&2
+      echo "ERROR: File could not be recognised as markdown file (.md)!" >&2
       continue
     fi
 
-    # Falls alles passt, aus der Schleife ausbrechen
     break
   done
 
   echo "---------------------------------------"
   # Loop until the user enters 'y' or 'n'
   while true; do
-    echo "Soll der alte Dateiname am Ende des neuen Dateinamens eingefügt werden? (y/n)"
+    echo "Should the old filename be appended to the new one? (y/n)"
     read -n 1 ADD_OLD_FILENAME # Read one character without waiting for Enter
     echo                       # Print a newline
 
@@ -152,7 +150,7 @@ wizard_mode() {
       break
       ;;
     *)
-      echo "Ungültige Eingabe. Bitte 'Y' oder 'N' eingeben."
+      echo "Please use 'Y' or 'N' to proceed."
       ;;
     esac
   done
@@ -168,18 +166,16 @@ show_help() {
   echo "USAGE: wolfgang [OPTIONS] [INPUT_PATH]"
   echo ""
   echo "OPTIONS:"
-  echo "  -n, --name                Custom Präfix für Dateinamen"
-  echo "  -h, --help, -man, --man   Hilfe-Nachricht anzeigen"
-  echo "  -d, --dimension PIXEL     Maximale Seitenlänge in Pixel (Standard: 1400)"
-  echo "  -k, --keywords FILE       Pfad zur Keyword Datei."
-  echo "                            (Falls Keyword Datei in deinem aktuellen Verzeichnis ist,"
-  echo "                            dann reicht einfach nur dateiname.md)"
+  echo "  -n, --name                Custom prefix for resulting files"
+  echo "  -h, --help, -man, --man   This help message"
+  echo "  -d, --dimension PIXEL     Longest side in pixels (Default: 1400)"
+  echo "  -k, --keywords FILE       Path to keywords file"
   echo "  -a, --append              Ursprünglichen Dateinamen anhängen"
   echo "  --debug                   Detaillierte Debug-Ausgaben aktivieren"
   echo ""
-  echo "ARGUMENTE:"
-  echo "  INPUT_PATH                Verzeichnis mit zu optimierenden Bildern"
-  echo "                            (Standard: Aktuelles Verzeichnis)"
+  echo "ARGUMENTS:"
+  echo "  INPUT_PATH                Directory that contains the images to convert"
+  echo "                            (Default: Current directory)"
   exit 0
 }
 
@@ -219,7 +215,7 @@ while [[ $# -gt 0 ]]; do
     shift
     ;;
   -*)
-    echo "❌ Unbekannte Option: $1"
+    echo "❌ unknown option: $1"
     exit 1
     ;;
   *)
@@ -234,7 +230,7 @@ set -- "${POSITIONAL_ARGS[@]}"
 
 # Handle input path
 if [[ ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
-  echo "❌ Zu viele Argumente. Verwenden Sie --help für Nutzungsinformationen."
+  echo "❌ Too many arguments. See --help for all possible options."
   exit 1
 elif [[ ${#POSITIONAL_ARGS[@]} -eq 1 ]]; then
   INPUT_PATH="${POSITIONAL_ARGS[0]}"
