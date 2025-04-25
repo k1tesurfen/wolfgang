@@ -86,7 +86,7 @@ convert() {
     magick "$img" $convert_cmd "resized_jpg/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}-${TIMESTAMP}-${FILE_BASE}.jpg"
     magick "$img" $convert_cmd "resized_webp/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}-${TIMESTAMP}-${FILE_BASE}.webp"
 
-    echo "✔ Verarbeitet: $REL_PATH → resized_jpg/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}${FILE_BASE}.jpg & resized_webp/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}${FILE_BASE}.webp"
+    echo "✔ Converted: $REL_PATH → resized_jpg/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}${FILE_BASE}.jpg & resized_webp/$DIR_PATH/${CUSTOM_BASE}-${KEYWORDS}${FILE_BASE}.webp"
   done
 
   echo "---------------------------------------"
@@ -102,7 +102,7 @@ wizard_mode() {
   # Benutzer fragt nach dem Basisnamen für die Dateien
   read -rp "Enter the base name for your output files (e. g. 'converted_'): " CUSTOM_BASE
   if [[ -z "$CUSTOM_BASE" ]]; then
-    echo "Fehler: Basisname darf nicht leer sein!" >&2
+    echo "ERROR: Basename is required." >&2
     exit 1
   fi
 
@@ -182,7 +182,6 @@ show_help() {
 # Check if no arguments are given, start wizard mode
 if [[ $# -eq 0 ]]; then
   wizard_mode
-  exit 0
 fi
 
 # Positional arguments array
