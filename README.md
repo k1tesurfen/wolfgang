@@ -5,13 +5,16 @@ Small little tool to prepare images for web use with [imagemagick](https://image
 ## Prerequisites
 
 - [imagemagick](https://imagemagick.org/):
-  for macos see: <https://formulae.brew.sh/formula/imagemagick#default>
-  for linux check your corresponding package managers
-  for windows, switch to either of the ones above
+  - for macos see: <https://formulae.brew.sh/formula/imagemagick#default>
+  - for linux check your corresponding package managers
+  - for windows, switch to either of the ones before
 
 ## Installation
 
-USAGE: wolfgang [OPTIONS] [INPUT_PATH]
+To install a bash script system wide on your MacOS machine you can place it in `/usr/local/bin/`.
+Make sure the file is executable and run `chmod +x wolfgang.sh`. You can check if the file is executable by running `stat wolfgang.sh` or `ls -la` in your terminal.
+
+USAGE: `wolfgang [OPTIONS] [INPUT_PATH]`
 
 OPTIONS:
 -n, --name Custom Präfix für Dateinamen
