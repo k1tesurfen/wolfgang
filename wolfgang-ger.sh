@@ -4,14 +4,14 @@
 MAX_SIZE=1400
 ADD_OLD_FILENAME="n"
 INPUT_PATH="."
-CUSTOM_BASE="image"
+CUSTOM_BASE="bild" # Changed default to German
 DEBUG="false"
-RESET_LOG_REQUESTED="false" # Flag for the new reset option
+RESET_LOG_REQUESTED="false"
 
 # Debug function
 debug() {
   if [[ "$DEBUG" == "true" ]]; then
-    echo "[DEBUG] $*" >&2
+    echo "[DEBUG] $*" >&2 # Debug output remains in English for technical users
   fi
 }
 
@@ -61,11 +61,11 @@ reset_log() {
   local abs_target_input_path
 
   if [[ -z "$target_input_path" ]]; then
-    target_input_path="." # Default to current directory if not specified
+    target_input_path="."
   fi
 
   if ! abs_target_input_path=$(readlink -f "$target_input_path"); then
-    echo "❌ Error: Input path '$target_input_path' for reset is not valid or does not exist." >&2
+    echo "❌ Fehler: Eingabepfad '$target_input_path' für das Zurücksetzen ist ungültig oder existiert nicht." >&2
     exit 1
   fi
 
@@ -76,13 +76,13 @@ reset_log() {
 
   if [[ -f "$log_to_reset" ]]; then
     if rm "$log_to_reset"; then
-      echo "✅ Log file '$log_to_reset' has been successfully deleted."
+      echo "✅ Log-Datei '$log_to_reset' wurde erfolgreich gelöscht."
     else
-      echo "❌ Error: Failed to delete log file '$log_to_reset'. Check permissions." >&2
+      echo "❌ Fehler: Log-Datei '$log_to_reset' konnte nicht gelöscht werden. Berechtigungen prüfen." >&2
       exit 1
     fi
   else
-    echo "ℹ️ Log file '$log_to_reset' not found. Nothing to reset."
+    echo "ℹ️ Log-Datei '$log_to_reset' nicht gefunden. Nichts zum Zurücksetzen."
   fi
   exit 0
 }
@@ -98,7 +98,7 @@ convert() {
 
   local JQ_AVAILABLE="true"
   if ! command -v jq &>/dev/null; then
-    echo "⚠️ Warning: jq command not found. Run logging and skipping previously logged files will be disabled." >&2
+    echo "⚠️ Warnung: Befehl 'jq' nicht gefunden. Protokollierung und Überspringen bereits protokollierter Dateien wird deaktiviert." >&2
     JQ_AVAILABLE="false"
   fi
 
@@ -132,9 +132,9 @@ convert() {
     debug "No global keyword file found in $CWD or it was not a regular file."
   fi
 
-  echo "Start converting images - Prefix: '$CUSTOM_BASE', longer image side: $MAX_SIZE px..."
+  echo "Starte Bildkonvertierung - Präfix: '$CUSTOM_BASE', längere Bildseite: $MAX_SIZE px..."
   if [[ -n "$GLOBAL_KEYWORDS_STRING" ]]; then
-    echo "Global keywords active (from $global_keyword_file_path): $GLOBAL_KEYWORDS_STRING"
+    echo "Globale Schlüsselwörter aktiv (aus $global_keyword_file_path): $GLOBAL_KEYWORDS_STRING"
   fi
   echo "---------------------------------------"
 
@@ -159,7 +159,7 @@ convert() {
     if [[ "$JQ_AVAILABLE" == "true" && -s "$log_file_path" ]]; then
       if jq -e --arg OPATH "$img_abs_path" 'select(.converted_files[]?.original_path == $OPATH)' "$log_file_path" >/dev/null; then
         debug "Skipping '$img_abs_path' as it is logged as previously converted (jq check)."
-        echo "ℹ️ Already processed (logged): $img_abs_path"
+        echo "ℹ️ Bereits verarbeitet (protokolliert): $img_abs_path"
         continue
       fi
     fi
@@ -238,7 +238,7 @@ convert() {
     width=$(identify -format "%w" "$img_abs_path")
     height=$(identify -format "%h" "$img_abs_path")
     if [[ -z "$width" || -z "$height" ]]; then
-      echo "⚠️ Could not get dimensions for $img_abs_path. Skipping."
+      echo "⚠️ Dimensionen für $img_abs_path konnten nicht ermittelt werden. Werden übersprungen."
       continue
     fi
 
@@ -277,7 +277,7 @@ convert() {
       debug "Collision for ${candidate_base_name}.jpg. Attempting with suffix: $current_filetimestamp_suffix"
 
       if [[ "$iterator" -gt 100 ]]; then
-        echo "⚠️ Critical: Could not find unique filename for '$img_abs_path' after $iterator attempts. Skipping." >&2
+        echo "⚠️ Kritisch: Konnte nach $iterator Versuchen keinen eindeutigen Dateinamen für '$img_abs_path' finden. Überspringe dieses Bild." >&2
         skip_current_image="true"
         break
       fi
@@ -307,7 +307,7 @@ convert() {
       debug "Successfully converted '$img_abs_path' to '$output_jpg_abs_path'"
       success_jpg=true
     else
-      echo "❌ Error converting '$img_abs_path' to JPG. magick exit code: $?" >&2
+      echo "❌ Fehler beim Konvertieren von '$img_abs_path' zu JPG. Magick Exit-Code: $?" >&2
     fi
 
     debug "Converting '$img_abs_path' to '$output_webp_abs_path'"
@@ -315,7 +315,7 @@ convert() {
       debug "Successfully converted '$img_abs_path' to '$output_webp_abs_path'"
       success_webp=true
     else
-      echo "❌ Error converting '$img_abs_path' to WebP. magick exit code: $?" >&2
+      echo "❌ Fehler beim Konvertieren von '$img_abs_path' zu WebP. Magick Exit-Code: $?" >&2
     fi
 
     if [[ "$success_jpg" == true || "$success_webp" == true ]] && [[ "$JQ_AVAILABLE" == "true" ]]; then
@@ -333,7 +333,7 @@ convert() {
 
     local user_msg_jpg_path="resized_jpg/${output_jpg_rel_path}"
     local user_msg_webp_path="resized_webp/${output_webp_rel_path}"
-    echo "✔ Converted: $REL_PATH → $FOLDERTIMESTAMP_NAME/$user_msg_jpg_path & $FOLDERTIMESTAMP_NAME/$user_msg_webp_path"
+    echo "✔ Konvertiert: $REL_PATH → $FOLDERTIMESTAMP_NAME/$user_msg_jpg_path & $FOLDERTIMESTAMP_NAME/$user_msg_webp_path"
   done < <(find "$abs_input_path" \
     \( -type d -name "*-${output_id}" -prune \) -o \
     \( -type d -name ".git" -prune \) -o \
@@ -372,14 +372,14 @@ convert() {
   fi
 
   echo "---------------------------------------"
-  echo "✅ All images converted successfully! Output is in '$output_folder_path'."
+  echo "✅ Alle Bilder erfolgreich konvertiert! Ausgabe im Ordner '$output_folder_path'."
   if [[ "$JQ_AVAILABLE" == "true" ]]; then
-    echo "ℹ️ Run details logged to: $log_file_path"
+    echo "ℹ️ Details des Durchlaufs sind hier protokolliert: $log_file_path"
   fi
 }
 
 wizard_mode() {
-  echo "Welcome! Let's prepare some images for the web"
+  echo "Moin! Lass uns ein paar Bilder fürs Web vorbereiten."
 
   local current_input_path_for_log
   current_input_path_for_log=$(readlink -f "$INPUT_PATH")
@@ -404,7 +404,7 @@ wizard_mode() {
 
     if [[ "$preset_count" -gt 0 ]]; then
       echo "---------------------------------------"
-      echo "You ran wolfgang previously in this directory with the following settings:"
+      echo "Du hast Wolfgang schonmal in diesem Verzeichnis mit folgenden Einstellungen ausgeführt:"
       declare -a displayed_options_cb
       declare -a displayed_options_ms
       declare -a displayed_options_aof
@@ -420,14 +420,14 @@ wizard_mode() {
         displayed_options_aof+=("$aof")
 
         local aof_display="n"
-        if [[ "$aof" == "y" ]]; then aof_display="y"; fi
-        echo "$((i + 1))) Prefix: '$cb', Dimension: $ms px, Append Filename: $aof_display"
+        if [[ "$aof" == "y" ]]; then aof_display="j"; fi # j for Ja
+        echo "$((i + 1))) Präfix: '$cb', Dimension: $ms px, Dateiname anhängen: $aof_display"
       done
 
       while true; do
-        read -rp "Select one of these presets (1-$preset_count) or skip with (N)o: " user_choice
+        read -rp "Wähle eine dieser Voreinstellungen (1-$preset_count) oder überspringen mit (N)ein: " user_choice
         if [[ "$user_choice" =~ ^[Nn]$ ]]; then
-          echo "Proceeding with manual settings input."
+          echo "Wir fahren mit manueller Eingabe der Einstellungen fort."
           settings_from_preset="false"
           break
         elif [[ "$user_choice" =~ ^[0-9]+$ && "$user_choice" -ge 1 && "$user_choice" -le "$preset_count" ]]; then
@@ -435,11 +435,13 @@ wizard_mode() {
           CUSTOM_BASE="${displayed_options_cb[$selected_index]}"
           MAX_SIZE="${displayed_options_ms[$selected_index]}"
           ADD_OLD_FILENAME="${displayed_options_aof[$selected_index]}"
-          echo "Using preset: Prefix: '$CUSTOM_BASE', Dimension: $MAX_SIZE px, Append Filename: $ADD_OLD_FILENAME"
+          local aof_confirm_display="n"
+          if [[ "$ADD_OLD_FILENAME" == "y" ]]; then aof_confirm_display="j"; fi
+          echo "Voreinstellung verwendet: Präfix: '$CUSTOM_BASE', Dimension: $MAX_SIZE px, Dateiname anhängen: $aof_confirm_display"
           settings_from_preset="true"
           break
         else
-          echo "Invalid selection. Please enter a number between 1 and $preset_count, or N."
+          echo "Ungültige Auswahl. Bitte geben Sie eine Zahl zwischen 1 und $preset_count ein, oder N."
         fi
       done
     fi
@@ -450,25 +452,25 @@ wizard_mode() {
   echo "---------------------------------------"
 
   if [[ "$settings_from_preset" != "true" ]]; then
-    read -rp "Enter the base name for your output files (e. g. 'converted_'): " CUSTOM_BASE
+    read -rp "Gebe den Basisnamen für deine Bilder ein (z.B. 'arismedia_'): " CUSTOM_BASE
     if [[ -z "$CUSTOM_BASE" ]]; then
-      echo "ERROR: Basename is required." >&2
+      echo "FEHLER: Basisname ist erforderlich." >&2
       exit 1
     fi
     echo "---------------------------------------"
 
     while true; do
-      read -rp "Enter pixel value for the longer side of the image (e.g. 1400): " MAX_SIZE
-      if [[ "$MAX_SIZE" =~ ^[0-9]+$ && "$MAX_SIZE" -gt 0 ]]; then break; else echo "ERROR: Please enter a valid positive number!"; fi
+      read -rp "Geb den Pixelwert für die längere Seite des Bildes an (z.B. 1400): " MAX_SIZE
+      if [[ "$MAX_SIZE" =~ ^[0-9]+$ && "$MAX_SIZE" -gt 0 ]]; then break; else echo "NICHT GANZ: Bitte geb eine gültige positive Zahl ein!"; fi
     done
     echo "---------------------------------------"
 
     while true; do
-      echo "Should the old filename be appended to the new one? (y/n)"
+      echo "Soll der alte Dateiname an den neuen angehängt werden? (j/n)"
       read -n 1 -r user_aof_choice
       echo
       case "$user_aof_choice" in
-      [Yy])
+      [JjYy]) # Accept j/J for Ja and y/Y for Yes
         ADD_OLD_FILENAME="y"
         break
         ;;
@@ -476,15 +478,15 @@ wizard_mode() {
         ADD_OLD_FILENAME="n"
         break
         ;;
-      *) echo "Please use 'Y' or 'N' to proceed." ;;
+      *) echo "Bitte 'j' oder 'n', um fortzufahren." ;;
       esac
     done
   fi
 
   echo "---------------------------------------"
-  echo "Keywords will be automatically detected:"
-  echo "  - Global keywords: From the last modified *.txt file in the current directory (where script is run)."
-  echo "  - Local keywords: From the last modified *.txt file in each image's own directory."
+  echo "Schlüsselwörter werden automatisch erkannt:"
+  echo "  - Globale Schlüsselwörter: Aus der zuletzt geänderten *.txt-Datei im aktuellen Verzeichnis (wo das Skript ausgeführt wird)."
+  echo "  - Lokale Schlüsselwörter: Aus der zuletzt geänderten *.txt-Datei im jeweiligen Bildverzeichnis."
   echo "---------------------------------------"
 
   convert
@@ -492,61 +494,59 @@ wizard_mode() {
 }
 
 show_help() {
-  echo "WOLFGANG - Web Optimized Lightweight Fast Graphics Analyser and Generator"
+  echo "WOLFGANG - Web Optimierte Leichtgewichtige Schnelle Grafiken Analysator und Generator"
   echo ""
-  echo "USAGE: wolfgang [OPTIONS] [INPUT_PATH]"
+  echo "VERWENDUNG: wolfgang [OPTIONEN] [EINGABEPFAD]"
   echo ""
-  echo "OPTIONS:"
-  echo "  -n, --name BASENAME        Custom prefix for resulting files (Default: '$CUSTOM_BASE')"
-  echo "  -h, --help, -man, --man    This help message"
-  echo "  -d, --dimension PIXEL      Longest side in pixels (Default: $MAX_SIZE)"
-  echo "  -a, --append               Append the original filename (without extension) to the new name."
-  echo "  -r, --reset                Deletes the .wolfgang_run_log.jsonl in the INPUT_PATH (or current dir)." # New help text
-  echo "  --debug                    Enable detailed debug output."
+  echo "OPTIONEN:"
+  echo "  -n, --name BASISNAME       Benutzerdefiniertes Präfix für Ergebnisdateien (Standard: '$CUSTOM_BASE')"
+  echo "  -h, --help, -man, --man    Diese Hilfemeldung"
+  echo "  -d, --dimension PIXEL      Längste Seite in Pixeln (Standard: $MAX_SIZE)"
+  echo "  -a, --append               Hängt den ursprünglichen Dateinamen (ohne Erweiterung) an den neuen Namen an."
+  echo "  -r, --reset                Löscht die .wolfgang_run_log.jsonl im EINGABEPFAD (oder aktuellem Verzeichnis)."
+  echo "  --debug                    Aktiviert detaillierte Debug-Ausgabe."
   echo ""
-  echo "KEYWORD DETECTION:"
-  echo "  Keywords are automatically detected from '*.txt' files:"
-  echo "  1. Global Keywords: The last modified '*.txt' file found in the directory"
-  echo "     where the script is run provides global keywords for all images."
-  echo "  2. Local Keywords: For each image, the last modified '*.txt' file in its"
-  echo "     own directory provides local keywords for that image and others in the same directory."
-  echo "     (If this file is the same as the global keyword file, it's not re-added)."
-  echo "  Keywords within these files should be one per line. Words on a single line will be joined by underscores."
+  echo "SCHLÜSSELWORTERKENNUNG:"
+  echo "  Schlüsselwörter werden automatisch aus '*.txt'-Dateien erkannt:"
+  echo "  1. Globale Schlüsselwörter: Die zuletzt geänderte '*.txt'-Datei im Verzeichnis,"
+  echo "     in dem das Skript ausgeführt wird, liefert globale Schlüsselwörter für alle Bilder."
+  echo "  2. Lokale Schlüsselwörter: Für jedes Bild liefert die zuletzt geänderte '*.txt'-Datei"
+  echo "     in seinem eigenen Verzeichnis lokale Schlüsselwörter für dieses Bild und andere im selben Verzeichnis."
+  echo "     (Wenn diese Datei mit der globalen Schlüsselwortdatei identisch ist, wird sie nicht erneut hinzugefügt)."
+  echo "  Schlüsselwörter in diesen Dateien sollten zeilenweise angegeben werden. Wörter in einer Zeile werden mit Unterstrichen verbunden."
   echo ""
-  echo "OUTPUT FOLDER:"
-  echo "  Converted images are saved in a directory named 'YYYY-MM-DD_HH-M-SS-wolfgang' (created in current dir)."
-  echo "  The script will automatically skip any subdirectories ending with '-wolfgang' to avoid reprocessing."
+  echo "AUSGABEORDNER:"
+  echo "  Konvertierte Bilder werden in einem Ordner namens 'JJJJ-MM-TT_HH-MM-SS-wolfgang' gespeichert (erstellt im aktuellen Verzeichnis)."
+  echo "  Das Skript überspringt automatisch alle Unterverzeichnisse, die auf '-wolfgang' enden, um eine erneute Verarbeitung zu vermeiden."
   echo ""
-  echo "RUN LOGGING (Requires 'jq' command-line JSON processor):"
-  echo "  If 'jq' is installed, each run's settings and processed files are logged to '.wolfgang_run_log.jsonl'"
-  echo "  in the root of the INPUT_PATH. The script will use this log to skip already converted original files."
-  echo "  Wizard mode will offer to reuse settings from previous runs in the current directory if available."
+  echo "PROTOKOLLIERUNG (Benötigt 'jq' Kommandozeilen-JSON-Prozessor):"
+  echo "  Wenn 'jq' installiert ist, werden die Einstellungen jedes Durchlaufs und die verarbeiteten Dateien in '.wolfgang_run_log.jsonl'"
+  echo "  im Stammverzeichnis des EINGABEPFADS protokolliert. Das Skript verwendet dieses Protokoll, um bereits konvertierte Originaldateien zu überspringen."
+  echo "  Der Assistentenmodus bietet an, Einstellungen von früheren Durchläufen im aktuellen Verzeichnis wiederzuverwenden, falls verfügbar."
   echo ""
-  echo "ARGUMENTS:"
-  echo "  INPUT_PATH                 Directory that contains the images to convert"
-  echo "                             (Default: Current directory)"
+  echo "ARGUMENTE:"
+  echo "  EINGABEPFAD                Verzeichnis, das die zu konvertierenden Bilder enthält"
+  echo "                             (Standard: Aktuelles Verzeichnis)"
   exit 0
 }
 
-# Argument parsing starts here
-# Store original number of arguments to distinguish between no args (wizard) and args processed to zero
 original_arg_count=$#
 
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
   -h | --help | -man | --man) show_help ;;
-  -r | --reset) # New option
+  -r | --reset)
     RESET_LOG_REQUESTED="true"
     shift
     ;;
   -d | --dimension)
     if [[ -z "$2" || "$2" == -* ]]; then
-      echo "❌ Error: Missing value for $1 option." >&2
+      echo "❌ Fehler: Fehlender Wert für Option $1." >&2
       exit 1
     fi
     if ! [[ "$2" =~ ^[0-9]+$ && "$2" -gt 0 ]]; then
-      echo "❌ Error: Dimension value for $1 must be a positive integer. Got: '$2'" >&2
+      echo "❌ Fehler: Dimensionswert für $1 muss eine positive Ganzzahl sein. Erhalten: '$2'" >&2
       exit 1
     fi
     MAX_SIZE="$2"
@@ -554,7 +554,7 @@ while [[ $# -gt 0 ]]; do
     ;;
   -n | --name)
     if [[ -z "$2" || "$2" == -* ]]; then
-      echo "❌ Error: Missing value for $1 option." >&2
+      echo "❌ Fehler: Fehlender Wert für Option $1." >&2
       exit 1
     fi
     CUSTOM_BASE="$2"
@@ -569,7 +569,7 @@ while [[ $# -gt 0 ]]; do
     shift
     ;;
   -*)
-    echo "❌ Unknown option: $1"
+    echo "❌ Unbekannte Option: $1"
     show_help
     exit 1
     ;;
@@ -581,24 +581,18 @@ while [[ $# -gt 0 ]]; do
 done
 set -- "${POSITIONAL_ARGS[@]}"
 
-# Determine INPUT_PATH from positional arguments or default
 if [[ ${#POSITIONAL_ARGS[@]} -eq 1 ]]; then
   INPUT_PATH="${POSITIONAL_ARGS[0]}"
 elif [[ ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
-  echo "❌ Too many arguments. Only one INPUT_PATH is allowed. See --help."
+  echo "❌ Zu viele Argumente. Nur ein EINGABEPFAD ist erlaubt. Siehe --help."
   exit 1
 else
-  # If no positional args, INPUT_PATH remains its default "."
-  # This is fine for -reset and wizard_mode if no path is given.
-  : # No-op, INPUT_PATH is already "." if not overridden
+  :
 fi
 
-# --- Execution Control ---
-
-# Handle -reset first if requested
 if [[ "$RESET_LOG_REQUESTED" == "true" ]]; then
   debug "Reset log requested for INPUT_PATH: $INPUT_PATH"
-  reset_log "$INPUT_PATH" # reset_log will exit
+  reset_log "$INPUT_PATH"
 fi
 
 debug "Initial Configuration (after potential wizard/args):"
@@ -609,19 +603,15 @@ debug "  CUSTOM_BASE: $CUSTOM_BASE"
 debug "  DEBUG: $DEBUG"
 debug "  CWD for global keywords & output folder: $(pwd)"
 
-# Decide whether to run wizard or convert based on original argument count
 if [[ "$original_arg_count" -eq 0 ]]; then
-  # No arguments were passed initially, run wizard mode
-  wizard_mode # wizard_mode calls convert and exits
+  wizard_mode
 else
-  # Arguments were passed (and it wasn't just -reset, as that would have exited)
-  # Validate INPUT_PATH if it was set from an argument
-  if [[ "${#POSITIONAL_ARGS[@]}" -eq 1 || (-n "$INPUT_PATH" && "$INPUT_PATH" != ".") ]]; then # Check if INPUT_PATH was explicitly set
+  if [[ "${#POSITIONAL_ARGS[@]}" -eq 1 || (-n "$INPUT_PATH" && "$INPUT_PATH" != ".") ]]; then
     if ! temp_abs_input_path=$(readlink -f "$INPUT_PATH"); then
-      echo "❌ Error: Input path '$INPUT_PATH' is not a valid directory or does not exist." >&2
+      echo "❌ Fehler: Eingabepfad '$INPUT_PATH' ist kein gültiges Verzeichnis oder existiert nicht." >&2
       exit 1
     elif [[ ! -d "$temp_abs_input_path" ]]; then
-      echo "❌ Error: Input path '$INPUT_PATH' ('$temp_abs_input_path') is not a directory." >&2
+      echo "❌ Fehler: Eingabepfad '$INPUT_PATH' ('$temp_abs_input_path') ist kein Verzeichnis." >&2
       exit 1
     fi
   fi
