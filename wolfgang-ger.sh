@@ -338,7 +338,7 @@ convert() {
     \( -type d -name "*-${output_id}" -prune \) -o \
     \( -type d -name ".git" -prune \) -o \
     \( -type d -name ".DS_Store" -prune \) -o \
-    \( -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.gif" -o -iname "*.tif" -o -iname "*.tiff" \) -print0 \))
+    \( -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.heic" -o -iname "*.gif" -o -iname "*.tif" -o -iname "*.tiff" \) -print0 \))
 
   if [[ "$JQ_AVAILABLE" == "true" ]]; then
     debug "Final processed_files_json_array before logging run: $processed_files_json_array"

@@ -11,8 +11,7 @@ Small little tool to prepare images for web use with [imagemagick](https://image
 
 ## Installation
 
-To install a bash script system wide on your MacOS machine you can place it in `/usr/local/bin/`.
-Make sure the file is executable and run `chmod +x wolfgang.sh`. You can check if the file is executable by running `stat wolfgang.sh` or `ls -la` in your terminal.
+Use the installer script to install wolfgang and it's dependencies.
 
 USAGE: `wolfgang [OPTIONS] [INPUT_PATH]`
 
