@@ -54,20 +54,69 @@ generate_keyword_string_from_file() {
   echo "$keywords_output"
 }
 
-# Function to reset/delete the Wolfgang run log file
-# $1: The base input path where the log file is expected
+# Function to reset/delete the Wolfgang run log file AND revert original filenames
+# $1: The base input path where the log file and indexed images are located
 reset_log() {
   local target_input_path="$1"
   local abs_target_input_path
+  local renamed_count=0
+  local skipped_count=0
+  local output_id="wolfgang" # Used to identify and ignore output folders
 
   if [[ -z "$target_input_path" ]]; then
     target_input_path="." # Default to current directory if not specified
   fi
 
+  # Assuming readlink -f is available as per the original script's usage on macOS (e.g., via coreutils).
   if ! abs_target_input_path=$(readlink -f "$target_input_path"); then
     echo "❌ Error: Input path '$target_input_path' for reset is not valid or does not exist." >&2
     exit 1
   fi
+
+  echo "ℹ️ Starting reset process in: $abs_target_input_path"
+  echo "---------------------------------------"
+  echo "🔎 Searching for original files with Wolfgang-generated indexes to rename back..."
+  echo "ℹ️ Note: Directories ending in '-${output_id}' will be ignored."
+
+  # Find all files matching the indexed pattern and loop through them, excluding output directories.
+  # -print0 and read -d $'\0' handle all filenames safely, including those with spaces.
+  while IFS= read -r -d $'\0' indexed_file_path; do
+    # Derive the original filename by removing the index pattern: "-####" before the extension.
+    local original_file_path
+    # sed -E works on macOS. It removes the last occurrence of -[4 digits] before the file extension.
+    original_file_path=$(echo "$indexed_file_path" | sed -E 's/-[0-9]{4}(\.[^.]+)$/\1/')
+
+    # If sed made no change, the file didn't match our specific pattern. Skip it.
+    if [[ "$indexed_file_path" == "$original_file_path" ]]; then
+      debug "Skipping '$indexed_file_path' as it does not match the specific '...-[0-9]{4}.ext' pattern."
+      continue
+    fi
+
+    # Check if a file with the intended original name already exists.
+    if [[ -e "$original_file_path" ]]; then
+      echo "⚠️ Skipping rename of '$(basename "$indexed_file_path")': Target '$(basename "$original_file_path")' already exists in the same directory." >&2
+      skipped_count=$((skipped_count + 1))
+    else
+      # Perform the rename.
+      if mv "$indexed_file_path" "$original_file_path"; then
+        echo "✅ Renamed back: '$(basename "$indexed_file_path")' → '$(basename "$original_file_path")'"
+        renamed_count=$((renamed_count + 1))
+      else
+        echo "❌ Error: Failed to rename '$(basename "$indexed_file_path")'. Check permissions." >&2
+        skipped_count=$((skipped_count + 1))
+      fi
+    fi
+  done < <(find "$abs_target_input_path" \
+    \( -type d -name "*-${output_id}" -prune \) -o \
+    \( -type f -name '*-*[0-9][0-9][0-9][0-9].*' -print0 \))
+
+  if [[ "$renamed_count" -gt 0 || "$skipped_count" -gt 0 ]]; then
+    echo "---------------------------------------"
+    echo "✅ Filename cleanup complete. Renamed: $renamed_count. Skipped: $skipped_count."
+  else
+    echo "ℹ️ No indexed original files found to rename."
+  fi
+  echo "---------------------------------------"
 
   local log_file_name=".wolfgang_run_log.jsonl"
   local log_to_reset="${abs_target_input_path}/${log_file_name}"
@@ -79,11 +128,12 @@ reset_log() {
       echo "✅ Log file '$log_to_reset' has been successfully deleted."
     else
       echo "❌ Error: Failed to delete log file '$log_to_reset'. Check permissions." >&2
-      exit 1
+      # We don't exit with 1 here, as the user might have primarily wanted the filename cleanup.
     fi
   else
-    echo "ℹ️ Log file '$log_to_reset' not found. Nothing to reset."
+    echo "ℹ️ Log file '$log_to_reset' not found. Nothing to delete."
   fi
+
   exit 0
 }
 
@@ -518,11 +568,11 @@ show_help() {
   echo "USAGE: wolfgang [OPTIONS] [INPUT_PATH]"
   echo ""
   echo "OPTIONS:"
-  echo "  -n, --name PREFIX        Custom prefix for resulting files (Default: '$CUSTOM_BASE')"
+  echo "  -n, --name PREFIX      Custom prefix for resulting files (Default: '$CUSTOM_BASE')"
   echo "  -h, --help, -man, --man  This help message"
   echo "  -d, --dimension PIXEL    Longest side in pixels (Default: $MAX_SIZE)"
   echo "  -a, --append             Append the original filename (without extension) to the new name."
-  echo "  -r, --reset              Deletes the .wolfgang_run_log.jsonl in the INPUT_PATH (or current dir)."
+  echo "  -r, --reset              Deletes the .wolfgang_run_log.jsonl and renames indexed original files back."
   echo "  --debug                  Enable detailed debug output."
   echo ""
   echo "OUTPUT FILENAME STRUCTURE:"
