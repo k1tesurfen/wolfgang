@@ -55,7 +55,7 @@ fi
 # --- Install Homebrew Packages ---
 inform "Updating Homebrew and installing imagemagick and jq..."
 if brew update && brew install imagemagick jq; then
-  inform "imagemagick and jq installed/updated successfully."
+  inform "imagemagick and jq are installed and up-to-date."
 else
   echo "------------------------------------------------------------" >&2
   echo "WARNING: Failed to install or update imagemagick or jq." >&2
@@ -69,35 +69,17 @@ fi
 # --- Locate, Make Executable, and Move Wolfgang Script ---
 TARGET_DIR="/usr/local/bin"
 TARGET_SCRIPT_NAME="wolfgang"
-SOURCE_SCRIPT_PATTERN_NAME="wolfgang*.sh"
+SOURCE_SCRIPT_NAME="wolfgang.sh"
 
-inform "Looking for a script matching '$SOURCE_SCRIPT_PATTERN_NAME' in the current directory..."
+inform "Looking for '$SOURCE_SCRIPT_NAME' in the current directory..."
 
-shopt -s nullglob
-wolfgang_scripts_found=(./wolfgang*.sh)
-shopt -u nullglob
+wolfgang_script_source="./$SOURCE_SCRIPT_NAME"
 
-num_found_scripts=${#wolfgang_scripts_found[@]}
-wolfgang_script_source=""
-
-if [[ $num_found_scripts -eq 0 ]]; then
+if [[ ! -f "$wolfgang_script_source" ]]; then
   echo "------------------------------------------------------------" >&2
-  echo "ERROR: No script starting with 'wolfgang' and ending with '.sh' found" >&2
-  echo "in the current directory (where you ran this installer)." >&2
-  echo "Please make sure your '$SOURCE_SCRIPT_PATTERN_NAME' file is here." >&2
-  echo "------------------------------------------------------------" >&2
-  exit 1
-elif [[ $num_found_scripts -eq 1 ]]; then
-  wolfgang_script_source="${wolfgang_scripts_found[0]}"
-  inform "Found one script: $wolfgang_script_source"
-else
-  echo "------------------------------------------------------------" >&2
-  echo "ERROR: Multiple scripts starting with 'wolfgang' were found here:" >&2
-  for script_path in "${wolfgang_scripts_found[@]}"; do
-    echo "  - $script_path" >&2
-  done
-  echo "Please ensure there is only ONE such script (e.g., ./wolfgang.sh)" >&2
-  echo "in this directory and re-run the installer." >&2
+  echo "ERROR: '$SOURCE_SCRIPT_NAME' was not found in the current directory" >&2
+  echo "(where you ran this installer)." >&2
+  echo "Please run this installer from the directory that contains '$SOURCE_SCRIPT_NAME'." >&2
   echo "------------------------------------------------------------" >&2
   exit 1
 fi

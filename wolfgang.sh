@@ -2,11 +2,13 @@
 
 # Default values
 MAX_SIZE=1400
+QUALITY=80
 ADD_OLD_FILENAME="n"
 INPUT_PATH="."
 CUSTOM_BASE="image"
 DEBUG="false"
-RESET_LOG_REQUESTED="false" # Flag for the new reset option
+RESET_LOG_REQUESTED="false"
+SEPARATOR_STYLE="dash" # Default separator style: 'dash', 'underscore', or 'caps'
 
 # Debug function
 debug() {
@@ -64,10 +66,9 @@ reset_log() {
   local output_id="wolfgang" # Used to identify and ignore output folders
 
   if [[ -z "$target_input_path" ]]; then
-    target_input_path="." # Default to current directory if not specified
+    target_input_path="."
   fi
 
-  # Assuming readlink -f is available as per the original script's usage on macOS (e.g., via coreutils).
   if ! abs_target_input_path=$(readlink -f "$target_input_path"); then
     echo "❌ Error: Input path '$target_input_path' for reset is not valid or does not exist." >&2
     exit 1
@@ -78,26 +79,19 @@ reset_log() {
   echo "🔎 Searching for original files with Wolfgang-generated indexes to rename back..."
   echo "ℹ️ Note: Directories ending in '-${output_id}' will be ignored."
 
-  # Find all files matching the indexed pattern and loop through them, excluding output directories.
-  # -print0 and read -d $'\0' handle all filenames safely, including those with spaces.
   while IFS= read -r -d $'\0' indexed_file_path; do
-    # Derive the original filename by removing the index pattern: "-####" before the extension.
     local original_file_path
-    # sed -E works on macOS. It removes the last occurrence of -[4 digits] before the file extension.
     original_file_path=$(echo "$indexed_file_path" | sed -E 's/-[0-9]{4}(\.[^.]+)$/\1/')
 
-    # If sed made no change, the file didn't match our specific pattern. Skip it.
     if [[ "$indexed_file_path" == "$original_file_path" ]]; then
       debug "Skipping '$indexed_file_path' as it does not match the specific '...-[0-9]{4}.ext' pattern."
       continue
     fi
 
-    # Check if a file with the intended original name already exists.
     if [[ -e "$original_file_path" ]]; then
-      echo "⚠️ Skipping rename of '$(basename "$indexed_file_path")': Target '$(basename "$original_file_path")' already exists in the same directory." >&2
+      echo "⚠️ Skipping rename of '$(basename "$indexed_file_path")': Target '$(basename "$original_file_path")' already exists." >&2
       skipped_count=$((skipped_count + 1))
     else
-      # Perform the rename.
       if mv "$indexed_file_path" "$original_file_path"; then
         echo "✅ Renamed back: '$(basename "$indexed_file_path")' → '$(basename "$original_file_path")'"
         renamed_count=$((renamed_count + 1))
@@ -128,13 +122,19 @@ reset_log() {
       echo "✅ Log file '$log_to_reset' has been successfully deleted."
     else
       echo "❌ Error: Failed to delete log file '$log_to_reset'. Check permissions." >&2
-      # We don't exit with 1 here, as the user might have primarily wanted the filename cleanup.
     fi
   else
     echo "ℹ️ Log file '$log_to_reset' not found. Nothing to delete."
   fi
 
   exit 0
+}
+
+# Helper to capitalize first letter of a string (Bash 3.2+ compatible)
+capitalize_first() {
+  local str="$1"
+  # Use sed to upper case the first character
+  echo "$str" | sed 's/./\u&/'
 }
 
 convert() {
@@ -148,15 +148,15 @@ convert() {
 
   local JQ_AVAILABLE="true"
   if ! command -v jq &>/dev/null; then
-    echo "⚠️ Warning: jq command not found. Run logging, skipping previously logged files, and persistent indexing will be disabled." >&2
+    echo "⚠️ Warning: jq command not found. Run logging and persistent indexing disabled." >&2
     JQ_AVAILABLE="false"
   fi
 
   local log_file_name=".wolfgang_run_log.jsonl"
   local log_file_path="${abs_input_path}/${log_file_name}"
-  debug "Run log file path: $log_file_path"
+
   if [[ "$JQ_AVAILABLE" == "true" ]]; then
-    touch "$log_file_path" # Ensure log file exists
+    touch "$log_file_path"
   fi
 
   local NEXT_AVAILABLE_INDEX=1
@@ -164,7 +164,6 @@ convert() {
     debug "Scanning log file for highest existing index..."
     local max_logged_index
     max_logged_index=$(jq -s '[inputs.converted_files[]? | (.jpg_path // .webp_path // "") | select(test("-[0-9]{4}\\.(jpg|jpeg|png|webp|gif|tif|tiff|heic)$")) | capture("(?<idx>[0-9]{4})\\.[^.]+$") | .idx | tonumber] | max // 0' "$log_file_path")
-    debug "Max index found in log: $max_logged_index"
     if [[ "$max_logged_index" -ge 0 ]]; then
       NEXT_AVAILABLE_INDEX=$((max_logged_index + 1))
     fi
@@ -186,20 +185,15 @@ convert() {
   fi
 
   if [[ -n "$global_keyword_file_path" ]] && [[ -f "$global_keyword_file_path" ]]; then
-    debug "Attempting to load global keywords from (last modified .txt in CWD): $global_keyword_file_path"
     GLOBAL_KEYWORDS_STRING=$(generate_keyword_string_from_file "$global_keyword_file_path")
-    debug "Global keywords loaded (for logging only): '$GLOBAL_KEYWORDS_STRING'"
-  else
-    global_keyword_file_path=""
-    debug "No global keyword file found in $CWD or it was not a regular file."
   fi
 
-  echo "Start converting images - Prefix: '$CUSTOM_BASE', longer image side: $MAX_SIZE px..."
-  echo "Persistent index for filenames starting at: $(printf "%04d" "$NEXT_AVAILABLE_INDEX")"
-  if [[ -n "$GLOBAL_KEYWORDS_STRING" ]]; then
-    echo "Global keywords detected (from $global_keyword_file_path): $GLOBAL_KEYWORDS_STRING (Note: Not used in filename)"
-  fi
-  echo "ℹ️ Original image files will be RENAMED to include the index (e.g., original-0001.ext)."
+  echo "Start converting images..."
+  echo "  Prefix: '$CUSTOM_BASE'"
+  echo "  Max Size: $MAX_SIZE px"
+  echo "  Quality: $QUALITY"
+  echo "  Separator Style: '$SEPARATOR_STYLE'"
+  echo "  Next Index: $(printf "%04d" "$NEXT_AVAILABLE_INDEX")"
   echo "---------------------------------------"
 
   local BASE_FOLDERTIMESTAMP
@@ -208,8 +202,6 @@ convert() {
 
   local output_folder_path="${CWD}/${FOLDERTIMESTAMP_NAME}"
   mkdir -p "$output_folder_path"
-  debug "Created main output folder: $output_folder_path"
-
   local output_base_dir="$output_folder_path"
   mkdir -p "$output_base_dir/resized_jpg"
   mkdir -p "$output_base_dir/resized_webp"
@@ -217,54 +209,42 @@ convert() {
   local processed_files_json_array="[]"
 
   while IFS= read -r -d $'\0' img_path_from_find; do
-    local img_abs_path # This will be the path to the image file, potentially renamed.
+    local img_abs_path
     img_abs_path=$(readlink -f "$img_path_from_find")
-    local initial_img_abs_path="$img_abs_path" # Keep a copy before any renaming, for log skip check
+    local initial_img_abs_path="$img_abs_path"
 
     if [[ "$JQ_AVAILABLE" == "true" && -s "$log_file_path" ]]; then
-      # Check log against potential *future* renamed path OR current path if already renamed.
-      # This logic might need refinement if script is re-run and files are already indexed.
-      # For now, checking the current name. If it was renamed in a previous run, the log would have that name.
       if jq -e --arg OPATH "$initial_img_abs_path" 'select(.converted_files[]?.original_path == $OPATH)' "$log_file_path" >/dev/null; then
-        debug "Skipping '$initial_img_abs_path' as it is logged as previously converted (jq check)."
-        echo "ℹ️ Already processed (logged): $initial_img_abs_path"
+        debug "Skipping '$initial_img_abs_path' - already logged."
+        echo "ℹ️ Already processed: $initial_img_abs_path"
         continue
       fi
     fi
 
     if ! file --mime-type "$initial_img_abs_path" | grep -qE 'image/'; then
-      debug "Skipping non-image file: $initial_img_abs_path"
       continue
     fi
 
-    # --- Determine paths and names based on the *initial* file path for output structure ---
-    local REL_PATH_FOR_STRUCTURE # Relative path for determining output directory structure
-    REL_PATH_FOR_STRUCTURE="${initial_img_abs_path#$abs_input_path/}"
+    # Determine relative paths
+    local REL_PATH_FOR_STRUCTURE="${initial_img_abs_path#$abs_input_path/}"
     if [[ "$initial_img_abs_path" == "$abs_input_path" ]]; then
       REL_PATH_FOR_STRUCTURE=$(basename "$initial_img_abs_path")
     fi
-    debug "Source image (initial): $initial_img_abs_path, Relative path for output structure: $REL_PATH_FOR_STRUCTURE"
-
-    local DIR_PATH_RAW
-    DIR_PATH_RAW=$(dirname "$REL_PATH_FOR_STRUCTURE")
-    local current_img_src_dir # Directory where the original image resides
-    current_img_src_dir=$(dirname "$initial_img_abs_path")
-    local DIR_PATH_FOR_OUTPUT # Subdirectory structure for converted files
-    if [[ "$DIR_PATH_RAW" == "." ]]; then
-      DIR_PATH_FOR_OUTPUT=""
-    else
+    local DIR_PATH_RAW=$(dirname "$REL_PATH_FOR_STRUCTURE")
+    local current_img_src_dir=$(dirname "$initial_img_abs_path")
+    local DIR_PATH_FOR_OUTPUT=""
+    if [[ "$DIR_PATH_RAW" != "." ]]; then
       DIR_PATH_FOR_OUTPUT="$DIR_PATH_RAW/"
     fi
 
-    local INITIAL_FILE_NAME # Filename before any renaming in this run
-    INITIAL_FILE_NAME=$(basename "$initial_img_abs_path")
-    local ORIGINAL_FILE_BASE_FOR_APPEND="${INITIAL_FILE_NAME%.*}" # Base name for -a option, e.g., "myphoto"
-    local original_extension="${INITIAL_FILE_NAME##*.}"           # Extension, e.g., "jpg"
+    local INITIAL_FILE_NAME=$(basename "$initial_img_abs_path")
+    local ORIGINAL_FILE_BASE_FOR_APPEND="${INITIAL_FILE_NAME%.*}"
+    local original_extension="${INITIAL_FILE_NAME##*.}"
 
     mkdir -p "$output_base_dir/resized_jpg/${DIR_PATH_FOR_OUTPUT}"
     mkdir -p "$output_base_dir/resized_webp/${DIR_PATH_FOR_OUTPUT}"
 
-    # --- Local Keywords (based on original file's directory) ---
+    # Load Local Keywords
     local local_keyword_file_path=""
     local LOCAL_KEYWORDS_STRING=""
     if ls -t "$current_img_src_dir"/*.txt >/dev/null 2>&1; then
@@ -272,83 +252,98 @@ convert() {
       temp_lk_path=$(ls -t "$current_img_src_dir"/*.txt | head -n 1)
       if [[ -n "$temp_lk_path" ]]; then
         local_keyword_file_path=$(readlink -f "$temp_lk_path")
-      fi
-    fi
-    if [[ -n "$local_keyword_file_path" ]] && [[ -f "$local_keyword_file_path" ]]; then
-      debug "Attempting to load local keywords for image $INITIAL_FILE_NAME from: $local_keyword_file_path"
-      if [[ -n "$global_keyword_file_path" && "$local_keyword_file_path" == "$global_keyword_file_path" ]]; then
-        debug "Local keyword file is same as global. Using its content for local keywords."
-        LOCAL_KEYWORDS_STRING=$(generate_keyword_string_from_file "$local_keyword_file_path")
-      else
         LOCAL_KEYWORDS_STRING=$(generate_keyword_string_from_file "$local_keyword_file_path")
       fi
-      debug "Local keywords loaded for $INITIAL_FILE_NAME: '$LOCAL_KEYWORDS_STRING'"
-    else
-      local_keyword_file_path=""
-      debug "No local keyword file found in $current_img_src_dir for $INITIAL_FILE_NAME."
     fi
+    # Clean hyphens for keywords immediately if necessary
     LOCAL_KEYWORDS_STRING=$(echo "$LOCAL_KEYWORDS_STRING" | sed -e 's/--\+/-/g' -e 's/^-//' -e 's/-$//')
-    debug "Final local keywords for $INITIAL_FILE_NAME: '$LOCAL_KEYWORDS_STRING'"
 
-    # --- Rename the original file ---
+    # Rename original file
     local current_index_for_file=$NEXT_AVAILABLE_INDEX
-    local formatted_index
-    formatted_index=$(printf "%04d" "$current_index_for_file")
-
+    local formatted_index=$(printf "%04d" "$current_index_for_file")
     local new_original_file_basename_indexed="${ORIGINAL_FILE_BASE_FOR_APPEND}-${formatted_index}"
     local new_original_filename_indexed="${new_original_file_basename_indexed}.${original_extension}"
     local new_original_img_abs_path="${current_img_src_dir}/${new_original_filename_indexed}"
 
-    debug "Attempting to rename original image from '$initial_img_abs_path' to '$new_original_img_abs_path'"
     if mv -n "$initial_img_abs_path" "$new_original_img_abs_path"; then
-      debug "Successfully renamed original image to '$new_original_img_abs_path'"
-      img_abs_path="$new_original_img_abs_path" # CRITICAL: Update img_abs_path to the new name for magick & logging
+      img_abs_path="$new_original_img_abs_path"
     else
-      echo "❌ Error: Failed to rename original file '$initial_img_abs_path' to '$new_original_img_abs_path'. mv exit code: $?. Skipping this file." >&2
-      # Do not increment NEXT_AVAILABLE_INDEX if rename fails and we skip.
+      echo "❌ Error: Failed to rename '$initial_img_abs_path'. Skipping." >&2
       continue
     fi
-    # --- End Renaming ---
 
-    # Get dimensions from the (now renamed) original file
-    width=$(identify -format "%w" "$img_abs_path")
-    height=$(identify -format "%h" "$img_abs_path")
+    # Get dimensions
+    width=$(magick identify -format "%w" "$img_abs_path")
+    height=$(magick identify -format "%h" "$img_abs_path")
     if [[ -z "$width" || -z "$height" ]]; then
-      echo "⚠️ Could not get dimensions for $img_abs_path. Skipping." >&2
-      # If identify fails, something is wrong. Original file (renamed) might be kept.
-      # Do not increment NEXT_AVAILABLE_INDEX.
+      echo "⚠️ Could not get dimensions. Skipping." >&2
       continue
     fi
 
-    # --- Generate filename for CONVERTED images ---
+    # --- NEW FILENAME ASSEMBLY LOGIC ---
     local temp_filename_parts=()
-    [[ -n "$LOCAL_KEYWORDS_STRING" ]] && temp_filename_parts+=("$LOCAL_KEYWORDS_STRING")
     temp_filename_parts+=("$CUSTOM_BASE")
-    # Use the ORIGINAL_FILE_BASE_FOR_APPEND (e.g., "myphoto") if -a is specified
+    [[ -n "$LOCAL_KEYWORDS_STRING" ]] && temp_filename_parts+=("$LOCAL_KEYWORDS_STRING")
     [[ "$ADD_OLD_FILENAME" == "y" && -n "$ORIGINAL_FILE_BASE_FOR_APPEND" ]] && temp_filename_parts+=("$ORIGINAL_FILE_BASE_FOR_APPEND")
-    temp_filename_parts+=("$formatted_index") # Index for the converted file
+    temp_filename_parts+=("$formatted_index")
 
-    local new_filename_base # For converted files
-    new_filename_base=$(
+    local new_filename_base=""
+
+    if [[ "$SEPARATOR_STYLE" == "caps" ]]; then
+      # Camel/Pascal Case: Capitalize first letter of every part, join with empty string
+      for part in "${temp_filename_parts[@]}"; do
+        # Handle keywords that might be hyphen-separated inside the string
+        # Split 'part' by hyphens, capitalize each chunk
+        local caps_part_accum=""
+        local old_ifs="$IFS"
+        IFS='-' read -ra SUBPARTS <<<"$part"
+        IFS="$old_ifs"
+        for sub in "${SUBPARTS[@]}"; do
+          local capped_sub
+          capped_sub=$(capitalize_first "$sub")
+          caps_part_accum+="${capped_sub}"
+        done
+        new_filename_base+="${caps_part_accum}"
+      done
+      # Remove non-alphanumeric chars for Caps style to ensure clean look
+      new_filename_base=$(echo "$new_filename_base" | sed 's/[^a-zA-Z0-9]//g')
+
+    elif [[ "$SEPARATOR_STYLE" == "underscore" ]]; then
+      # Underscore style
+      IFS='_'
+      new_filename_base="${temp_filename_parts[*]}"
+      IFS=' ' # Reset IFS
+      # Convert remaining dashes (from keywords) to underscores and clean up
+      new_filename_base=$(echo "$new_filename_base" | tr '-' '_' | sed -e 's/__\+/_/g')
+      # Sanitize
+      new_filename_base=$(echo "$new_filename_base" | sed -e 's/^_//' -e 's/_$//' -e 's/[^a-zA-Z0-9_]/_/g')
+
+    else
+      # Default: Dash style
       IFS='-'
-      echo "${temp_filename_parts[*]}"
-    )
-    new_filename_base=$(echo "$new_filename_base" | sed -e 's/--\+/-/g' -e 's/^-//' -e 's/-$//' -e 's/[^a-zA-Z0-9_.-]/_/g')
-    debug "Generated filename base for converted files (from $INITIAL_FILE_NAME): '$new_filename_base' (using index $formatted_index)"
+      new_filename_base="${temp_filename_parts[*]}"
+      IFS=' ' # Reset IFS
+      # Convert underscores to dashes (optional, but cleaner)
+      new_filename_base=$(echo "$new_filename_base" | tr '_' '-' | sed -e 's/--\+/-/g')
+      # Sanitize
+      new_filename_base=$(echo "$new_filename_base" | sed -e 's/^-//' -e 's/-$//' -e 's/[^a-zA-Z0-9.-]/-/g')
+    fi
+
+    debug "Generated Filename ($SEPARATOR_STYLE): $new_filename_base"
+    # --- END NEW ASSEMBLY ---
 
     local check_path_jpg="$output_base_dir/resized_jpg/${DIR_PATH_FOR_OUTPUT}${new_filename_base}.jpg"
     if [[ -f "$check_path_jpg" ]]; then
-      debug "Warning: Output file '$check_path_jpg' already exists. ImageMagick will likely overwrite it."
+      debug "Warning: Output file '$check_path_jpg' exists. Overwriting."
     fi
 
     local convert_cmd
     if [ "$width" -gt "$height" ]; then
-      convert_cmd="-resize ${MAX_SIZE}x\> -quality 90"
+      convert_cmd="-resize ${MAX_SIZE}x\> -quality ${QUALITY}"
     else
-      convert_cmd="-resize x${MAX_SIZE}\> -quality 90"
+      convert_cmd="-resize x${MAX_SIZE}\> -quality ${QUALITY}"
     fi
 
-    # Paths for CONVERTED files, using DIR_PATH_FOR_OUTPUT from original structure
     local output_jpg_rel_path="${DIR_PATH_FOR_OUTPUT}${new_filename_base}.jpg"
     local output_webp_rel_path="${DIR_PATH_FOR_OUTPUT}${new_filename_base}.webp"
     local output_jpg_abs_path="$output_base_dir/resized_jpg/${output_jpg_rel_path}"
@@ -356,31 +351,24 @@ convert() {
     local success_jpg=false
     local success_webp=false
 
-    debug "Converting '$img_abs_path' (renamed original) to '$output_jpg_abs_path'"
     if magick "$img_abs_path" $convert_cmd "$output_jpg_abs_path"; then
-      debug "Successfully converted '$img_abs_path' to '$output_jpg_abs_path'"
       success_jpg=true
     else
-      echo "❌ Error converting '$img_abs_path' to JPG. magick exit code: $?" >&2
+      echo "❌ Error converting to JPG." >&2
     fi
 
-    debug "Converting '$img_abs_path' (renamed original) to '$output_webp_abs_path'"
     if magick "$img_abs_path" $convert_cmd "$output_webp_abs_path"; then
-      debug "Successfully converted '$img_abs_path' to '$output_webp_abs_path'"
       success_webp=true
     else
-      echo "❌ Error converting '$img_abs_path' to WebP. magick exit code: $?" >&2
+      echo "❌ Error converting to WebP." >&2
     fi
 
     if [[ "$success_jpg" == true || "$success_webp" == true ]]; then
       NEXT_AVAILABLE_INDEX=$((NEXT_AVAILABLE_INDEX + 1))
-      debug "Incremented NEXT_AVAILABLE_INDEX to $NEXT_AVAILABLE_INDEX"
 
       if [[ "$JQ_AVAILABLE" == "true" ]]; then
-        # Calculate relative path of the RENAMED original file for logging
-        local rel_path_of_renamed_original_for_log
-        rel_path_of_renamed_original_for_log="${img_abs_path#$abs_input_path/}"
-        if [[ "$img_abs_path" == "$abs_input_path" ]]; then # Unlikely for a file from find within input path
+        local rel_path_of_renamed_original_for_log="${img_abs_path#$abs_input_path/}"
+        if [[ "$img_abs_path" == "$abs_input_path" ]]; then
           rel_path_of_renamed_original_for_log=$(basename "$img_abs_path")
         fi
 
@@ -396,14 +384,10 @@ convert() {
           '{original_path: $oap, original_relative_path: $orp, jpg_path: (if $ajp == "null" then null else $ajp end), webp_path: (if $awp == "null" then null else $awp end), local_keyword_file: (if $lkfp == "" then null else $lkfp end), local_keywords_string: (if $lks == "" then null else $lks end), filename_index: $cidx}')
 
         processed_files_json_array=$(echo "$processed_files_json_array" | jq --argjson entry "$file_entry_json" '. + [$entry]')
-        debug "Updated processed_files_json_array"
       fi
     fi
 
-    local user_msg_jpg_path="resized_jpg/${output_jpg_rel_path}"
-    local user_msg_webp_path="resized_webp/${output_webp_rel_path}"
-    # Display the INITIAL_FILE_NAME in the success message for user clarity as "source"
-    echo "✔ Converted: $REL_PATH_FOR_STRUCTURE (renamed to $(basename "$img_abs_path")) → $FOLDERTIMESTAMP_NAME/$user_msg_jpg_path & $FOLDERTIMESTAMP_NAME/$user_msg_webp_path"
+    echo "✔ Converted: $(basename "$img_abs_path") → $new_filename_base (JPG/WebP)"
 
   done < <(find "$abs_input_path" \
     \( -type d -name "*-${output_id}" -prune \) -o \
@@ -412,41 +396,35 @@ convert() {
     \( -type f \( -iname "*.jpg" -o -iname "*.jpeg" -o -iname "*.png" -o -iname "*.webp" -o -iname "*.heic" -o -iname "*.gif" -o -iname "*.tif" -o -iname "*.tiff" \) -print0 \))
 
   if [[ "$JQ_AVAILABLE" == "true" ]]; then
-    debug "Final processed_files_json_array before logging run."
     local run_log_entry
     run_log_entry=$(jq -n \
       --arg rts "$run_start_iso_time" \
       --argjson ms "$MAX_SIZE" \
+      --argjson q "$QUALITY" \
       --arg cb "$CUSTOM_BASE" \
+      --arg sep "$SEPARATOR_STYLE" \
       --arg aof "$ADD_OLD_FILENAME" \
       --arg ipath "$abs_input_path" \
-      --arg gkfp_arg "${global_keyword_file_path:-}" \
-      --arg gks_arg "${GLOBAL_KEYWORDS_STRING:-}" \
       --arg ofn "$FOLDERTIMESTAMP_NAME" \
       --argjson cf "$processed_files_json_array" \
       '{
         run_timestamp: $rts,
         settings: {
             max_size: $ms,
+            quality: $q,
             custom_base: $cb,
+            separator_style: $sep,
             add_old_filename: $aof,
-            input_path: $ipath,
-            global_keywords_file: (if $gkfp_arg == "" then null else $gkfp_arg end),
-            global_keywords_string: (if $gks_arg == "" then null else $gks_arg end)
+            input_path: $ipath
         },
         output_folder_name: $ofn,
         converted_files: $cf
     }')
-
     echo "$run_log_entry" >>"$log_file_path"
-    debug "Appended run information to log file: $log_file_path"
   fi
 
   echo "---------------------------------------"
-  echo "✅ All images converted successfully! Output is in '$output_folder_path'."
-  if [[ "$JQ_AVAILABLE" == "true" ]]; then
-    echo "ℹ️ Run details logged to: $log_file_path"
-  fi
+  echo "✅ All images converted successfully! Output in '$output_folder_path'."
 }
 
 wizard_mode() {
@@ -465,77 +443,104 @@ wizard_mode() {
   fi
 
   if [[ "$JQ_WIZARD_AVAILABLE" == "true" && -f "$log_file_path_for_wizard" && -s "$log_file_path_for_wizard" ]]; then
-    debug "Wizard: Log file found at $log_file_path_for_wizard, attempting to read presets."
+    debug "Wizard: Reading presets..."
+    # Now includes separator_style in preset logic
     local presets_json
-    presets_json=$(jq -s 'map(select(.settings.custom_base and .settings.max_size and .settings.add_old_filename) | .settings | {custom_base, max_size, add_old_filename}) | reverse | unique | .[0:5] // []' "$log_file_path_for_wizard" 2>/dev/null || echo "[]")
+    presets_json=$(jq -s 'map(select(.settings.custom_base) | .settings | {custom_base, max_size, quality, add_old_filename, separator_style}) | reverse | unique | .[0:5] // []' "$log_file_path_for_wizard" 2>/dev/null || echo "[]")
 
     local preset_count
     preset_count=$(echo "$presets_json" | jq 'length')
-    debug "Wizard: Found $preset_count unique presets."
 
     if [[ "$preset_count" -gt 0 ]]; then
       echo "---------------------------------------"
-      echo "You ran wolfgang previously in this directory with the following settings:"
+      echo "Previous run presets found:"
       declare -a displayed_options_cb
       declare -a displayed_options_ms
+      declare -a displayed_options_q
       declare -a displayed_options_aof
+      declare -a displayed_options_sep
 
       for i in $(seq 0 $((preset_count - 1))); do
-        local cb ms aof
+        local cb ms q aof sep
         cb=$(echo "$presets_json" | jq -r ".[$i].custom_base")
         ms=$(echo "$presets_json" | jq -r ".[$i].max_size")
+        q=$(echo "$presets_json" | jq -r ".[$i].quality // 80")
         aof=$(echo "$presets_json" | jq -r ".[$i].add_old_filename")
+        sep=$(echo "$presets_json" | jq -r ".[$i].separator_style // \"dash\"")
 
         displayed_options_cb+=("$cb")
         displayed_options_ms+=("$ms")
+        displayed_options_q+=("$q")
         displayed_options_aof+=("$aof")
+        displayed_options_sep+=("$sep")
 
-        local aof_display="n"
-        if [[ "$aof" == "y" ]]; then aof_display="y"; fi
-        echo "$((i + 1))) Prefix: '$cb', Dimension: $ms px, Append Filename: $aof_display"
+        echo "$((i + 1))) Prefix: '$cb', Dim: $ms, Quality: $q, Style: $sep, Append Old: $aof"
       done
 
       while true; do
-        read -rp "Select one of these presets (1-$preset_count) or skip with (N)o: " user_choice
+        read -rp "Select a preset (1-$preset_count) or (N)o: " user_choice
         if [[ "$user_choice" =~ ^[Nn]$ ]]; then
-          echo "Proceeding with manual settings input."
           settings_from_preset="false"
           break
         elif [[ "$user_choice" =~ ^[0-9]+$ && "$user_choice" -ge 1 && "$user_choice" -le "$preset_count" ]]; then
           local selected_index=$((user_choice - 1))
           CUSTOM_BASE="${displayed_options_cb[$selected_index]}"
           MAX_SIZE="${displayed_options_ms[$selected_index]}"
+          QUALITY="${displayed_options_q[$selected_index]}"
           ADD_OLD_FILENAME="${displayed_options_aof[$selected_index]}"
-          echo "Using preset: Prefix: '$CUSTOM_BASE', Dimension: $MAX_SIZE px, Append Filename: $ADD_OLD_FILENAME"
+          SEPARATOR_STYLE="${displayed_options_sep[$selected_index]}"
+          echo "Used preset with style: $SEPARATOR_STYLE"
           settings_from_preset="true"
           break
-        else
-          echo "Invalid selection. Please enter a number between 1 and $preset_count, or N."
         fi
       done
     fi
-  else
-    debug "Wizard: No log file found, log is empty, or jq not available. Skipping presets."
   fi
 
   echo "---------------------------------------"
 
   if [[ "$settings_from_preset" != "true" ]]; then
-    read -rp "Enter the base name (prefix) for your output files (e. g. 'holiday_'): " CUSTOM_BASE
-    if [[ -z "$CUSTOM_BASE" ]]; then
-      echo "ERROR: Basename prefix is required." >&2
+    read -rp "Enter the base name (prefix) (e.g., 'holiday'): " CUSTOM_BASE
+    [[ -z "$CUSTOM_BASE" ]] && {
+      echo "ERROR: Basename required."
       exit 1
-    fi
-    echo "---------------------------------------"
+    }
 
+    echo "---------------------------------------"
     while true; do
-      read -rp "Enter pixel value for the longer side of the image (e.g. 1400): " MAX_SIZE
-      if [[ "$MAX_SIZE" =~ ^[0-9]+$ && "$MAX_SIZE" -gt 0 ]]; then break; else echo "ERROR: Please enter a valid positive number!"; fi
+      read -rp "Enter pixel value for the longer side (e.g. 1400): " MAX_SIZE
+      [[ "$MAX_SIZE" =~ ^[0-9]+$ && "$MAX_SIZE" -gt 0 ]] && break
     done
-    echo "---------------------------------------"
 
+    echo "---------------------------------------"
     while true; do
-      echo "Should the old filename be appended to the new one? (y/n)"
+      read -rp "Enter compression quality 1-100 (Enter for 80): " user_quality
+      if [[ -z "$user_quality" ]]; then
+        QUALITY=80
+        break
+      elif [[ "$user_quality" =~ ^[0-9]+$ && "$user_quality" -ge 1 && "$user_quality" -le 100 ]]; then
+        QUALITY="$user_quality"
+        break
+      fi
+    done
+
+    echo "---------------------------------------"
+    echo "Choose a filename separator style:"
+    echo "1) Dash (keyword-prefix-index) [Default]"
+    echo "2) Underscore (keyword_prefix_index)"
+    echo "3) Capitalize (KeywordPrefixIndex)"
+    read -n 1 -r user_sep_choice
+    echo ""
+    case "$user_sep_choice" in
+    2) SEPARATOR_STYLE="underscore" ;;
+    3) SEPARATOR_STYLE="caps" ;;
+    *) SEPARATOR_STYLE="dash" ;;
+    esac
+    echo "Selected Style: $SEPARATOR_STYLE"
+
+    echo "---------------------------------------"
+    while true; do
+      echo "Append old filename? (y/n)"
       read -n 1 -r user_aof_choice
       echo
       case "$user_aof_choice" in
@@ -547,15 +552,12 @@ wizard_mode() {
         ADD_OLD_FILENAME="n"
         break
         ;;
-      *) echo "Please use 'Y' or 'N' to proceed." ;;
       esac
     done
   fi
 
   echo "---------------------------------------"
-  echo "Local keywords for filenames: From the last modified *.txt file in each image's own directory."
-  echo "Global keywords (if any *.txt in current script dir): Logged for info, but NOT used in filenames."
-  echo "Output Filename Structure: [local-keywords]-[prefix]-[optional-old-filename]-[index].ext"
+  echo "Structure: [local-keywords][separator][prefix][separator][index].ext"
   echo "---------------------------------------"
 
   convert
@@ -563,77 +565,55 @@ wizard_mode() {
 }
 
 show_help() {
-  echo "WOLFGANG - Web Optimized Lightweight Fast Graphics Analyser and Generator"
-  echo ""
-  echo "USAGE: wolfgang [OPTIONS] [INPUT_PATH]"
+  echo "WOLFGANG Usage:"
+  echo "  wolfgang [OPTIONS] [INPUT_PATH]"
   echo ""
   echo "OPTIONS:"
-  echo "  -n, --name PREFIX      Custom prefix for resulting files (Default: '$CUSTOM_BASE')"
-  echo "  -h, --help, -man, --man  This help message"
-  echo "  -d, --dimension PIXEL    Longest side in pixels (Default: $MAX_SIZE)"
-  echo "  -a, --append             Append the original filename (without extension) to the new name."
-  echo "  -r, --reset              Deletes the .wolfgang_run_log.jsonl and renames indexed original files back."
-  echo "  --debug                  Enable detailed debug output."
-  echo ""
-  echo "OUTPUT FILENAME STRUCTURE:"
-  echo "  [LOCAL_KEYWORDS]-[PREFIX]-[OPTIONAL_OLD_FILENAME]-[INDEX].ext"
-  echo "  - LOCAL_KEYWORDS: Derived from the last modified '*.txt' in the image's directory."
-  echo "                    Words on one line joined by '_', lines joined by '-'."
-  echo "  - PREFIX: The custom name set via -n or wizard (e.g., '$CUSTOM_BASE')."
-  echo "  - OPTIONAL_OLD_FILENAME: Original filename (sans extension) if -a is used."
-  echo "  - INDEX: A persistent 4-digit counter (e.g., 0001, 0002), unique per input directory log."
-  echo ""
-  echo "KEYWORD DETECTION FOR FILENAMES (LOCAL KEYWORDS):"
-  echo "  For each image, the last modified '*.txt' file in its own directory provides local keywords."
-  echo "  Keywords within these files should be one per line. Words on a single line will be joined by underscores."
-  echo "  Global keywords (from *.txt in script's CWD) are logged but NOT used in filenames."
-  echo ""
-  echo "OUTPUT FOLDER:"
-  echo "  Converted images are saved in a directory named 'YYYY-MM-DD_HH-M-SS-wolfgang' (created in current dir)."
-  echo "  The script will automatically skip any subdirectories ending with '-wolfgang' to avoid reprocessing."
-  echo ""
-  echo "RUN LOGGING (Requires 'jq' command-line JSON processor):"
-  echo "  If 'jq' is installed, each run's settings and processed files are logged to '.wolfgang_run_log.jsonl'"
-  echo "  in the root of the INPUT_PATH. The script uses this log to skip already converted files and to"
-  echo "  determine the next available index for filenames."
-  echo "  Wizard mode will offer to reuse settings from previous runs in the current directory if available."
-  echo ""
-  echo "ARGUMENTS:"
-  echo "  INPUT_PATH               Directory that contains the images to convert"
-  echo "                           (Default: Current directory)"
+  echo "  -n, --name PREFIX      Custom prefix (Default: '$CUSTOM_BASE')"
+  echo "  -d, --dimension PIXEL  Longest side (Default: $MAX_SIZE)"
+  echo "  -q, --quality 1-100    Compression quality (Default: $QUALITY)"
+  echo "  -s, --separator STYLE  Separator style: 'dash', 'underscore', or 'caps'"
+  echo "  -a, --append           Append original filename."
+  echo "  -r, --reset            Reset log and rename files back."
+  echo "  --debug                Enable debug."
   exit 0
 }
 
-# Argument parsing starts here
-# Store original number of arguments to distinguish between no args (wizard) and args processed to zero
+# Argument parsing
 original_arg_count=$#
-
 POSITIONAL_ARGS=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
   -h | --help | -man | --man) show_help ;;
-  -r | --reset) # New option
+  -r | --reset)
     RESET_LOG_REQUESTED="true"
     shift
     ;;
   -d | --dimension)
-    if [[ -z "$2" || "$2" == -* ]]; then
-      echo "❌ Error: Missing value for $1 option." >&2
-      exit 1
-    fi
-    if ! [[ "$2" =~ ^[0-9]+$ && "$2" -gt 0 ]]; then
-      echo "❌ Error: Dimension value for $1 must be a positive integer. Got: '$2'" >&2
-      exit 1
-    fi
     MAX_SIZE="$2"
     shift 2
     ;;
-  -n | --name)
-    if [[ -z "$2" || "$2" == -* ]]; then
-      echo "❌ Error: Missing value for $1 option." >&2
+  -q | --quality)
+    if [[ "$2" =~ ^[0-9]+$ && "$2" -ge 1 && "$2" -le 100 ]]; then
+      QUALITY="$2"
+    else
+      echo "❌ Error: Invalid quality '$2'. Use a number between 1 and 100."
       exit 1
     fi
+    shift 2
+    ;;
+  -n | --name)
     CUSTOM_BASE="$2"
+    shift 2
+    ;;
+  -s | --separator)
+    case "$2" in
+    dash | underscore | caps) SEPARATOR_STYLE="$2" ;;
+    *)
+      echo "❌ Error: Invalid separator '$2'. Use dash, underscore, or caps."
+      exit 1
+      ;;
+    esac
     shift 2
     ;;
   -a | --append)
@@ -657,49 +637,19 @@ while [[ $# -gt 0 ]]; do
 done
 set -- "${POSITIONAL_ARGS[@]}"
 
-# Determine INPUT_PATH from positional arguments or default
 if [[ ${#POSITIONAL_ARGS[@]} -eq 1 ]]; then
   INPUT_PATH="${POSITIONAL_ARGS[0]}"
 elif [[ ${#POSITIONAL_ARGS[@]} -gt 1 ]]; then
-  echo "❌ Too many arguments. Only one INPUT_PATH is allowed. See --help."
+  echo "❌ Too many arguments."
   exit 1
-else
-  # If no positional args, INPUT_PATH remains its default "."
-  # This is fine for -reset and wizard_mode if no path is given.
-  : # No-op, INPUT_PATH is already "." if not overridden
 fi
 
-# --- Execution Control ---
-
-# Handle -reset first if requested
 if [[ "$RESET_LOG_REQUESTED" == "true" ]]; then
-  debug "Reset log requested for INPUT_PATH: $INPUT_PATH"
-  reset_log "$INPUT_PATH" # reset_log will exit
+  reset_log "$INPUT_PATH"
 fi
 
-debug "Initial Configuration (after potential wizard/args):"
-debug "  MAX_SIZE: $MAX_SIZE"
-debug "  ADD_OLD_FILENAME: $ADD_OLD_FILENAME"
-debug "  INPUT_PATH: $INPUT_PATH"
-debug "  CUSTOM_BASE: $CUSTOM_BASE"
-debug "  DEBUG: $DEBUG"
-debug "  CWD for global keywords & output folder: $(pwd)"
-
-# Decide whether to run wizard or convert based on original argument count
 if [[ "$original_arg_count" -eq 0 ]]; then
-  # No arguments were passed initially, run wizard mode
-  wizard_mode # wizard_mode calls convert and exits
+  wizard_mode
 else
-  # Arguments were passed (and it wasn't just -reset, as that would have exited)
-  # Validate INPUT_PATH if it was set from an argument
-  if [[ "${#POSITIONAL_ARGS[@]}" -eq 1 || (-n "$INPUT_PATH" && "$INPUT_PATH" != ".") ]]; then # Check if INPUT_PATH was explicitly set
-    if ! temp_abs_input_path=$(readlink -f "$INPUT_PATH"); then
-      echo "❌ Error: Input path '$INPUT_PATH' is not a valid directory or does not exist." >&2
-      exit 1
-    elif [[ ! -d "$temp_abs_input_path" ]]; then
-      echo "❌ Error: Input path '$INPUT_PATH' ('$temp_abs_input_path') is not a directory." >&2
-      exit 1
-    fi
-  fi
   convert
 fi
