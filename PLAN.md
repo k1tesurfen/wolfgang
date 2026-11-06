@@ -37,8 +37,8 @@ Status: **approved**. Milestones 1–4 (spike, core engine, dialogue, CLI) are d
 | Fonts | Converted 1:1 to WOFF2, **no subsetting** (decided after the spike, to avoid broken fonts) |
 | Language | German only. Strings still live in a separate dialogue/strings file so other languages can be added later. |
 | Voice | Gemütlich, uses *du*, light slang, warm, a few running gags, never annoying |
-| Look | Cozy bearded guy, mid-40s, cardigan, beanie or reading glasses, coffee mug |
-| Art | Pixel art drawn in code by me (sprites as pixel grids → PNG/canvas) |
+| Look | Defined by the reference studies in `pixel-art/` (2026-11-07): man bun, clear round glasses, full grey-brown beard, ear plugs, mustard/green striped shawl cardigan over a plaid shirt and dark tee, rainbow lanyard, pins, coffee mug |
+| Art | Reference images by the user (AI-generated, pixel-art *style*), turned into real pixel art by a pixelize tool (grid snap + fixed palette). The animated desk sprite is drawn in code to match the references. |
 | Migration | Clean break as **v2.0**. Old Bash script moves to `legacy/`. Old run logs are ignored. `wolfgang legacy-reset` can still undo the old in-place renames. |
 
 ---
@@ -133,6 +133,16 @@ HQ mode asks only for the format (JPG/WebP/AVIF/PNG). Fonts need no questions: W
 ---
 
 ## 5. Desktop app (Tauri)
+
+### 5.0 Art direction (decided 2026-11-07)
+
+- **Office:** reference #10 (`pixel-art/Gemini_Generated_Image_464ll5…`), the calmer wall, so speech bubbles fit up top. It's turned into a real low-res pixel background (~320–400 px wide, fixed palette) by a pixelize tool and scaled up crisply.
+- **Wolfgang in the scene:** a small animated sprite sitting in the desk chair (idle/blink, talk, type, sip coffee, hand over a folder), drawn in code in the colours of the references.
+- **Mood portraits:** the eight expression studies, cleaned the same way and cropped to head and shoulders, appear next to the speech bubble and change with the dialogue `mood`:
+  `happy` → #1 smiling · `thinking` → #2 chin / #7 looking up · `surprised` → #3 · `proud` → #5 laughing / #4 content · `sorry` → #8 head scratch · `neutral` → #6 side-eye
+- **Objects:** filing cabinets (left) → settings, clipboard on the desk → presets, mug → his coffee, desk → drop zone
+- **CLI portrait:** stays a tiny 16×16, but gets the new look (bun, clear glasses, striped cardigan)
+- The AI references have garbled text (certificates, „CALEPDAY“). It disappears at the target resolution or gets painted over.
 
 ### 5.1 Scene
 
@@ -270,7 +280,7 @@ Findings:
 2. ✅ **Core engine**: scanning, piles, image/font converters, naming, run log, re-run detection, settings/presets. 26 unit + 9 end-to-end tests.
 3. ✅ **Dialogue engine + `dialogue/de.yaml`**: state machine, typed custom answers, written in Wolfgang's voice. 18 tests, including 300 random conversations.
 4. ✅ **CLI**: flags, TUI conversation, `--yes`/`--json`, presets/settings commands, `legacy-reset`. Moved the Bash script to `legacy/`. 17 CLI tests; the interactive mode was driven in a pseudo-terminal.
-5. **Pixel art**: Wolfgang (idle/talk/work/handover animations), desk, office, bubbles, panels, objects. Built by a script from pixel grids.
+5. **Pixel art**: pixelize tool for the references; office background from #10; mood portraits from the eight studies; animated desk sprite (idle/talk/type/sip/handover) drawn in code; bubbles, panels, object highlights; new-look CLI portrait.
 6. **Tauri app**: scene, drag & drop on the desk, bubbles, progress, result, settings/preset panels, SFX, CLI install.
 7. **Release**: `.dmg` build via GitHub Actions (macOS arm64 runner), README rewrite (German), first-launch instructions for the unsigned app. Tag v2.0.0.
 
