@@ -23,28 +23,40 @@ idle:
 
 working:
   - "Moment, bin dran …"
-  - "Läuft. Ich mach das schon."
+  - "Läuft. Ich setz mich dran."
   - "Pixel sortieren, Bytes rausschütteln … gleich fertig."
   - "Kurz noch. Der Kaffee ist eh noch heiß."
   - "Schön eins nach dem anderen."
-  - "Das wird gut, versprochen."
+  - "Jubdidubdidub. Was? Ja gleich fertig."
+  - "Das hier hin und den da dran. So haben wir's bald."
 
 nodes:
-
   # ── Ankommen ───────────────────────────────────────────────────────────────
 
   greet:
     mood: happy
     say:
-      - ["Na, was hast du mir mitgebracht? Lass mal sehen …", "Moin! Zeig mal her, was du da hast.", "Ah, Arbeit. Schön. Mal gucken …"]
+      - [
+          "Na, was hast du mir mitgebracht? Lass mal sehen …",
+          "Moin! Zeig mal her, was du da hast.",
+          "Ah, Arbeit. Schön. Mal gucken …",
+        ]
       - when: [has_images, has_fonts]
         text: "Ich seh {images:ein Foto:Fotos} und {fonts:eine Schrift:Schriften}."
       - when: [has_images, "!has_fonts"]
-        text: ["Ich seh {images:ein Foto:Fotos}.", "{images:Ein Foto:Fotos}, sehr schön."]
+        text:
+          [
+            "Ich seh {images:ein Foto:Fotos}.",
+            "{images:Ein Foto:Fotos}, sehr schön.",
+          ]
       - when: [only_fonts]
         text: "Ich seh {fonts:eine Schrift:Schriften}."
       - when: [has_unknown, "!nothing_to_do"]
-        text: ["Mit {unknown:einer Datei:Dateien} kann ich nix anfangen, die lass ich einfach liegen.", "{unknown:Eine Datei ist:Dateien sind} nicht mein Ding, die bleiben, wo sie sind."]
+        text:
+          [
+            "Mit {unknown:einer Datei:Dateien} kann ich nix anfangen, die lass ich einfach liegen.",
+            "{unknown:Eine Datei ist:Dateien sind} nicht mein Ding, die bleiben, wo sie sind.",
+          ]
       - when: [has_duplicates]
         text: "{duplicates:Eine Datei ist:Dateien sind} doppelt drin. Mach ich nur einmal."
     go:
@@ -71,7 +83,10 @@ nodes:
 
   fonts_only:
     say:
-      - ["Die mach ich dir zu WOFF2. Ganz ohne Rumschnippeln, alle Zeichen bleiben drin.", "Schriften? Easy. Gibt's als WOFF2, eins zu eins, nix wird weggelassen."]
+      - [
+          "Die mach ich dir zu WOFF2. Ganz ohne Rumschnippeln, alle Zeichen bleiben drin.",
+          "Schriften? Easy. Gibt's als WOFF2, eins zu eins, nix wird weggelassen.",
+        ]
     go:
       - { to: rerun_check }
 
@@ -80,11 +95,29 @@ nodes:
   how:
     mood: thinking
     say:
-      - ["Wie machen wir's?", "Wie soll's werden?", "Und, wie hättest du's gern?"]
+      - [
+          "Wie machen wir's?",
+          "Wie soll's werden?",
+          "Und, wie hättest du's gern?",
+        ]
     answers:
-      - { label: "So wie letztes Mal ({last_run})", when: [has_last_run], set: { use_last: true }, to: keywords }
-      - { label: "Vorlage „{preset}“", each: presets, set: { preset: "{preset}" }, to: keywords }
-      - { label: "Lass uns das neu einstellen", set: { use_last: false }, to: mode }
+      - {
+          label: "So wie letztes Mal ({last_run})",
+          when: [has_last_run],
+          set: { use_last: true },
+          to: keywords,
+        }
+      - {
+          label: "Vorlage „{preset}“",
+          each: presets,
+          set: { preset: "{preset}" },
+          to: keywords,
+        }
+      - {
+          label: "Lass uns das neu einstellen",
+          set: { use_last: false },
+          to: mode,
+        }
 
   # ── Bilder: Modus ──────────────────────────────────────────────────────────
 
@@ -93,17 +126,37 @@ nodes:
     say:
       - ["Wofür brauchst du die Bilder?", "Was soll aus den Bildern werden?"]
     answers:
-      - { label: "Fürs Web vorbereiten – klein und schnell", set: { mode: web, use_last: false }, to: web_format }
-      - { label: "Hochwertig behalten – nur ein anderes Format", set: { mode: hq, use_last: false }, to: hq_format }
+      - {
+          label: "Fürs Web vorbereiten – klein und schnell",
+          set: { mode: web, use_last: false },
+          to: web_format,
+        }
+      - {
+          label: "Hochwertig behalten – nur ein anderes Format",
+          set: { mode: hq, use_last: false },
+          to: hq_format,
+        }
 
   hq_format:
     say:
       - "Alles klar: Originalgröße, volle Qualität. In welches Format?"
     answers:
-      - { label: "JPG – passt überall", set: { hq.format: jpg }, to: rerun_check }
+      - {
+          label: "JPG – passt überall",
+          set: { hq.format: jpg },
+          to: rerun_check,
+        }
       - { label: "WebP", set: { hq.format: webp }, to: rerun_check }
-      - { label: "AVIF – am kleinsten", set: { hq.format: avif }, to: rerun_check }
-      - { label: "PNG – verlustfrei, auch mit Transparenz", set: { hq.format: png }, to: rerun_check }
+      - {
+          label: "AVIF – am kleinsten",
+          set: { hq.format: avif },
+          to: rerun_check,
+        }
+      - {
+          label: "PNG – verlustfrei, auch mit Transparenz",
+          set: { hq.format: png },
+          to: rerun_check,
+        }
 
   # ── Bilder: fürs Web ───────────────────────────────────────────────────────
 
@@ -116,11 +169,26 @@ nodes:
 
   web_size:
     say:
-      - ["Wie groß sollen sie werden? Ich mein die längste Seite.", "Welche Größe? Gemeint ist die längste Seite."]
+      - [
+          "Wie groß sollen sie werden? Ich mein die längste Seite.",
+          "Welche Größe? Gemeint ist die längste Seite.",
+        ]
     answers:
-      - { label: "Klein (800 px) – für Vorschaubilder", set: { web.max_side: 800 }, to: web_quality }
-      - { label: "Normal (1400 px) – passt fast immer", set: { web.max_side: 1400 }, to: web_quality }
-      - { label: "Groß (2400 px) – für große Titelbilder", set: { web.max_side: 2400 }, to: web_quality }
+      - {
+          label: "Klein (800 px) – für Vorschaubilder",
+          set: { web.max_side: 800 },
+          to: web_quality,
+        }
+      - {
+          label: "Normal (1400 px) – passt fast immer",
+          set: { web.max_side: 1400 },
+          to: web_quality,
+        }
+      - {
+          label: "Groß (2400 px) – für große Titelbilder",
+          set: { web.max_side: 2400 },
+          to: web_quality,
+        }
     input:
       kind: number
       min: 100
@@ -130,15 +198,30 @@ nodes:
       set: web.max_side
       to: web_quality
       invalid:
-        - ["„{input}“? Gib mir einfach 'ne Zahl zwischen {min} und {max} Pixel.", "Da komm ich nicht mit. Irgendwas zwischen {min} und {max} Pixel, bitte."]
+        - [
+            "„{input}“? Gib mir einfach 'ne Zahl zwischen {min} und {max} Pixel.",
+            "Da komm ich nicht mit. Irgendwas zwischen {min} und {max} Pixel, bitte.",
+          ]
 
   web_quality:
     say:
       - "Und die Qualität? Weniger heißt kleinere Dateien."
     answers:
-      - { label: "Kleiner (65) – reicht oft", set: { web.quality: 65 }, to: prefix }
-      - { label: "Ausgewogen (80) – mein Tipp", set: { web.quality: 80 }, to: prefix }
-      - { label: "Schöner (90) – für Fotos, die glänzen sollen", set: { web.quality: 90 }, to: prefix }
+      - {
+          label: "Kleiner (65) – reicht oft",
+          set: { web.quality: 65 },
+          to: prefix,
+        }
+      - {
+          label: "Ausgewogen (80) – mein Tipp",
+          set: { web.quality: 80 },
+          to: prefix,
+        }
+      - {
+          label: "Schöner (90) – für Fotos, die glänzen sollen",
+          set: { web.quality: 90 },
+          to: prefix,
+        }
     input:
       kind: number
       min: 1
@@ -189,7 +272,11 @@ nodes:
       - "Worum geht's auf den Bildern? Ein paar Stichworte machen die Dateinamen besser für Google."
     answers:
       - { label: "Für alle gleich", to: keywords_all }
-      - { label: "Für jeden Ordner einzeln", when: [several_folders_without_keywords], to: keywords_folder }
+      - {
+          label: "Für jeden Ordner einzeln",
+          when: [several_folders_without_keywords],
+          to: keywords_folder,
+        }
       - { label: "Ohne Stichworte", to: naming_style }
 
   keywords_all:
@@ -230,16 +317,36 @@ nodes:
     say:
       - "Wie sollen die Wörter getrennt sein?"
     answers:
-      - { label: "Mit Bindestrich: {preview_dash}", set: { naming.separator: dash }, to: append_original }
-      - { label: "Mit Unterstrich: {preview_underscore}", set: { naming.separator: underscore }, to: append_original }
-      - { label: "Zusammen, groß geschrieben: {preview_caps}", set: { naming.separator: caps }, to: append_original }
+      - {
+          label: "Mit Bindestrich: {preview_dash}",
+          set: { naming.separator: dash },
+          to: append_original,
+        }
+      - {
+          label: "Mit Unterstrich: {preview_underscore}",
+          set: { naming.separator: underscore },
+          to: append_original,
+        }
+      - {
+          label: "Zusammen, groß geschrieben: {preview_caps}",
+          set: { naming.separator: caps },
+          to: append_original,
+        }
 
   append_original:
     say:
       - "Soll der alte Dateiname mit rein? Hilft, wenn du später was wiederfinden willst."
     answers:
-      - { label: "Nee, lass mal", set: { naming.append_original: false }, to: rerun_check }
-      - { label: "Ja, mit rein", set: { naming.append_original: true }, to: rerun_check }
+      - {
+          label: "Nee, lass mal",
+          set: { naming.append_original: false },
+          to: rerun_check,
+        }
+      - {
+          label: "Ja, mit rein",
+          set: { naming.append_original: true },
+          to: rerun_check,
+        }
 
   # ── Schon mal gemacht? ─────────────────────────────────────────────────────
 
@@ -280,7 +387,10 @@ nodes:
   cancelled:
     mood: neutral
     say:
-      - ["Kein Ding. Wenn du's dir anders überlegst, ich bin hier.", "Alles klar, dann nicht. Ich lauf ja nicht weg."]
+      - [
+          "Kein Ding. Wenn du's dir anders überlegst, ich bin hier.",
+          "Alles klar, dann nicht. Ich lauf ja nicht weg.",
+        ]
     go:
       - { to: "@cancel" }
 
@@ -290,7 +400,11 @@ nodes:
     mood: proud
     say:
       - when: ["!failed_any"]
-        text: ["Fertig! {converted:Eine Datei:Dateien} in {duration}, aus {bytes_in} sind {bytes_out} geworden.", "So, erledigt. {bytes_in} rein, {bytes_out} raus – {saved_percent} Prozent gespart."]
+        text:
+          [
+            "Fertig! {converted:Eine Datei:Dateien} in {duration}, aus {bytes_in} sind {bytes_out} geworden.",
+            "So, erledigt. {bytes_in} rein, {bytes_out} raus – {saved_percent} Prozent gespart.",
+          ]
       - when: [failed_any, "!all_failed"]
         text: "{converted:Eine Datei hat:Dateien haben} geklappt, aber bei {failed:einer:} hat's gehakt. Zum Beispiel: {first_error}"
       - when: [all_failed]
@@ -300,7 +414,11 @@ nodes:
       - when: [converted_any]
         text: "Liegt alles in „{output_folder}“."
     answers:
-      - { label: "Als Vorlage merken", when: [has_images, "!from_template", converted_any], to: preset_name }
+      - {
+          label: "Als Vorlage merken",
+          when: [has_images, "!from_template", converted_any],
+          to: preset_name,
+        }
       - { label: "Danke, Wolfgang!", to: "@end" }
 
   preset_name:
