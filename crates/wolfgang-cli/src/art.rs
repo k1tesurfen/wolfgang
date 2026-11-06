@@ -5,54 +5,54 @@
 use crossterm::style::{Color, Stylize};
 use wolfgang_dialogue::Mood;
 
-/// 16×16 pixels. `.` is transparent.
+/// 16×16 pixels, after the reference studies: bun, clear glasses, beard,
+/// mustard/green striped cardigan. `.` is transparent.
 const BASE: [&str; 16] = [
-    "....hHHHHHHh....",
-    "...hHHHHHHHHh...",
-    "..hHHHHHHHHHHh..",
-    "..rrrrrrrrrrrr..",
-    "..sSSSSSSSSSSs..",
-    "..sGGGGSGGGGSs..",
-    "..sGLEGGGELGSs..",
-    "..sGGGGSGGGGSs..",
-    "..sSSSSssSSSSs..",
-    "..sBSSSSSSSSBs..",
-    "..BBBbMMMMbBBB..",
-    "..BBBBbbbbBBBB..",
-    "...BBBBBBBBBB...",
-    "..cCCBBBBBBCCc..",
-    ".cCCCCTTTTCCCCc.",
-    ".cCCKCTTTTCKCCc.",
+    "..........HH....",
+    "....HHHHHHHHH...",
+    "...HHiiHHHHHHh..",
+    "...HHHHHHHHHHh..",
+    "...HSSSSSSSSH...",
+    "...GGGGSSGGGG...",
+    "...GSEGSSGSEG...",
+    "...GGGGSSGGGGE..",
+    "...SSSSssSSSS...",
+    "..BSBBBBBBBBSB..",
+    "..BBBBMMMMBBBB..",
+    "..BBBBBBBBBBBB..",
+    "...BBBgBBgBBB...",
+    ".YYVBBBBBBBBVYY.",
+    "YYYVVTTTTTTVVYYY",
+    "VVVVVTTTTTTVVVVV",
 ];
 
 /// Mouth rows (10 and 11) per mood.
 fn mouth(mood: Mood) -> [&'static str; 2] {
     match mood {
-        Mood::Happy | Mood::Proud => ["..BBBMbbbbMBBB..", "..BBBBMMMMBBBB.."],
-        Mood::Surprised => ["..BBBbbMMbbBBB..", "..BBBBbMMbBBBB.."],
-        Mood::Sorry => ["..BBBbbbbbbBBB..", "..BBBMMMMMMBBB.."],
-        Mood::Thinking => ["..BBBbbbMMMBBB..", "..BBBBbbbbBBBB.."],
+        Mood::Happy | Mood::Proud => ["..BBBMBBBBMBBB..", "..BBBBMMMMBBBB.."],
+        Mood::Surprised => ["..BBBBBMMBBBBB..", "..BBBBBMMBBBBB.."],
+        Mood::Sorry => ["..BBBBBBBBBBBB..", "..BBBMMMMMMBBB.."],
+        Mood::Thinking => ["..BBBBBBMMMBBB..", "..BBBBBBBBBBBB.."],
         Mood::Neutral => [BASE[10], BASE[11]],
     }
 }
 
+/// Colours taken from the app's portraits.
 fn rgb(c: char) -> Option<(u8, u8, u8)> {
     Some(match c {
-        'H' => (0xc0, 0x66, 0x3a), // beanie
-        'h' => (0x9a, 0x4f, 0x2c),
-        'r' => (0xd9, 0x8a, 0x5a),
-        'S' => (0xf0, 0xc3, 0x9b), // skin
-        's' => (0xd9, 0xa4, 0x7f),
-        'G' => (0x3b, 0x2f, 0x2a), // glasses
-        'E' => (0x2a, 0x24, 0x20),
-        'L' => (0xdf, 0xe8, 0xec), // lens
-        'B' => (0x7a, 0x52, 0x36), // beard
-        'b' => (0x95, 0x68, 0x3f),
-        'M' => (0x5a, 0x34, 0x24),
-        'C' => (0x5b, 0x7a, 0x62), // cardigan
-        'c' => (0x46, 0x60, 0x4c),
-        'K' => (0xe8, 0xd9, 0xb0),
-        'T' => (0xef, 0xe7, 0xd6), // shirt
+        'H' => (0x52, 0x3c, 0x2d), // hair
+        'h' => (0x3d, 0x27, 0x22),
+        'i' => (0x69, 0x4f, 0x40),
+        'S' => (0xe6, 0x9f, 0x5e), // skin
+        's' => (0xd5, 0x75, 0x4c),
+        'G' => (0xbd, 0xa7, 0x99), // clear glasses
+        'E' => (0x1c, 0x0c, 0x16), // eyes, ear plug
+        'B' => (0x5f, 0x44, 0x2e), // beard
+        'g' => (0x86, 0x67, 0x54),
+        'M' => (0x5c, 0x2b, 0x29),
+        'Y' => (0xb4, 0x79, 0x2b), // cardigan mustard
+        'V' => (0x48, 0x4f, 0x33), // cardigan green
+        'T' => (0x1f, 0x22, 0x2d), // tee
         _ => return None,
     })
 }

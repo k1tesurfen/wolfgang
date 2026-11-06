@@ -11,8 +11,10 @@ const ARIAL: &str = "/System/Library/Fonts/Supplemental/Arial.ttf";
 
 fn jpg(path: &Path) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-    // Distinct content per path, or Wolfgang rightly treats them as duplicates.
-    let shade = path.to_string_lossy().bytes().fold(7u8, |a, b| a.wrapping_mul(31).wrapping_add(b));
+    // Clearly different content per file (JPEG would erase subtle differences),
+    // or Wolfgang rightly treats them as duplicates.
+    static NEXT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+    let shade = NEXT.fetch_add(37, std::sync::atomic::Ordering::Relaxed);
     let px = Pixels { width: 120, height: 80, rgba: vec![shade; 120 * 80 * 4], icc: None };
     std::fs::write(path, image::encode(&px, ImageFormat::Jpg, 80.0).unwrap()).unwrap();
 }

@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wolfgangs Büro</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&display=swap" rel="stylesheet">
+<style>
+  :root { --scale: 4; --ink: #1c0c16; --paper: #f6eedd; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: #2a211c; color: #f6eedd; font-family: "Pixelify Sans", ui-monospace, monospace; }
+  body { display: grid; place-items: center; gap: 12px; padding: 16px; }
+  #stage { position: relative; width: calc(320px * var(--scale)); height: calc(180px * var(--scale)); image-rendering: pixelated; }
+  #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+  .px { position: absolute; }
+  .bubble { color: var(--ink); line-height: 1.25; font-size: calc(6.5px * var(--scale)); padding: calc(5px * var(--scale)) calc(7px * var(--scale)); border-style: solid; }
+  #say { left: calc(56px * var(--scale)); top: calc(4px * var(--scale)); width: calc(208px * var(--scale)); min-height: calc(30px * var(--scale)); }
+  #say p { margin: 0 0 calc(2px * var(--scale)); }
+  #tail { width: calc(11px * var(--scale)); height: calc(8px * var(--scale)); }
+  #portrait { left: calc(4px * var(--scale)); top: calc(78px * var(--scale)); width: calc(98px * var(--scale)); height: calc(98px * var(--scale)); padding: calc(1px * var(--scale)); border-style: solid; }
+  #portrait img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
+  #answers { right: calc(6px * var(--scale)); bottom: calc(5px * var(--scale)); width: calc(150px * var(--scale)); display: flex; flex-direction: column; gap: calc(2px * var(--scale)); }
+  .answer { position: relative; cursor: pointer; font-size: calc(5.5px * var(--scale)); padding: calc(3px * var(--scale)) calc(6px * var(--scale)); }
+  .answer .cursor { position: absolute; left: calc(-7px * var(--scale)); top: 50%; transform: translateY(-50%); width: calc(6px * var(--scale)); height: calc(7px * var(--scale)); display: none; }
+  .answer.sel .cursor { display: block; }
+  .tip { position: absolute; font-size: calc(5px * var(--scale)); color: var(--paper); background: rgba(28, 12, 22, .85); padding: 2px 8px; pointer-events: none; white-space: nowrap; display: none; }
+  #drop { position: absolute; border: calc(1px * var(--scale)) dashed #e6b45a; display: none; pointer-events: none; }
+  nav { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; max-width: 1280px; }
+  nav button { font: inherit; font-size: 15px; background: #5c3a22; color: #f6eedd; border: 2px solid #1c0c16; padding: 4px 10px; cursor: pointer; }
+  nav button.on { background: #b4792b; }
+  nav span { align-self: center; opacity: .7; }
+  @media (max-width: 1340px) { :root { --scale: 3; } }
+  @media (max-width: 1000px) { :root { --scale: 2; } }
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="c" width="320" height="180"></canvas>
+  <div id="drop"></div>
+  <div class="px bubble" id="say"></div>
+  <div class="px" id="tail"></div>
+  <div class="px" id="portrait"><img id="face" alt=""></div>
+  <div class="px" id="answers"></div>
+  <div class="tip" id="tip"></div>
+</div>
+<nav id="anims"><span>Wolfgang:</span></nav>
+<nav id="moods"><span>Stimmung:</span></nav>
+<script>
+const SCENE = /*SCENE*/{};
+const IMAGES = /*IMAGES*/{};
+
+const load = src => new Promise(r => { const i = new Image(); i.onload = () => r(i); i.src = src; });
+const $ = id => document.getElementById(id);
+const scale = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--scale'));
+
+const LINES = {
+  neutral: ["Na, was hast du mir mitgebracht? Lass mal sehen …", "Ich seh 42 Fotos und 6 Schriften."],
+  happy: ["Moin! Leg's einfach auf den Tisch, ich kümmer mich drum."],
+  thinking: ["Wofür brauchst du die Bilder?"],
+  surprised: ["Moment, die kenn ich doch! 38 Dateien hab ich schon mal gemacht, 4 sind neu."],
+  proud: ["So, erledigt. 41,7 MB rein, 1,2 MB raus – 98 Prozent gespart."],
+  sorry: ["Mist, bei einer Datei hat's gehakt. Die schau ich mir nochmal an."],
+};
+const ANSWERS = ["Fürs Web vorbereiten – klein und schnell", "Hochwertig behalten – nur ein anderes Format", "✎ Selbst eintippen …"];
+
+(async () => {
+  const img = {};
+  for (const [k, v] of Object.entries(IMAGES)) img[k] = await load(v);
+  const ui = SCENE.ui.frames, uiSheet = img[SCENE.ui.sheet];
+
+  // Cut single UI frames out of the sheet for CSS border-image.
+  const piece = name => {
+    const f = ui[name], c = document.createElement('canvas');
+    c.width = f.w; c.height = f.h;
+    c.getContext('2d').drawImage(uiSheet, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+    return c.toDataURL();
+  };
+  const nine = (el, name) => {
+    const s = ui[name].slice, k = scale();
+    el.style.borderImage = `url(${piece(name)}) ${s} fill / ${s * k}px stretch`;
+    el.style.borderWidth = `${s * k}px`;
+    el.style.imageRendering = 'pixelated';
+  };
+  const restyle = () => {
+    nine($('say'), 'bubble');
+    nine($('portrait'), 'panel');
+    document.querySelectorAll('.answer').forEach(a => nine(a, a.classList.contains('sel') ? 'answer-hover' : 'answer'));
+    const k = scale(), t = $('tail');
+    t.style.background = `url(${piece('tail')}) 0 0 / 100% 100%`;
+    const say = $('say').getBoundingClientRect(), st = $('stage').getBoundingClientRect();
+    t.style.left = `${SCENE.speaker[0] * k - 5 * k}px`;
+    t.style.top = `${say.bottom - st.top - 2 * k}px`;
+    document.querySelectorAll('.cursor').forEach(c => c.style.background = `url(${piece('cursor')}) 0 0 / 100% 100%`);
+  };
+
+  // Answers
+  let sel = 0;
+  const answers = $('answers');
+  ANSWERS.forEach((text, i) => {
+    const a = document.createElement('div');
+    a.className = 'bubble answer' + (i === 0 ? ' sel' : '');
+    a.innerHTML = `<div class="cursor"></div>${text}`;
+    a.onmouseenter = () => { sel = i; document.querySelectorAll('.answer').forEach((b, j) => b.classList.toggle('sel', j === i)); restyle(); };
+    answers.appendChild(a);
+  });
+
+  // Mood → portrait + line
+  let mood = 'neutral', variant = 0;
+  const setMood = m => {
+    mood = m;
+    const options = SCENE.moods[m];
+    $('face').src = IMAGES[SCENE.portraits[options[variant++ % options.length]]];
+    $('say').innerHTML = LINES[m].map(l => `<p>${l}</p>`).join('');
+    document.querySelectorAll('#moods button').forEach(b => b.classList.toggle('on', b.textContent === m));
+    play('talk', 1600);
+    requestAnimationFrame(restyle);
+  };
+  for (const m of Object.keys(SCENE.moods)) {
+    const b = document.createElement('button'); b.textContent = m; b.onclick = () => setMood(m); $('moods').appendChild(b);
+  }
+
+  // Wolfgang's animation
+  const W = SCENE.wolfgang, sheet = img[W.sheet];
+  let anim = 'idle', step = 0, stepAt = 0, back = null;
+  const play = (name, ms) => {
+    anim = name; step = 0; stepAt = performance.now();
+    clearTimeout(back);
+    if (ms) back = setTimeout(() => play('idle'), ms);
+    document.querySelectorAll('#anims button').forEach(b => b.classList.toggle('on', b.textContent === name));
+  };
+  for (const a of Object.keys(W.animations)) {
+    const b = document.createElement('button'); b.textContent = a; b.onclick = () => play(a); $('anims').appendChild(b);
+  }
+
+  // Sparkles over hotspots, tooltips, drop highlight
+  const spots = Object.entries(SCENE.hotspots);
+  let hover = null;
+  const stage = $('stage');
+  const at = e => { const r = stage.getBoundingClientRect(), k = scale(); return [(e.clientX - r.left) / k, (e.clientY - r.top) / k]; };
+  const hit = ([x, y]) => spots.find(([, s]) => s.rects.some(r => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h));
+  stage.addEventListener('mousemove', e => {
+    if (e.target.closest('.bubble')) { hover = null; $('tip').style.display = 'none'; return; }
+    const p = at(e), h = hit(p);
+    hover = h ? h[0] : null;
+    stage.style.cursor = h ? 'pointer' : 'default';
+    const tip = $('tip');
+    tip.style.display = h ? 'block' : 'none';
+    if (h) { tip.textContent = h[1].label; tip.style.left = `${e.clientX - stage.getBoundingClientRect().left + 14}px`; tip.style.top = `${e.clientY - stage.getBoundingClientRect().top + 10}px`; }
+  });
+  stage.addEventListener('click', e => {
+    const h = hit(at(e)); if (!h || e.target.closest('.bubble')) return;
+    const act = h[1].action;
+    if (act === 'sip') play('sip', 2200);
+    else if (act === 'drop') play('type', 2500);
+    else if (act === 'settings') setMood('thinking');
+    else if (act === 'presets') setMood('happy');
+    else if (act === 'about') setMood('proud');
+  });
+  const desk = SCENE.hotspots.desk.rects[0], drop = $('drop');
+  const showDrop = on => { const k = scale(); Object.assign(drop.style, { display: on ? 'block' : 'none', left: `${desk.x * k}px`, top: `${desk.y * k}px`, width: `${desk.w * k}px`, height: `${desk.h * k}px` }); };
+  stage.addEventListener('dragover', e => { e.preventDefault(); showDrop(true); if (anim !== 'hand') play('happy'); });
+  stage.addEventListener('dragleave', () => showDrop(false));
+  stage.addEventListener('drop', e => { e.preventDefault(); showDrop(false); play('type', 3000); setTimeout(() => { play('hand', 2500); setMood('proud'); }, 3000); });
+
+  // Render loop
+  const ctx = $('c').getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const frame = (name, x, y) => { const f = W.frames[name]; ctx.drawImage(sheet, f.x, f.y, f.w, f.h, x, y, f.w, f.h); };
+  const sparkle = SCENE.ui.animations.sparkle;
+  const tick = now => {
+    const steps = W.animations[anim];
+    while (steps[step][1] > 0 && now - stepAt > steps[step][1]) { stepAt += steps[step][1]; step = (step + 1) % steps.length; }
+    ctx.drawImage(img[SCENE.background], 0, 0);
+    frame(steps[step][0], W.origin[0], W.origin[1]);
+    if (hover && hover !== 'desk') {
+      const r = SCENE.hotspots[hover].rects[0];
+      const s = sparkle[Math.floor(now / 260) % sparkle.length][0], f = ui[s];
+      ctx.drawImage(uiSheet, f.x, f.y, f.w, f.h, r.x + r.w - 4, r.y - 4, f.w, f.h);
+    }
+    requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+
+  setMood('neutral');
+  play('idle');
+  addEventListener('resize', restyle);
+  document.fonts?.ready.then(restyle);
+})();
+</script>
+</body>
+</html>

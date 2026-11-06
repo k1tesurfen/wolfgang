@@ -3,7 +3,7 @@
 > Wolfgang is the personification of conversion: a cozy, bearded guy in a cardigan who sits behind his desk with a coffee and converts whatever you put in front of him.
 > Usability for non-technical colleagues is the top priority.
 
-Status: **approved**. Milestones 1–4 (spike, core engine, dialogue, CLI) are done.
+Status: **approved**. Milestones 1–5 (spike, core engine, dialogue, CLI, pixel art) are done.
 
 ---
 
@@ -215,7 +215,9 @@ wolfgang/
 │   ├── src-tauri/            # thin Rust layer → wolfgang-core, emits progress events
 │   └── src/                  # frontend: canvas scene, sprites, bubbles, panels (TypeScript)
 ├── dialogue/de.yaml          # all of Wolfgang's lines and the question tree
-├── assets/pixel/             # code-generated sprites (source grids + build script → PNG)
+├── assets/reference/         # the user's reference images (office + 8 portraits)
+├── assets/pixel/             # generated pixel art + scene.json; src/*.sprite = hand-editable sources
+│   (crates/wolfgang-art)     # the build tool
 ├── legacy/                   # old Bash wolfgang
 ├── spike/                    # M1 throwaway spike
 └── PLAN.md
@@ -272,6 +274,17 @@ Findings:
 - If everything was already converted, Wolfgang says so right after the greeting.
 - The confirmation summary text is generated in Rust (`summary_text`), not in the YAML, because it combines many settings. Change it there.
 
+### Milestone 5 result (2026-11-07) ✅
+
+- **`crates/wolfgang-art`** (`cargo run --release -p wolfgang-art -- build`) turns `assets/reference/` and `assets/pixel/src/*.sprite` into `assets/pixel/`, and writes a clickable preview to `target/wolfgang-art/preview.html`.
+- **Scene: 320×180** (16:9, shown at 4× = 1280×720). Office and portraits end up with almost the same pixel size, so the whole scene has one pixel scale.
+- **Pixelizing:** a k-means palette in OKLab, the majority colour per block, and an outline pass so thin dark lines stay continuous. The office has no strict grid (art pixels ≈ 4 reference pixels, not aligned). The portraits have a clean 11.5-pixel grid.
+- **Portraits:** 96×96 head-and-shoulders, one shared 40-colour palette, transparent background (including areas enclosed by an arm). Moods map in `scene.json`: neutral → sideeye/content, happy → happy, thinking → thinking/dreamy, surprised → surprised, proud → laughing/content, sorry → sorry.
+- **Desk sprite:** 46×56, 8 frames (idle, blink, talk, smile, typeA/B, sip, hand), animations idle/talk/type/sip/hand/happy with timings. The source is a plain-text pixel grid (`wolfgang.sprite`), validated by a test.
+- **UI pieces** (`ui.sprite`): speech bubble and tail, answer bubbles (normal and hover), wooden panel, cursor, sparkle. 9-slice insets are in `scene.json`.
+- **Hotspots** (`scene.json`): desk = drop zone, filing cabinets = settings, clipboard = presets, mug = sip coffee, computer = about/CLI install. Speech bubbles go on the free wall above Wolfgang's head.
+- **Preview layout (visual-novel style):** Wolfgang's bubble at the top with its tail pointing at him, the mood portrait in a wooden frame at the bottom left, answers at the bottom right, and the desk in the middle as the drop zone. The font in the preview is Pixelify Sans (Google Fonts, OFL); the app will bundle it to work offline.
+
 ---
 
 ## 8. Milestones
@@ -280,7 +293,7 @@ Findings:
 2. ✅ **Core engine**: scanning, piles, image/font converters, naming, run log, re-run detection, settings/presets. 26 unit + 9 end-to-end tests.
 3. ✅ **Dialogue engine + `dialogue/de.yaml`**: state machine, typed custom answers, written in Wolfgang's voice. 18 tests, including 300 random conversations.
 4. ✅ **CLI**: flags, TUI conversation, `--yes`/`--json`, presets/settings commands, `legacy-reset`. Moved the Bash script to `legacy/`. 17 CLI tests; the interactive mode was driven in a pseudo-terminal.
-5. **Pixel art**: pixelize tool for the references; office background from #10; mood portraits from the eight studies; animated desk sprite (idle/talk/type/sip/handover) drawn in code; bubbles, panels, object highlights; new-look CLI portrait.
+5. ✅ **Pixel art**: pixelize tool for the references; office background from #10; mood portraits from the eight studies; animated desk sprite (idle/talk/type/sip/handover) drawn in code; bubbles, panels, object highlights; new-look CLI portrait. See *Milestone 5 result*.
 6. **Tauri app**: scene, drag & drop on the desk, bubbles, progress, result, settings/preset panels, SFX, CLI install.
 7. **Release**: `.dmg` build via GitHub Actions (macOS arm64 runner), README rewrite (German), first-launch instructions for the unsigned app. Tag v2.0.0.
 

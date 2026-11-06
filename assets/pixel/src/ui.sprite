@@ -1,0 +1,126 @@
+# UI pieces for the app scene (same format as wolfgang.sprite).
+#
+# frame NAME W H [slice N]   N = 9-slice inset: corners stay, edges/centre stretch.
+
+size 13 13
+
+color O 1c0c16  # outline
+color P f6eedd  # bubble paper
+color U dccdb4  # bubble shade
+color A efe0bd  # answer paper
+color a d8c399  # answer shade
+color Y e6b45a  # highlight mustard
+color y b4792b  # highlight shade
+color v 3b3e2e  # answer border (cardigan green)
+color e a8703f  # wood light
+color D 8a5a34  # wood
+color d 5c3a22  # wood dark
+color W fff6d8  # sparkle light
+color w e6b45a  # sparkle mid
+
+# Wolfgang's speech bubble.
+frame bubble 13 13 slice 4
+...OOOOOOO...
+.OOPPPPPPPOO.
+.OPPPPPPPPPO.
+OPPPPPPPPPPPO
+OPPPPPPPPPPPO
+OPPPPPPPPPPPO
+OPPPPPPPPPPPO
+OPPPPPPPPPPPO
+OPPPPPPPPPPUO
+OPPPPPPPPPPUO
+.OPUUUUUUUUO.
+.OOUUUUUUUOO.
+...OOOOOOO...
+
+# Tail below the bubble, pointing down to Wolfgang (overlaps the bubble's bottom edge).
+frame tail 11 8
+OUUUUUUUUUO
+.OUUUUUUUO.
+..OPPPPPO..
+...OPPPO...
+...OPPO....
+....OPO....
+....OO.....
+....O......
+
+# The user's answers.
+frame answer 13 13 slice 4
+...vvvvvvv...
+.vvAAAAAAAvv.
+.vAAAAAAAAAv.
+vAAAAAAAAAAAv
+vAAAAAAAAAAAv
+vAAAAAAAAAAAv
+vAAAAAAAAAAAv
+vAAAAAAAAAAAv
+vAAAAAAAAAAav
+vAAAAAAAAAAav
+.vAaaaaaaaav.
+.vvaaaaaaavv.
+...vvvvvvv...
+
+frame answer-hover 13 13 slice 4
+...OOOOOOO...
+.OOYYYYYYYOO.
+.OYYYYYYYYYO.
+OYYYYYYYYYYYO
+OYYYYYYYYYYYO
+OYYYYYYYYYYYO
+OYYYYYYYYYYYO
+OYYYYYYYYYYYO
+OYYYYYYYYYYyO
+OYYYYYYYYYYyO
+.OYyyyyyyyyO.
+.OOyyyyyyyOO.
+...OOOOOOO...
+
+# Wooden panel for settings and presets (paper inside).
+frame panel 15 15 slice 5
+.OOOOOOOOOOOOO.
+OeeeeeeeeeeeeeO
+OeDDDDDDDDDDDdO
+OeDOOOOOOOOODdO
+OeDOPPPPPPPODdO
+OeDOPPPPPPPODdO
+OeDOPPPPPPPODdO
+OeDOPPPPPPPODdO
+OeDOPPPPPPPODdO
+OeDOPPPPPPPODdO
+OeDOPPPPPPUODdO
+OeDOOOOOOOOODdO
+OeDDDDDDDDDDDdO
+OdddddddddddddO
+.OOOOOOOOOOOOO.
+
+# Cursor next to the highlighted answer.
+frame cursor 6 7
+OO....
+OYO...
+OYYO..
+OYYyO.
+OYyO..
+OyO...
+OO....
+
+# Twinkle over things you can click.
+frame sparkle-a 7 7
+...O...
+...W...
+..OwO..
+OWwWwWO
+..OwO..
+...W...
+...O...
+
+frame sparkle-b 7 7
+.......
+...O...
+...W...
+.OWWWO.
+...W...
+...O...
+.......
+
+anim sparkle sparkle-a:260 sparkle-b:260

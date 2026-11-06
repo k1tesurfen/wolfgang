@@ -1,0 +1,348 @@
+{
+  "width": 320,
+  "height": 180,
+  "background": "office.png",
+  "wolfgang": {
+    "sheet": "wolfgang.png",
+    "origin": [
+      140,
+      52
+    ],
+    "frames": {
+      "blink": {
+        "x": 47,
+        "y": 0,
+        "w": 46,
+        "h": 56
+      },
+      "hand": {
+        "x": 329,
+        "y": 0,
+        "w": 46,
+        "h": 56
+      },
+      "idle": {
+        "x": 0,
+        "y": 0,
+        "w": 46,
+        "h": 56
+      },
+      "sip": {
+        "x": 282,
+        "y": 0,
+        "w": 46,
+        "h": 56
+      },
+      "smile": {
+        "x": 141,
+        "y": 0,
+        "w": 46,
+        "h": 56
+      },
+      "talk": {
+        "x": 94,
+        "y": 0,
+        "w": 46,
+        "h": 56
+      },
+      "typeA": {
+        "x": 188,
+        "y": 0,
+        "w": 46,
+        "h": 56
+      },
+      "typeB": {
+        "x": 235,
+        "y": 0,
+        "w": 46,
+        "h": 56
+      }
+    },
+    "animations": {
+      "hand": [
+        [
+          "hand",
+          0
+        ]
+      ],
+      "happy": [
+        [
+          "smile",
+          0
+        ]
+      ],
+      "idle": [
+        [
+          "idle",
+          2600
+        ],
+        [
+          "blink",
+          130
+        ],
+        [
+          "idle",
+          4200
+        ],
+        [
+          "blink",
+          110
+        ],
+        [
+          "idle",
+          180
+        ],
+        [
+          "blink",
+          110
+        ]
+      ],
+      "sip": [
+        [
+          "idle",
+          300
+        ],
+        [
+          "sip",
+          1600
+        ],
+        [
+          "idle",
+          0
+        ]
+      ],
+      "talk": [
+        [
+          "talk",
+          150
+        ],
+        [
+          "idle",
+          110
+        ],
+        [
+          "talk",
+          170
+        ],
+        [
+          "smile",
+          140
+        ],
+        [
+          "talk",
+          120
+        ],
+        [
+          "idle",
+          150
+        ]
+      ],
+      "type": [
+        [
+          "typeA",
+          120
+        ],
+        [
+          "typeB",
+          120
+        ],
+        [
+          "typeA",
+          140
+        ],
+        [
+          "idle",
+          90
+        ],
+        [
+          "typeB",
+          110
+        ],
+        [
+          "typeA",
+          120
+        ]
+      ]
+    }
+  },
+  "ui": {
+    "sheet": "ui.png",
+    "frames": {
+      "answer": {
+        "x": 26,
+        "y": 0,
+        "w": 13,
+        "h": 13,
+        "slice": 4
+      },
+      "answer-hover": {
+        "x": 40,
+        "y": 0,
+        "w": 13,
+        "h": 13,
+        "slice": 4
+      },
+      "bubble": {
+        "x": 0,
+        "y": 0,
+        "w": 13,
+        "h": 13,
+        "slice": 4
+      },
+      "cursor": {
+        "x": 70,
+        "y": 0,
+        "w": 6,
+        "h": 7
+      },
+      "panel": {
+        "x": 54,
+        "y": 0,
+        "w": 15,
+        "h": 15,
+        "slice": 5
+      },
+      "sparkle-a": {
+        "x": 77,
+        "y": 0,
+        "w": 7,
+        "h": 7
+      },
+      "sparkle-b": {
+        "x": 85,
+        "y": 0,
+        "w": 7,
+        "h": 7
+      },
+      "tail": {
+        "x": 14,
+        "y": 0,
+        "w": 11,
+        "h": 8
+      }
+    },
+    "animations": {
+      "sparkle": [
+        [
+          "sparkle-a",
+          260
+        ],
+        [
+          "sparkle-b",
+          260
+        ]
+      ]
+    }
+  },
+  "portraits": {
+    "content": "portraits/content.png",
+    "dreamy": "portraits/dreamy.png",
+    "happy": "portraits/happy.png",
+    "laughing": "portraits/laughing.png",
+    "sideeye": "portraits/sideeye.png",
+    "sorry": "portraits/sorry.png",
+    "surprised": "portraits/surprised.png",
+    "thinking": "portraits/thinking.png"
+  },
+  "moods": {
+    "happy": [
+      "happy"
+    ],
+    "neutral": [
+      "sideeye",
+      "content"
+    ],
+    "proud": [
+      "laughing",
+      "content"
+    ],
+    "sorry": [
+      "sorry"
+    ],
+    "surprised": [
+      "surprised"
+    ],
+    "thinking": [
+      "thinking",
+      "dreamy"
+    ]
+  },
+  "hotspots": {
+    "cabinet": {
+      "action": "settings",
+      "label": "Aktenschrank: Einstellungen",
+      "rects": [
+        {
+          "x": 0,
+          "y": 112,
+          "w": 34,
+          "h": 68
+        },
+        {
+          "x": 84,
+          "y": 60,
+          "w": 26,
+          "h": 40
+        }
+      ]
+    },
+    "clipboard": {
+      "action": "presets",
+      "label": "Klemmbrett: Vorlagen",
+      "rects": [
+        {
+          "x": 110,
+          "y": 106,
+          "w": 23,
+          "h": 15
+        }
+      ]
+    },
+    "computer": {
+      "action": "about",
+      "label": "Computer: Über Wolfgang",
+      "rects": [
+        {
+          "x": 207,
+          "y": 76,
+          "w": 38,
+          "h": 43
+        }
+      ]
+    },
+    "desk": {
+      "action": "drop",
+      "label": "Leg's auf den Tisch",
+      "rects": [
+        {
+          "x": 73,
+          "y": 98,
+          "w": 180,
+          "h": 75
+        }
+      ]
+    },
+    "mug": {
+      "action": "sip",
+      "label": "Wolfgangs Kaffee",
+      "rects": [
+        {
+          "x": 100,
+          "y": 110,
+          "w": 9,
+          "h": 11
+        }
+      ]
+    }
+  },
+  "bubble_area": {
+    "x": 56,
+    "y": 4,
+    "w": 208,
+    "h": 46
+  },
+  "speaker": [
+    162,
+    70
+  ]
+}
