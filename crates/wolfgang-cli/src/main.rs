@@ -79,10 +79,20 @@ fn convert(ui: &Ui, store: &mut UserStore, store_path: &Path, mut args: flags::R
         return ExitCode::from(2);
     }
 
-    if interactive {
-        ui.note("Moment, ich guck mir das an …");
+    // Hashing big folders can take a moment; a spinner that vanishes once Wolfgang talks.
+    let looking = interactive.then(|| {
+        let pb = indicatif::ProgressBar::new_spinner().with_style(
+            indicatif::ProgressStyle::with_template("  {spinner:.yellow} {msg}").expect("valid template").tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
+        );
+        pb.set_message("Wolfgang guckt sich das an …");
+        pb.enable_steady_tick(std::time::Duration::from_millis(100));
+        pb
+    });
+    let opened = Workspace::open(&args.paths);
+    if let Some(pb) = looking {
+        pb.finish_and_clear();
     }
-    let mut ws = match Workspace::open(&args.paths) {
+    let mut ws = match opened {
         Ok(ws) => ws,
         Err(e) => {
             ui.error(&e.to_string());
