@@ -1,0 +1,151 @@
+//! `wolfgang`: the command line face of Wolfgang.
+//!
+//! Exit codes: 0 ok, 1 some files failed (or another error), 2 usage error, 130 aborted.
+
+mod art;
+mod flags;
+mod legacy;
+mod manage;
+mod run;
+mod tui;
+mod ui;
+
+use clap::Parser;
+use flags::{Cli, Command, OnlyArg};
+use std::io::IsTerminal;
+use std::path::Path;
+use std::process::ExitCode;
+use ui::Ui;
+use wolfgang_core::{FileKind, UserStore, Workspace};
+
+fn main() -> ExitCode {
+    let cli = Cli::parse();
+    let ui = Ui::new();
+    run::install_ctrlc();
+
+    let store_path = UserStore::default_path();
+    let mut store = match UserStore::load(&store_path) {
+        Ok(l) => {
+            if let Some(backup) = l.recovered_from {
+                ui.note(&format!("Meine Einstellungen waren durcheinander, ich hab neu angefangen (alte Datei: {}).", backup.display()));
+            }
+            l.store
+        }
+        Err(e) => {
+            ui.error(&format!("Kann meine Einstellungen nicht lesen: {e}"));
+            return ExitCode::from(1);
+        }
+    };
+
+    match cli.command {
+        Some(Command::Presets { action }) => manage::presets(&ui, &mut store, &store_path, action),
+        Some(Command::Settings { action }) => manage::settings(&ui, &mut store, &store_path, action),
+        Some(Command::LegacyReset { path, yes }) => legacy_reset(&ui, &path, yes),
+        None if cli.run.reset => {
+            let dir = cli.run.paths.first().cloned().unwrap_or_else(|| ".".into());
+            legacy_reset(&ui, &dir, cli.run.yes)
+        }
+        None => convert(&ui, &mut store, &store_path, cli.run),
+    }
+}
+
+fn convert(ui: &Ui, store: &mut UserStore, store_path: &Path, mut args: flags::RunArgs) -> ExitCode {
+    let interactive = !args.yes && !args.json && std::io::stdin().is_terminal() && std::io::stdout().is_terminal();
+    if interactive {
+        tui::setup_prompts();
+    }
+
+    // Validate flags before scanning anything.
+    let fixed = match args.fixed(store) {
+        Ok(f) => f,
+        Err(e) => {
+            ui.error(&e);
+            return ExitCode::from(2);
+        }
+    };
+
+    if args.paths.is_empty() {
+        if !interactive {
+            ui.error("Sag mir, welchen Ordner: wolfgang ORDNER (oder wolfgang --help)");
+            return ExitCode::from(2);
+        }
+        match tui::ask_for_paths(ui) {
+            Some(p) => args.paths = p,
+            None => return ExitCode::SUCCESS,
+        }
+    }
+    if let Some(missing) = args.paths.iter().find(|p| !p.exists()) {
+        ui.error(&format!("„{}“ find ich nicht.", missing.display()));
+        return ExitCode::from(2);
+    }
+
+    if interactive {
+        ui.note("Moment, ich guck mir das an …");
+    }
+    let mut ws = match Workspace::open(&args.paths) {
+        Ok(ws) => ws,
+        Err(e) => {
+            ui.error(&e.to_string());
+            return ExitCode::from(1);
+        }
+    };
+    match args.only {
+        Some(OnlyArg::Images) => ws.exclude(FileKind::Font),
+        Some(OnlyArg::Fonts) => ws.exclude(FileKind::Image),
+        None => {}
+    }
+
+    if interactive {
+        tui::converse(ui, ws, store, store_path, fixed)
+    } else {
+        run::non_interactive(ui, ws, store, store_path, &args)
+    }
+}
+
+fn legacy_reset(ui: &Ui, dir: &Path, yes: bool) -> ExitCode {
+    let plan = match legacy::plan(dir) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            ui.say(&[format!("In „{}“ hab ich kein altes Logbuch gefunden. Da gibt's nix zurückzudrehen.", dir.display())], None);
+            return ExitCode::SUCCESS;
+        }
+        Err(e) => {
+            ui.error(&e);
+            return ExitCode::from(1);
+        }
+    };
+    let rel = |p: &Path| p.strip_prefix(dir).unwrap_or(p).display().to_string();
+    for (from, to) in &plan.renames {
+        println!("  {} → {}", rel(from), to.file_name().unwrap_or_default().to_string_lossy());
+    }
+    for (from, to) in &plan.blocked {
+        ui.note(&format!("übersprungen: {} („{}“ gibt's schon)", rel(from), to.file_name().unwrap_or_default().to_string_lossy()));
+    }
+    if !plan.missing.is_empty() {
+        ui.note(&format!("{} Dateien aus dem Logbuch gibt's nicht mehr, die lass ich.", plan.missing.len()));
+    }
+    if plan.renames.is_empty() {
+        ui.say(&["Nix umzubenennen.".into()], None);
+        return ExitCode::SUCCESS;
+    }
+    let go = yes
+        || (std::io::stdin().is_terminal()
+            && inquire::Confirm::new(&format!("{} Originaldateien zurück umbenennen?", plan.renames.len())).with_default(true).prompt().unwrap_or(false));
+    if !go {
+        ui.say(&["Hab nix angefasst. (Mit --yes mach ich's ohne Nachfrage.)".into()], None);
+        return ExitCode::SUCCESS;
+    }
+    let errors = legacy::apply(dir, &plan);
+    for (p, e) in &errors {
+        ui.error(&format!("{}: {e}", rel(p)));
+    }
+    ui.say(
+        &[format!("{} Dateien heißen wieder wie früher. Die alten *-wolfgang-Ordner hab ich nicht angefasst.", plan.renames.len() - errors.len())],
+        None,
+    );
+    if errors.is_empty() {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::from(1)
+    }
+}

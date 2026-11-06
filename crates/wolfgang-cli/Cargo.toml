@@ -1,0 +1,29 @@
+[package]
+name = "wolfgang-cli"
+description = "Wolfgang on the command line"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+publish = false
+
+[[bin]]
+name = "wolfgang"
+path = "src/main.rs"
+
+[dependencies]
+wolfgang-core = { path = "../wolfgang-core" }
+wolfgang-dialogue = { path = "../wolfgang-dialogue" }
+clap = { version = "4", features = ["derive"] }
+crossterm = "0.29"
+ctrlc = "3"
+fastrand = "2"
+indicatif = "0.18"
+inquire = "0.9"
+serde_json = "1"
+serde_norway = "0.9"
+textwrap = "0.16"
+
+[dev-dependencies]
+serde_json = "1"
+tempfile = "3"

@@ -89,11 +89,22 @@ pub struct Conversation {
     last_variant: HashMap<String, usize>,
     run: Option<RunInfo>,
     started_with: Option<RunSettings>,
+    /// Answers given up front (CLI flags); questions they answer are skipped.
+    fixed: Vec<(String, Value)>,
 }
+
+/// Keys that trigger an action instead of storing a value; never re-applied.
+const ACTION_KEYS: &[&str] = &["use_last", "preset", "save_preset"];
 
 impl Conversation {
     /// Starts talking. `seed` makes line variants reproducible (tests); use any value otherwise.
     pub fn new(script: Arc<Script>, ctx: Context, seed: u64) -> Self {
+        Self::with_fixed(script, ctx, seed, Vec::new())
+    }
+
+    /// Like [`Conversation::new`], with some answers already given (e.g. CLI flags as
+    /// `("web.max_side", 2000)`). Questions fully answered by them are skipped.
+    pub fn with_fixed(script: Arc<Script>, ctx: Context, seed: u64, fixed: Vec<(String, Value)>) -> Self {
         let state = State { node: String::new(), item: 0, draft: Draft::new(&ctx.store.defaults) };
         let start = script.start.clone();
         let mut c = Self {
@@ -107,7 +118,9 @@ impl Conversation {
             last_variant: HashMap::new(),
             run: None,
             started_with: None,
+            fixed,
         };
+        c.reapply_fixed();
         c.enter(start, Vec::new());
         c
     }
@@ -160,7 +173,7 @@ impl Conversation {
                 if lines.is_empty() {
                     lines.push("Hm, das versteh ich nicht. Nochmal?".into());
                 }
-                self.ask(&node, lines);
+                self.ask(&node, Vec::new(), lines);
             }
         }
         &self.current
@@ -229,17 +242,21 @@ impl Conversation {
     }
 
     fn advance(&mut self, to: Option<String>) {
+        self.advance_with(to, Vec::new());
+    }
+
+    fn advance_with(&mut self, to: Option<String>, lines: Vec<String>) {
         let node = self.node();
         if let Some(fe) = node.foreach {
             if self.state.item + 1 < self.items(fe).len() {
                 self.state.item += 1;
                 let same = self.state.node.clone();
-                return self.enter(same, Vec::new());
+                return self.enter(same, lines);
             }
         }
         self.state.item = 0;
         let target = to.or(node.then).unwrap_or_else(|| "@end".into());
-        self.enter(target, Vec::new());
+        self.enter(target, lines);
     }
 
     fn enter(&mut self, mut target: String, mut lines: Vec<String>) {
@@ -262,11 +279,12 @@ impl Conversation {
                 self.set(k, v);
             }
             let item_vars = self.item_vars(&node);
-            lines.extend(self.say(&node.say, &item_vars));
+            let own = self.say(&node.say, &item_vars);
             mood = node.mood;
             if node.go.is_empty() {
-                return self.ask(&node, lines);
+                return self.ask(&node, lines, own);
             }
+            lines.extend(own);
             match node.go.iter().find(|g| self.all(&g.when)) {
                 Some(g) => target = g.to.clone(),
                 None => break,
@@ -277,7 +295,8 @@ impl Conversation {
         self.current = Step::End { mood: Mood::Sorry, lines };
     }
 
-    fn ask(&mut self, node: &Node, lines: Vec<String>) {
+    /// Shows the question: `before` are lines from earlier nodes, `own` the node's own.
+    fn ask(&mut self, node: &Node, before: Vec<String>, own: Vec<String>) {
         let item_vars = self.item_vars(node);
         let mut answers = Vec::new();
         let mut choices = Vec::new();
@@ -297,7 +316,25 @@ impl Conversation {
                 choices.push(Choice { set, to: a.to.clone() });
             }
         }
+
+        // Already answered up front? Skip the question, keep what was said before it.
+        if !self.fixed.is_empty() {
+            let is_fixed = |k: &str, v: &Value| self.fixed.iter().any(|(fk, fv)| fk == k && fv == v);
+            if let Some(c) = choices.iter().find(|c| !c.set.is_empty() && c.set.iter().all(|(k, v)| is_fixed(k, v))) {
+                let c = c.clone();
+                for (k, v) in &c.set {
+                    self.set(k, v);
+                }
+                return self.advance_with(c.to, before);
+            }
+            if let Some(inp) = node.input.as_ref().filter(|i| self.fixed.iter().any(|(k, _)| *k == i.set)) {
+                return self.advance_with(inp.to.clone(), before);
+            }
+        }
+
         self.choices = choices;
+        let mut lines = before;
+        lines.extend(own);
         let input = node.input.as_ref().map(|i| InputView {
             kind: i.kind,
             placeholder: i.placeholder.as_ref().map(|p| self.render(p, &item_vars)),
@@ -326,6 +363,15 @@ impl Conversation {
         if let Err(e) = self.state.draft.apply(key, value, &self.ctx.store, folder.as_deref()) {
             debug_assert!(false, "dialogue set {key}: {e}");
         }
+        self.reapply_fixed(); // flags win over last run, presets and answers
+    }
+
+    fn reapply_fixed(&mut self) {
+        let fixed = std::mem::take(&mut self.fixed);
+        for (k, v) in fixed.iter().filter(|(k, _)| !ACTION_KEYS.contains(&k.as_str())) {
+            let _ = self.state.draft.apply(k, v, &self.ctx.store, None);
+        }
+        self.fixed = fixed;
     }
 
     fn items(&self, fe: Foreach) -> Vec<String> {

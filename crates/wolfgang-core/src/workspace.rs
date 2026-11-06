@@ -111,6 +111,19 @@ impl Workspace {
         Ok(Self { scan, output_root, source_key, log, hashes })
     }
 
+    /// Leaves a whole pile alone (e.g. `--only fonts`): its files are neither
+    /// counted nor converted.
+    pub fn exclude(&mut self, kind: FileKind) {
+        let keep: Vec<bool> = self.scan.files.iter().map(|f| f.kind != kind).collect();
+        let mut k = keep.iter();
+        self.scan.files.retain(|_| *k.next().unwrap());
+        let mut k = keep.iter();
+        self.hashes.retain(|_| *k.next().unwrap());
+        if kind == FileKind::Image {
+            self.scan.keyword_files.clear();
+        }
+    }
+
     fn convertible(&self) -> impl Iterator<Item = (&ScannedFile, &String)> {
         self.scan.files.iter().zip(&self.hashes).filter(|(f, _)| f.kind != FileKind::Unknown)
     }

@@ -8,6 +8,9 @@ A small shell tool that turns a folder of photos into web-ready, SEO-friendly JP
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
+> **Wolfgang 2 is in the works** on this branch: a Rust CLI + macOS app with a pixel-art Wolfgang to talk to.
+> See [PLAN.md](PLAN.md). Install it with `./install.sh`. The Bash version described below now lives in [`legacy/`](legacy/).
+
 ---
 
 ## What it does

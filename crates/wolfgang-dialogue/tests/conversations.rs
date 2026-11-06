@@ -304,3 +304,52 @@ fn random_conversations_always_end_cleanly() {
     }
     assert!(!store.presets.is_empty() && store.last_run.is_some(), "the walk covered presets and last runs");
 }
+
+fn val(yaml: &str) -> wolfgang_dialogue::script::Value {
+    serde_norway::from_str(yaml).unwrap()
+}
+
+#[test]
+fn flags_skip_answered_questions_but_keep_the_greeting() {
+    let t = tempfile::tempdir().unwrap();
+    let root = hotel(t.path());
+    let store = UserStore {
+        last_run: Some(wolfgang_core::RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Png }), fonts: None }),
+        ..Default::default()
+    };
+    let ws = Workspace::open(std::slice::from_ref(&root)).unwrap();
+    let fixed = vec![
+        ("use_last".to_owned(), val("false")),
+        ("mode".to_owned(), val("web")),
+        ("web.format".to_owned(), val("avif")),
+        ("web.max_side".to_owned(), val("2000")),
+        ("naming.prefix".to_owned(), val("Hotel")),
+    ];
+    let mut c = Conversation::with_fixed(builtin(), Context::new(&ws, &store), 3, fixed);
+    assert_eq!(node(&c), "web_quality", "how/mode/format/size were answered by flags");
+    assert!(said(&c).contains("3 Fotos"), "greeting survives skipping: {}", said(&c));
+    pick(&mut c, "Ausgewogen");
+    assert_eq!(node(&c), "keywords_ask", "prefix answered by flag");
+    pick(&mut c, "Ohne");
+    pick(&mut c, "Bindestrich");
+    pick(&mut c, "Nee");
+    assert!(said(&c).contains("AVIF, 2000 px, Qualität 80, Name „Hotel“"), "{}", said(&c));
+}
+
+#[test]
+fn flags_override_a_preset() {
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("P");
+    jpg(&root.join("a.jpg"));
+    let mut store = UserStore::default();
+    let web = wolfgang_core::WebSettings { max_side: 800, ..Default::default() };
+    store.save_preset("Klein", wolfgang_core::RunSettings { images: Some(ImageSettings::Web(web)), fonts: None }).unwrap();
+    let ws = Workspace::open(std::slice::from_ref(&root)).unwrap();
+    let fixed = vec![("preset".to_owned(), val("Klein")), ("web.quality".to_owned(), val("55"))];
+    let mut c = Conversation::with_fixed(builtin(), Context::new(&ws, &store), 3, fixed);
+    if node(&c) == "keywords_ask" {
+        pick(&mut c, "Ohne");
+    }
+    assert_eq!(node(&c), "confirm");
+    assert!(said(&c).contains("800 px, Qualität 55"), "{}", said(&c));
+}

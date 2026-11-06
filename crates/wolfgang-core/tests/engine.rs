@@ -279,3 +279,16 @@ fn caps_separator_and_typed_folder_keywords() {
     let plan = ws.plan(&settings, RerunPolicy::OnlyNew).unwrap();
     assert_eq!(plan.jobs[0].target, PathBuf::from("Schuhe/MuellerRoteSchuheLeder10001.webp"));
 }
+
+#[test]
+fn excluding_a_pile() {
+    let t = tempfile::tempdir().unwrap();
+    let root = holiday_folder(t.path());
+    let mut ws = Workspace::open(&[root]).unwrap();
+    ws.exclude(FileKind::Image);
+    let s = ws.summary();
+    assert_eq!(s.images.total, 0);
+    assert!(s.folders_without_keywords.is_empty() && s.keyword_files.is_empty());
+    assert_eq!(s.fonts.total, Path::new(ARIAL).exists() as usize);
+    assert_eq!(s.unknown.len(), 1);
+}

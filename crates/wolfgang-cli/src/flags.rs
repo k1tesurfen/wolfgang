@@ -1,0 +1,347 @@
+//! Command line arguments and how they turn into dialogue answers.
+
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use std::path::PathBuf;
+use wolfgang_core::{ImageSettings, RerunPolicy, RunSettings, UserStore};
+use wolfgang_dialogue::draft::{Draft, Mode};
+use wolfgang_dialogue::script::Value;
+
+#[derive(Parser, Debug)]
+#[command(
+    name = "wolfgang",
+    version,
+    about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Schriften zu WOFF2.",
+    long_about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Schriften zu WOFF2.\n\n\
+        Im Terminal fragt er dich, was du willst. Optionen beantworten seine Fragen vorab; \
+        mit --yes (oder ohne Terminal) fragt er gar nicht und nimmt deine Standards.",
+    args_conflicts_with_subcommands = true
+)]
+pub struct Cli {
+    #[command(subcommand)]
+    pub command: Option<Command>,
+    #[command(flatten)]
+    pub run: RunArgs,
+}
+
+#[derive(Args, Debug, Default)]
+pub struct RunArgs {
+    /// Ordner oder Dateien (ohne: Wolfgang fragt danach)
+    pub paths: Vec<PathBuf>,
+
+    /// Fürs Web vorbereiten (klein, schnell, SEO-Namen)
+    #[arg(long, conflicts_with = "hq")]
+    pub web: bool,
+    /// Hochwertig behalten (Originalgröße, Originalnamen)
+    #[arg(long)]
+    pub hq: bool,
+    /// Bildformat (fürs Web nur webp oder avif)
+    #[arg(short, long, value_enum)]
+    pub format: Option<FormatArg>,
+    /// Längste Seite in Pixeln (Web)
+    #[arg(short = 'd', long, visible_alias = "dimension", value_parser = clap::value_parser!(u32).range(100..=8000))]
+    pub size: Option<u32>,
+    /// Qualität 1–100 (Web)
+    #[arg(short, long, value_parser = clap::value_parser!(u8).range(1..=100))]
+    pub quality: Option<u8>,
+    /// Vorsilbe für Dateinamen (Web)
+    #[arg(short, long)]
+    pub name: Option<String>,
+    /// Stichworte für Ordner ohne Stichwortzettel (Web)
+    #[arg(short, long)]
+    pub keywords: Option<String>,
+    /// Worttrennung in Dateinamen (Web)
+    #[arg(short, long, value_enum)]
+    pub separator: Option<SeparatorArg>,
+    /// Alten Dateinamen anhängen (Web)
+    #[arg(short, long)]
+    pub append: bool,
+    /// Gespeicherte Vorlage benutzen
+    #[arg(short, long)]
+    pub preset: Option<String>,
+    /// Nur einen Stapel bearbeiten
+    #[arg(long, value_enum)]
+    pub only: Option<OnlyArg>,
+    /// Auch schon umgewandelte Dateien nochmal machen
+    #[arg(long)]
+    pub all: bool,
+    /// Nicht fragen: Standards + Optionen nehmen
+    #[arg(short, long)]
+    pub yes: bool,
+    /// Maschinenlesbare Ausgabe (eine JSON-Zeile pro Ereignis), fragt nie
+    #[arg(long)]
+    pub json: bool,
+    /// Wie früher: alte Umbenennungen rückgängig machen (= legacy-reset)
+    #[arg(short, long, hide = true)]
+    pub reset: bool,
+}
+
+#[derive(Subcommand, Debug)]
+pub enum Command {
+    /// Gespeicherte Vorlagen anzeigen oder löschen
+    Presets {
+        #[command(subcommand)]
+        action: Option<PresetAction>,
+    },
+    /// Deine Standards anzeigen oder ändern
+    Settings {
+        #[command(subcommand)]
+        action: Option<SettingsAction>,
+    },
+    /// Umbenennungen des alten Wolfgang (1.x) an Originaldateien rückgängig machen
+    LegacyReset {
+        /// Ordner, in dem der alte Wolfgang lief
+        #[arg(default_value = ".")]
+        path: PathBuf,
+        /// Ohne Nachfrage umbenennen
+        #[arg(short, long)]
+        yes: bool,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum PresetAction {
+    /// Alle Vorlagen anzeigen
+    List,
+    /// Eine Vorlage löschen
+    Remove { name: String },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SettingsAction {
+    /// Standards anzeigen
+    Show,
+    /// Einen Standard ändern, z. B. `wolfgang settings set web-format avif`
+    Set { key: SettingKey, value: String },
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettingKey {
+    WebFormat,
+    Size,
+    Quality,
+    HqFormat,
+    Separator,
+    Sound,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FormatArg {
+    Jpg,
+    Webp,
+    Avif,
+    Png,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SeparatorArg {
+    Dash,
+    Underscore,
+    Caps,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum OnlyArg {
+    Images,
+    Fonts,
+}
+
+fn yaml(s: &str) -> Value {
+    serde_norway::from_str(s).expect("static yaml")
+}
+
+fn text(s: &str) -> Value {
+    Value::String(s.to_owned())
+}
+
+fn num(n: u32) -> Value {
+    Value::Number(n.into())
+}
+
+impl FormatArg {
+    fn key(self) -> &'static str {
+        match self {
+            Self::Jpg => "jpg",
+            Self::Webp => "webp",
+            Self::Avif => "avif",
+            Self::Png => "png",
+        }
+    }
+}
+
+impl RunArgs {
+    fn web_only_flags(&self) -> Vec<&'static str> {
+        let mut v = Vec::new();
+        if self.size.is_some() {
+            v.push("--size");
+        }
+        if self.quality.is_some() {
+            v.push("--quality");
+        }
+        if self.name.is_some() {
+            v.push("--name");
+        }
+        if self.keywords.is_some() {
+            v.push("--keywords");
+        }
+        if self.separator.is_some() {
+            v.push("--separator");
+        }
+        if self.append {
+            v.push("--append");
+        }
+        v
+    }
+
+    /// Flags as pre-given dialogue answers. Errors are usage errors (German).
+    pub fn fixed(&self, store: &UserStore) -> Result<Vec<(String, Value)>, String> {
+        let web_flags = self.web_only_flags();
+        if self.hq && !web_flags.is_empty() {
+            return Err(format!("{} gilt nur fürs Web, nicht mit --hq", web_flags.join(", ")));
+        }
+        let format_is_web = matches!(self.format, Some(FormatArg::Webp | FormatArg::Avif));
+        let mode = if self.hq || (self.format.is_some() && !format_is_web) {
+            Some("hq")
+        } else if self.web || !web_flags.is_empty() {
+            Some("web")
+        } else {
+            None
+        };
+        if mode == Some("hq") && !web_flags.is_empty() {
+            return Err(format!("{} gilt nur fürs Web; JPG und PNG gibt's nur bei „hochwertig“", web_flags.join(", ")));
+        }
+
+        let mut f: Vec<(String, Value)> = Vec::new();
+        let mut put = |k: &str, v: Value| f.push((k.to_owned(), v));
+        if let Some(name) = &self.preset {
+            let p = store.preset(name).ok_or_else(|| {
+                let known: Vec<_> = store.presets.iter().map(|p| p.name.as_str()).collect();
+                if known.is_empty() {
+                    format!("Vorlage „{name}“ gibt's nicht (du hast noch keine)")
+                } else {
+                    format!("Vorlage „{name}“ gibt's nicht. Vorhanden: {}", known.join(", "))
+                }
+            })?;
+            put("preset", text(&p.name));
+        } else if mode.is_some() || self.format.is_some() {
+            put("use_last", yaml("false"));
+        }
+        if let Some(m) = mode {
+            put("mode", text(m));
+        }
+        if let Some(fmt) = self.format {
+            if mode != Some("web") {
+                put("hq.format", text(fmt.key()));
+            }
+            if format_is_web && mode != Some("hq") {
+                put("web.format", text(fmt.key()));
+            }
+        }
+        if let Some(s) = self.size {
+            put("web.max_side", num(s));
+        }
+        if let Some(q) = self.quality {
+            put("web.quality", num(q as u32));
+        }
+        if let Some(n) = &self.name {
+            put("naming.prefix", text(n));
+        }
+        if let Some(k) = &self.keywords {
+            put("naming.keywords_all", text(k));
+        }
+        if let Some(s) = self.separator {
+            put("naming.separator", text(match s {
+                SeparatorArg::Dash => "dash",
+                SeparatorArg::Underscore => "underscore",
+                SeparatorArg::Caps => "caps",
+            }));
+        }
+        if self.append {
+            put("naming.append_original", yaml("true"));
+        }
+        if self.all {
+            put("rerun", text("all"));
+        }
+        Ok(f)
+    }
+
+    /// Settings without a conversation: defaults, then preset, then flags.
+    /// Without any mode choice, images are prepared for the web.
+    pub fn settings(&self, store: &UserStore, has_images: bool, has_fonts: bool) -> Result<(RunSettings, RerunPolicy), String> {
+        let mut draft = Draft::new(&store.defaults);
+        let fixed = self.fixed(store)?;
+        // Actions first (preset), then plain values so flags win.
+        for (k, v) in fixed.iter().filter(|(k, _)| k == "preset").chain(fixed.iter().filter(|(k, _)| k != "preset")) {
+            draft.apply(k, v, store, None)?;
+        }
+        if draft.mode.is_none() {
+            draft.mode = Some(Mode::Web);
+        }
+        let settings = draft.settings(has_images, has_fonts);
+        if let Some(ImageSettings::Web(_)) = &settings.images {
+            settings.validate().map_err(|e| e.to_string())?;
+        }
+        Ok((settings, draft.rerun))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use wolfgang_core::{ImageFormat, WebFormat};
+
+    fn args(v: &[&str]) -> RunArgs {
+        Cli::try_parse_from(std::iter::once("wolfgang").chain(v.iter().copied())).unwrap().run
+    }
+
+    #[test]
+    fn web_flags_imply_web_mode() {
+        let store = UserStore::default();
+        let (s, _) = args(&["--size", "2000", "-n", "kunde", "x"]).settings(&store, true, false).unwrap();
+        let Some(ImageSettings::Web(w)) = s.images else { panic!() };
+        assert_eq!((w.max_side, w.naming.prefix.as_str(), w.format), (2000, "kunde", WebFormat::Webp));
+    }
+
+    #[test]
+    fn jpg_implies_high_quality_and_conflicts_with_web_flags() {
+        let store = UserStore::default();
+        let (s, _) = args(&["-f", "png", "x"]).settings(&store, true, false).unwrap();
+        assert_eq!(s.images, Some(ImageSettings::HighQuality { format: ImageFormat::Png }));
+        assert!(args(&["-f", "jpg", "--size", "800"]).fixed(&store).is_err());
+        assert!(args(&["--hq", "-q", "50"]).fixed(&store).is_err());
+        assert!(Cli::try_parse_from(["wolfgang", "--web", "--hq"]).is_err());
+    }
+
+    #[test]
+    fn avif_without_mode_answers_both_format_questions() {
+        let f = args(&["-f", "avif"]).fixed(&UserStore::default()).unwrap();
+        let keys: Vec<_> = f.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, ["use_last", "hq.format", "web.format"]);
+    }
+
+    #[test]
+    fn preset_then_flags() {
+        let mut store = UserStore::default();
+        store.save_preset("Druck", RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Png }), fonts: None }).unwrap();
+        let (s, _) = args(&["-p", "druck", "x"]).settings(&store, true, true).unwrap();
+        assert_eq!(s.images, Some(ImageSettings::HighQuality { format: ImageFormat::Png }));
+        assert!(s.fonts.is_some());
+        let err = args(&["-p", "nope"]).fixed(&store).unwrap_err();
+        assert!(err.contains("Vorhanden: Druck"), "{err}");
+    }
+
+    #[test]
+    fn old_short_flags_still_work() {
+        let a = args(&["-n", "holiday", "-d", "1600", "-q", "85", "-s", "caps", "-a", "trip"]);
+        assert_eq!((a.size, a.quality, a.separator, a.append), (Some(1600), Some(85), Some(SeparatorArg::Caps), true));
+        assert!(args(&["-r", "trip"]).reset);
+    }
+
+    #[test]
+    fn subcommands_parse() {
+        assert!(matches!(Cli::try_parse_from(["wolfgang", "presets"]).unwrap().command, Some(Command::Presets { action: None })));
+        assert!(matches!(
+            Cli::try_parse_from(["wolfgang", "settings", "set", "web-format", "avif"]).unwrap().command,
+            Some(Command::Settings { action: Some(SettingsAction::Set { key: SettingKey::WebFormat, .. }) })
+        ));
+    }
+}

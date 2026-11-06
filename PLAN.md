@@ -3,7 +3,7 @@
 > Wolfgang is the personification of conversion: a cozy, bearded guy in a cardigan who sits behind his desk with a coffee and converts whatever you put in front of him.
 > Usability for non-technical colleagues is the top priority.
 
-Status: **approved**. Milestones 1 (spike), 2 (core engine) and 3 (dialogue) are done.
+Status: **approved**. Milestones 1–4 (spike, core engine, dialogue, CLI) are done.
 
 ---
 
@@ -163,22 +163,25 @@ HQ mode asks only for the format (JPG/WebP/AVIF/PNG). Fonts need no questions: W
 
 ---
 
-## 6. CLI
+## 6. CLI ✅
 
-- `wolfgang [PATH...]` in a TTY starts the **terminal conversation**: a small ANSI pixel portrait of Wolfgang, his lines, and answers picked with the arrow keys, from the same dialogue file.
-- Flags pre-answer questions, and any unanswered question is asked:
+- `wolfgang [PATH...]` in a terminal starts the **conversation**: Wolfgang's pixel portrait (half-block characters, truecolor or 256 colours, changing with his mood) next to speech bubbles, and answers picked with the arrow keys (★ marks the current/default one). „✎ Selbst eintippen …“ opens the custom answer, „← Zurück“ or Esc goes back, Ctrl-C says goodbye.
+- `wolfgang` without a path asks for one: drag a folder into the terminal window, or press Enter for the current folder.
+- **Flags pre-answer questions.** Any question fully answered by flags is skipped, and the rest are asked. Flags win over „wie letztes Mal“ and presets:
   ```
-  wolfgang --web --format avif --size 1600 --quality 80 --name urlaub ./bilder
-  wolfgang --hq --format png ./scans
-  wolfgang --fonts ./fonts
-  wolfgang --preset "Blog-Bilder" ./bilder
+  wolfgang --web -f avif -d 1600 -q 80 -n urlaub ./bilder
+  wolfgang --hq -f png ./scans          # jpg/png imply --hq
+  wolfgang --only fonts ./projekt       # leave the images alone
+  wolfgang -p "Blog-Bilder" ./bilder
   ```
-- `--yes` or a non-TTY session means no conversation: settings/defaults only, which is fit for scripts
-- Machine output: `--json` for progress/results
-- Subcommands: `wolfgang presets`, `wolfgang settings`, `wolfgang legacy-reset PATH`
-- Exit codes: 0 ok, 1 partial failures, 2 usage error
-
----
+  Old 1.x flags still work: `-n`, `-d` (also `--dimension`), `-q`, `-s dash|underscore|caps`, `-a`, `-r` (= `legacy-reset`).
+- `--yes`, or no terminal: **no conversation**. Defaults, preset and flags decide, and web mode is the default. `--all` re-converts known files.
+- `--json`: one JSON object per line: `plan`, then a `file` event per file, then `done`. It never asks anything.
+- Ctrl-C during conversion stops after the current file (Wolfgang then talks about what's done). A second Ctrl-C quits.
+- Subcommands: `wolfgang presets [list|remove NAME]`, `wolfgang settings [show|set KEY VALUE]` (keys: `web-format`, `size`, `quality`, `hq-format`, `separator`, `sound`), `wolfgang legacy-reset PATH [--yes]`.
+- `legacy-reset` only renames files recorded in the old `.wolfgang_run_log.jsonl`, with their exact index. Wolfgang 1.x renamed anything ending in `-NNNN`, which could hit files like `Sommer-2023.jpg`. Without `--yes`, it shows the changes first. The old log is kept as `.jsonl.done`.
+- Exit codes: 0 ok, 1 some files failed (or another error), 2 usage error, 130 aborted.
+- `./install.sh` builds and installs into `/usr/local/bin` (it sets up Homebrew/cmake/nasm/Rust if missing). The 1.x scripts and installers are in `legacy/`.
 
 ## 7. Architecture
 
@@ -197,7 +200,7 @@ wolfgang/
 │   │   ├── src/store.rs      # user settings, last run, presets
 │   │   └── examples/drop.rs  # dev stand-in for the CLI
 │   ├── wolfgang-dialogue/    # dialogue state machine + loader ✅ (examples/chat.rs = text preview)
-│   └── wolfgang-cli/         # binary: clap flags + TUI renderer (M4)
+│   └── wolfgang-cli/         # binary `wolfgang`: flags, terminal conversation, portrait ✅
 ├── app/                      # Tauri app
 │   ├── src-tauri/            # thin Rust layer → wolfgang-core, emits progress events
 │   └── src/                  # frontend: canvas scene, sprites, bubbles, panels (TypeScript)
@@ -266,7 +269,7 @@ Findings:
 1. ✅ **Spike: bundling.** Proved that one self-contained binary (ImageIO decoding + static encoders + WOFF2) converts HEIC/RAW → WebP/AVIF/JPG/PNG and TTF/OTF → WOFF2. See section 7.
 2. ✅ **Core engine**: scanning, piles, image/font converters, naming, run log, re-run detection, settings/presets. 26 unit + 9 end-to-end tests.
 3. ✅ **Dialogue engine + `dialogue/de.yaml`**: state machine, typed custom answers, written in Wolfgang's voice. 18 tests, including 300 random conversations.
-4. **CLI**: flags, TUI conversation, `--yes`/`--json`, presets/settings commands, `legacy-reset`. Move the Bash script to `legacy/`.
+4. ✅ **CLI**: flags, TUI conversation, `--yes`/`--json`, presets/settings commands, `legacy-reset`. Moved the Bash script to `legacy/`. 17 CLI tests; the interactive mode was driven in a pseudo-terminal.
 5. **Pixel art**: Wolfgang (idle/talk/work/handover animations), desk, office, bubbles, panels, objects. Built by a script from pixel grids.
 6. **Tauri app**: scene, drag & drop on the desk, bubbles, progress, result, settings/preset panels, SFX, CLI install.
 7. **Release**: `.dmg` build via GitHub Actions (macOS arm64 runner), README rewrite (German), first-launch instructions for the unsigned app. Tag v2.0.0.
