@@ -56,7 +56,8 @@ pub struct Summary {
     pub folders_without_keywords: Vec<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum RerunPolicy {
     /// Skip files converted in an earlier run.
     #[default]

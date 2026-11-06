@@ -1,0 +1,334 @@
+# Wolfgang spricht.
+#
+# Das hier ist das komplette Gespräch mit Wolfgang. CLI und App lesen beide diese
+# Datei. Format und alle erlaubten Bedingungen/Platzhalter: siehe
+# crates/wolfgang-dialogue/src/script.rs und context.rs.
+#
+# Zum Ausprobieren ohne neu zu bauen:
+#   WOLFGANG_DIALOGUE=dialogue/de.yaml wolfgang ~/Bilder
+#
+# Stil: gemütlich, per du, ein bisschen Umgangssprache. Kurze Sätze.
+# Nie belehrend, nie hektisch. Wolfgang hat Kaffee und Zeit.
+
+start: greet
+after_run: done
+after_cancel: stopped
+
+idle:
+  - "Leg mir einfach was auf den Tisch. Bilder, Schriften … ich guck's mir an."
+  - "Na? Was gibt's heute zu tun?"
+  - "Kaffee ist da, Zeit hab ich auch. Her damit."
+  - "Einfach rüberziehen und fallen lassen. Ich kümmer mich drum."
+  - "Ruhiger Tag bisher. Hast du was für mich?"
+
+working:
+  - "Moment, bin dran …"
+  - "Läuft. Ich mach das schon."
+  - "Pixel sortieren, Bytes rausschütteln … gleich fertig."
+  - "Kurz noch. Der Kaffee ist eh noch heiß."
+  - "Schön eins nach dem anderen."
+  - "Das wird gut, versprochen."
+
+nodes:
+
+  # ── Ankommen ───────────────────────────────────────────────────────────────
+
+  greet:
+    mood: happy
+    say:
+      - ["Na, was hast du mir mitgebracht? Lass mal sehen …", "Moin! Zeig mal her, was du da hast.", "Ah, Arbeit. Schön. Mal gucken …"]
+      - when: [has_images, has_fonts]
+        text: "Ich seh {images:ein Foto:Fotos} und {fonts:eine Schrift:Schriften}."
+      - when: [has_images, "!has_fonts"]
+        text: ["Ich seh {images:ein Foto:Fotos}.", "{images:Ein Foto:Fotos}, sehr schön."]
+      - when: [only_fonts]
+        text: "Ich seh {fonts:eine Schrift:Schriften}."
+      - when: [has_unknown, "!nothing_to_do"]
+        text: ["Mit {unknown:einer Datei:Dateien} kann ich nix anfangen, die lass ich einfach liegen.", "{unknown:Eine Datei ist:Dateien sind} nicht mein Ding, die bleiben, wo sie sind."]
+      - when: [has_duplicates]
+        text: "{duplicates:Eine Datei ist:Dateien sind} doppelt drin. Mach ich nur einmal."
+    go:
+      - { when: [nothing_to_do], to: nothing }
+      - { when: [has_known, "!has_new"], to: rerun_all_known }
+      - { to: begin }
+
+  begin:
+    go:
+      - { when: [only_fonts], to: fonts_only }
+      - { when: [has_last_run], to: how }
+      - { when: [has_presets], to: how }
+      - { to: mode }
+
+  nothing:
+    mood: sorry
+    say:
+      - when: [has_unknown]
+        text: "Hm. Da ist nix bei, was ich umwandeln kann. Bilder und Schriften, das ist mein Ding – der Rest kommt vielleicht später."
+      - when: ["!has_unknown"]
+        text: "Hm, da ist ja gar nix drin. Leer gefegt."
+    answers:
+      - { label: "Okay, schade", to: "@end" }
+
+  fonts_only:
+    say:
+      - ["Die mach ich dir zu WOFF2. Ganz ohne Rumschnippeln, alle Zeichen bleiben drin.", "Schriften? Easy. Gibt's als WOFF2, eins zu eins, nix wird weggelassen."]
+    go:
+      - { to: rerun_check }
+
+  # ── Wie letztes Mal? ───────────────────────────────────────────────────────
+
+  how:
+    mood: thinking
+    say:
+      - ["Wie machen wir's?", "Wie soll's werden?", "Und, wie hättest du's gern?"]
+    answers:
+      - { label: "So wie letztes Mal ({last_run})", when: [has_last_run], set: { use_last: true }, to: keywords }
+      - { label: "Vorlage „{preset}“", each: presets, set: { preset: "{preset}" }, to: keywords }
+      - { label: "Lass uns das neu einstellen", set: { use_last: false }, to: mode }
+
+  # ── Bilder: Modus ──────────────────────────────────────────────────────────
+
+  mode:
+    mood: thinking
+    say:
+      - ["Wofür brauchst du die Bilder?", "Was soll aus den Bildern werden?"]
+    answers:
+      - { label: "Fürs Web vorbereiten – klein und schnell", set: { mode: web, use_last: false }, to: web_format }
+      - { label: "Hochwertig behalten – nur ein anderes Format", set: { mode: hq, use_last: false }, to: hq_format }
+
+  hq_format:
+    say:
+      - "Alles klar: Originalgröße, volle Qualität. In welches Format?"
+    answers:
+      - { label: "JPG – passt überall", set: { hq.format: jpg }, to: rerun_check }
+      - { label: "WebP", set: { hq.format: webp }, to: rerun_check }
+      - { label: "AVIF – am kleinsten", set: { hq.format: avif }, to: rerun_check }
+      - { label: "PNG – verlustfrei, auch mit Transparenz", set: { hq.format: png }, to: rerun_check }
+
+  # ── Bilder: fürs Web ───────────────────────────────────────────────────────
+
+  web_format:
+    say:
+      - "WebP oder AVIF? AVIF wird kleiner, dauert aber länger. WebP kann wirklich jeder Browser."
+    answers:
+      - { label: "WebP", set: { web.format: webp }, to: web_size }
+      - { label: "AVIF", set: { web.format: avif }, to: web_size }
+
+  web_size:
+    say:
+      - ["Wie groß sollen sie werden? Ich mein die längste Seite.", "Welche Größe? Gemeint ist die längste Seite."]
+    answers:
+      - { label: "Klein (800 px) – für Vorschaubilder", set: { web.max_side: 800 }, to: web_quality }
+      - { label: "Normal (1400 px) – passt fast immer", set: { web.max_side: 1400 }, to: web_quality }
+      - { label: "Groß (2400 px) – für große Titelbilder", set: { web.max_side: 2400 }, to: web_quality }
+    input:
+      kind: number
+      min: 100
+      max: 8000
+      unit: px
+      placeholder: "z. B. 1920"
+      set: web.max_side
+      to: web_quality
+      invalid:
+        - ["„{input}“? Gib mir einfach 'ne Zahl zwischen {min} und {max} Pixel.", "Da komm ich nicht mit. Irgendwas zwischen {min} und {max} Pixel, bitte."]
+
+  web_quality:
+    say:
+      - "Und die Qualität? Weniger heißt kleinere Dateien."
+    answers:
+      - { label: "Kleiner (65) – reicht oft", set: { web.quality: 65 }, to: prefix }
+      - { label: "Ausgewogen (80) – mein Tipp", set: { web.quality: 80 }, to: prefix }
+      - { label: "Schöner (90) – für Fotos, die glänzen sollen", set: { web.quality: 90 }, to: prefix }
+    input:
+      kind: number
+      min: 1
+      max: 100
+      placeholder: "1–100"
+      set: web.quality
+      to: prefix
+      invalid:
+        - "Qualität geht von {min} bis {max}. „{input}“ krieg ich da nicht unter."
+
+  # ── Bilder: Namen ──────────────────────────────────────────────────────────
+
+  prefix:
+    say:
+      - "Jetzt die Namen. Google mag sprechende Dateinamen."
+      - "Soll vorne was davor? Der Kunde zum Beispiel, oder das Projekt."
+    answers:
+      - { label: "Nix davor", set: { naming.prefix: "" }, to: keywords }
+    input:
+      kind: text
+      max_len: 40
+      placeholder: "z. B. Hotel Seeblick"
+      set: naming.prefix
+      to: keywords
+      invalid:
+        - "Puh, das ist mir zu lang. Halt's kurz, so {max} Zeichen."
+
+  keywords:
+    go:
+      - { when: [mode_hq], to: rerun_check }
+      - { when: [keyword_files_found], to: keywords_found }
+      - { when: [folders_without_keywords], to: keywords_ask }
+      - { to: naming_style }
+
+  keywords_found:
+    say:
+      - "Ich hab {keyword_folders:einen Stichwortzettel gefunden, den:Stichwortzettel gefunden, die} nehm ich für die Namen."
+    set: { naming.use_keyword_files: true }
+    go:
+      - { when: [folders_without_keywords], to: keywords_ask }
+      - { to: naming_style }
+
+  keywords_ask:
+    mood: thinking
+    say:
+      - when: [keyword_files_found]
+        text: "Für {folders_without_keywords:einen Ordner:Ordner} hab ich aber keine Stichworte."
+      - "Worum geht's auf den Bildern? Ein paar Stichworte machen die Dateinamen besser für Google."
+    answers:
+      - { label: "Für alle gleich", to: keywords_all }
+      - { label: "Für jeden Ordner einzeln", when: [several_folders_without_keywords], to: keywords_folder }
+      - { label: "Ohne Stichworte", to: naming_style }
+
+  keywords_all:
+    say:
+      - "Schreib's mir einfach hin. Zum Beispiel: Strand Sonnenuntergang Algarve"
+    answers:
+      - { label: "Doch lieber ohne", to: naming_style }
+    input:
+      kind: text
+      max_len: 80
+      placeholder: "z. B. Strand Sonnenuntergang Algarve"
+      set: naming.keywords_all
+      to: naming_style
+      invalid:
+        - "Das ist 'n Roman. Ein paar Stichworte reichen, höchstens {max} Zeichen."
+
+  keywords_folder:
+    foreach: folders_without_keywords
+    then: naming_style
+    say:
+      - ["Und im Ordner „{folder}“?", "Was ist in „{folder}“ drauf?"]
+    answers:
+      - { label: "Den überspringen" }
+    input:
+      kind: text
+      max_len: 80
+      placeholder: "Stichworte"
+      set: naming.folder_keywords
+      invalid:
+        - "Ein paar Stichworte reichen, höchstens {max} Zeichen."
+
+  naming_style:
+    go:
+      - { when: [from_template], to: rerun_check }
+      - { to: separator }
+
+  separator:
+    say:
+      - "Wie sollen die Wörter getrennt sein?"
+    answers:
+      - { label: "Mit Bindestrich: {preview_dash}", set: { naming.separator: dash }, to: append_original }
+      - { label: "Mit Unterstrich: {preview_underscore}", set: { naming.separator: underscore }, to: append_original }
+      - { label: "Zusammen, groß geschrieben: {preview_caps}", set: { naming.separator: caps }, to: append_original }
+
+  append_original:
+    say:
+      - "Soll der alte Dateiname mit rein? Hilft, wenn du später was wiederfinden willst."
+    answers:
+      - { label: "Nee, lass mal", set: { naming.append_original: false }, to: rerun_check }
+      - { label: "Ja, mit rein", set: { naming.append_original: true }, to: rerun_check }
+
+  # ── Schon mal gemacht? ─────────────────────────────────────────────────────
+
+  rerun_check:
+    go:
+      - { when: [has_known, has_new], to: rerun }
+      - { when: [has_known, "!rerun_all"], to: rerun_all_known }
+      - { to: confirm }
+
+  rerun:
+    mood: surprised
+    say:
+      - "Moment, die kenn ich doch! {known_files:Eine Datei hab ich:Dateien hab ich} schon mal gemacht, {new_files:eine ist neu:sind neu}."
+    answers:
+      - { label: "Nur die neuen", set: { rerun: only_new }, to: confirm }
+      - { label: "Alles nochmal", set: { rerun: all }, to: confirm }
+
+  rerun_all_known:
+    mood: surprised
+    say:
+      - "Die hab ich alle schon mal gemacht. Liegen in „{output_folder}“."
+    answers:
+      - { label: "Trotzdem nochmal", set: { rerun: all }, to: begin }
+      - { label: "Ach so, dann passt's", to: cancelled }
+
+  # ── Los? ───────────────────────────────────────────────────────────────────
+
+  confirm:
+    mood: happy
+    say:
+      - "{summary}"
+      - ["Passt das so?", "Soll ich?", "Einverstanden?"]
+    answers:
+      - { label: "Los geht's!", to: "@start" }
+      - { label: "Nochmal ändern", when: [has_images], to: mode }
+      - { label: "Lass mal, doch nicht", to: cancelled }
+
+  cancelled:
+    mood: neutral
+    say:
+      - ["Kein Ding. Wenn du's dir anders überlegst, ich bin hier.", "Alles klar, dann nicht. Ich lauf ja nicht weg."]
+    go:
+      - { to: "@cancel" }
+
+  # ── Nach getaner Arbeit ────────────────────────────────────────────────────
+
+  done:
+    mood: proud
+    say:
+      - when: ["!failed_any"]
+        text: ["Fertig! {converted:Eine Datei:Dateien} in {duration}, aus {bytes_in} sind {bytes_out} geworden.", "So, erledigt. {bytes_in} rein, {bytes_out} raus – {saved_percent} Prozent gespart."]
+      - when: [failed_any, "!all_failed"]
+        text: "{converted:Eine Datei hat:Dateien haben} geklappt, aber bei {failed:einer:} hat's gehakt. Zum Beispiel: {first_error}"
+      - when: [all_failed]
+        text: "Mist, da hat gar nix geklappt. {first_error}"
+      - when: [has_notes]
+        text: "Bei manchen Schriften war ich extra vorsichtig. Die sind dafür ein kleines bisschen größer."
+      - when: [converted_any]
+        text: "Liegt alles in „{output_folder}“."
+    answers:
+      - { label: "Als Vorlage merken", when: [has_images, "!from_template", converted_any], to: preset_name }
+      - { label: "Danke, Wolfgang!", to: "@end" }
+
+  preset_name:
+    say:
+      - "Wie soll die Vorlage heißen? Dann biet ich sie dir nächstes Mal gleich an."
+    answers:
+      - { label: "Doch nicht", to: "@end" }
+    input:
+      kind: text
+      max_len: 40
+      placeholder: "z. B. Blog-Bilder"
+      set: save_preset
+      to: preset_saved
+      invalid:
+        - "Kürzer bitte, so {max} Zeichen."
+
+  preset_saved:
+    mood: happy
+    say:
+      - "Gemerkt! „{save_preset_name}“ steht jetzt in meinem Notizbuch."
+    go:
+      - { to: "@end" }
+
+  stopped:
+    mood: sorry
+    say:
+      - "Okay, hab aufgehört."
+      - when: [converted_any]
+        text: "{converted:Eine Datei ist:Dateien sind} trotzdem schon fertig, die liegen in „{output_folder}“."
+    answers:
+      - { label: "Alles klar", to: "@end" }

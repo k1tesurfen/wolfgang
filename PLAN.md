@@ -3,7 +3,7 @@
 > Wolfgang is the personification of conversion: a cozy, bearded guy in a cardigan who sits behind his desk with a coffee and converts whatever you put in front of him.
 > Usability for non-technical colleagues is the top priority.
 
-Status: **approved** — milestones 1 (spike) and 2 (core engine) done
+Status: **approved**. Milestones 1 (spike), 2 (core engine) and 3 (dialogue) are done.
 
 ---
 
@@ -196,7 +196,7 @@ wolfgang/
 │   │   ├── src/settings.rs   # RunSettings (what the conversation produces)
 │   │   ├── src/store.rs      # user settings, last run, presets
 │   │   └── examples/drop.rs  # dev stand-in for the CLI
-│   ├── wolfgang-dialogue/    # dialogue state machine + loader (M3)
+│   ├── wolfgang-dialogue/    # dialogue state machine + loader ✅ (examples/chat.rs = text preview)
 │   └── wolfgang-cli/         # binary: clap flags + TUI renderer (M4)
 ├── app/                      # Tauri app
 │   ├── src-tauri/            # thin Rust layer → wolfgang-core, emits progress events
@@ -249,13 +249,23 @@ Findings:
 - Google's encoder packs better than `ttf2woff2` from the spike (Arial: 312 KB vs 352 KB).
 - Quality mapping (`settings::encoder_quality`): WebP/JPG use the user's number; AVIF uses 0.9× that. This still needs a visual calibration pass with real photos.
 
+### Milestone 3 result (2026-11-06) ✅
+
+- `dialogue/de.yaml` holds the whole conversation: around 30 nodes, random line variants, conditions, plural forms (`{images:ein Foto:Fotos}`), typed custom answers and Wolfgang's reactions to invalid input. It is embedded into the binary. Writers can try edits without rebuilding via `WOLFGANG_DIALOGUE=path/to/de.yaml`.
+- The file is **validated on load**: unknown targets, settings keys, conditions or placeholders are reported all at once, with node names.
+- The engine (`Conversation`) returns serialisable `Step`s (`ask` / `start` / `cancelled` / `end`) with mood, lines, answers (the current/default one is marked) and an input field description. Back-navigation, `foreach` (keywords per folder) and post-run talk („98 Prozent gespart“, „Als Vorlage merken“) are supported.
+- Name previews in the separator question use the real first image, prefix and keywords (`kunde-mueller-team-meeting-koeln-0001.webp`).
+- „So wie letztes Mal“ and presets reuse format, size, quality, prefix and separator, but **not typed keywords**, which describe the earlier pictures. Wolfgang asks again when needed.
+- If everything was already converted, Wolfgang says so right after the greeting.
+- The confirmation summary text is generated in Rust (`summary_text`), not in the YAML, because it combines many settings. Change it there.
+
 ---
 
 ## 8. Milestones
 
 1. ✅ **Spike: bundling.** Proved that one self-contained binary (ImageIO decoding + static encoders + WOFF2) converts HEIC/RAW → WebP/AVIF/JPG/PNG and TTF/OTF → WOFF2. See section 7.
 2. ✅ **Core engine**: scanning, piles, image/font converters, naming, run log, re-run detection, settings/presets. 26 unit + 9 end-to-end tests.
-3. **Dialogue engine + `dialogue/de.yaml`**: state machine, typed custom answers, written in Wolfgang's voice.
+3. ✅ **Dialogue engine + `dialogue/de.yaml`**: state machine, typed custom answers, written in Wolfgang's voice. 18 tests, including 300 random conversations.
 4. **CLI**: flags, TUI conversation, `--yes`/`--json`, presets/settings commands, `legacy-reset`. Move the Bash script to `legacy/`.
 5. **Pixel art**: Wolfgang (idle/talk/work/handover animations), desk, office, bubbles, panels, objects. Built by a script from pixel grids.
 6. **Tauri app**: scene, drag & drop on the desk, bubbles, progress, result, settings/preset panels, SFX, CLI install.
