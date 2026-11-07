@@ -125,6 +125,12 @@ impl Office {
         Ok(self.defaults())
     }
 
+    /// Remembers the window size chosen with ⌘+ / ⌘− (`None` = default).
+    pub fn set_window_scale(&mut self, scale: Option<u32>) -> Result<(), String> {
+        self.store.defaults.window_scale = scale;
+        self.save()
+    }
+
     pub fn presets(&self) -> Vec<PresetView> {
         self.store
             .presets

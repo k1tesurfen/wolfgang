@@ -170,6 +170,8 @@ fn install_cli() -> Res<About> {
 
 /// Scene size in points; the window is always an exact whole multiple of it.
 const SCENE: (f64, f64) = (320.0, 180.0);
+/// 1280×720: comfortable on Full HD and on Retina screens alike.
+const DEFAULT_SCALE: u32 = 4;
 /// Leave room for the menu bar and the Dock.
 const SCREEN_USE: f64 = 0.75;
 
@@ -191,12 +193,23 @@ fn set_scale(window: &tauri::WebviewWindow, scale: u32) {
     let _ = window.set_size(size);
 }
 
-/// ⌘+ / ⌘− grow or shrink the office by one whole step, ⌘0 picks the best fit.
+/// The saved size (or the default), but never bigger than the screen allows.
+fn start_scale(window: &tauri::WebviewWindow, saved: Option<u32>) -> u32 {
+    saved.unwrap_or(DEFAULT_SCALE).clamp(1, max_scale(window))
+}
+
+/// ⌘+ / ⌘− grow or shrink the office by one whole step and remember it;
+/// ⌘0 goes back to the default size.
 #[tauri::command]
-fn zoom(window: tauri::WebviewWindow, delta: i32) -> u32 {
-    let max = max_scale(&window);
-    let scale = if delta == 0 { max } else { (current_scale(&window) as i32 + delta).clamp(1, max as i32) as u32 };
+fn zoom(window: tauri::WebviewWindow, state: State<AppState>, delta: i32) -> u32 {
+    let (scale, remember) = if delta == 0 {
+        (start_scale(&window, None), None)
+    } else {
+        let s = (current_scale(&window) as i32 + delta).clamp(1, max_scale(&window) as i32) as u32;
+        (s, Some(s))
+    };
     set_scale(&window, scale);
+    let _ = lock(&state).set_window_scale(remember);
     scale
 }
 
@@ -243,7 +256,8 @@ fn main() {
         .setup(|app| {
             // Exactly the office, at the largest whole scale that fits this screen.
             if let Some(window) = app.get_webview_window("main") {
-                set_scale(&window, max_scale(&window));
+                let saved = app.state::<AppState>().office.lock().map(|o| o.store.defaults.window_scale).unwrap_or(None);
+                set_scale(&window, start_scale(&window, saved));
                 let _ = window.center();
                 let _ = window.show();
             }

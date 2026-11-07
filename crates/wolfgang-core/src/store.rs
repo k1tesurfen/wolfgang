@@ -19,6 +19,8 @@ pub struct Defaults {
     pub hq_format: ImageFormat,
     pub separator: Separator,
     pub sound: bool,
+    /// App window size as a whole multiple of the scene; `None` = the app's default.
+    pub window_scale: Option<u32>,
 }
 
 impl Default for Defaults {
@@ -30,6 +32,7 @@ impl Default for Defaults {
             hq_format: ImageFormat::Jpg,
             separator: Separator::Dash,
             sound: true,
+            window_scale: None,
         }
     }
 }
