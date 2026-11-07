@@ -49,6 +49,11 @@ fn main() {
                 std::process::exit(1);
             }
         }
+        Some("icon") => {
+            // icon OUT.png: 1024 px app icon from the happy portrait.
+            let paths = build::Paths { reference: "assets/reference".into(), out: "assets/pixel".into(), preview: None };
+            build::icon(&paths, Path::new(args.get(1).map(String::as_str).unwrap_or("icon.png")));
+        }
         Some("build") => {
             // build [--preview DIR]
             let preview = args.iter().position(|a| a == "--preview").map(|i| std::path::PathBuf::from(&args[i + 1]));
@@ -59,7 +64,7 @@ fn main() {
             let ui = build::sprites(&paths, "ui");
             build::manifest(&paths, wolfgang, ui);
         }
-        _ => eprintln!("usage: wolfgang-art build [--preview DIR] | import [--force] | analyze IMAGE..."),
+        _ => eprintln!("usage: wolfgang-art build [--preview DIR] | import [--force] | icon OUT.png | analyze IMAGE..."),
     }
 }
 

@@ -212,6 +212,49 @@ mod tests {
     }
 }
 
+/// The app icon: the happy portrait in a rounded, framed square (macOS style),
+/// built at 128 px and scaled 8× without smoothing to 1024 px.
+pub fn icon(paths: &Paths, out: &Path) {
+    const N: i32 = 128;
+    const R: i32 = 22; // corner radius
+    let face = read_png(&paths.portrait("happy")).expect("happy portrait");
+    let (x0, y0, x1, y1) = (8, 8, N - 9, N - 9); // the rounded square
+    let inside = |x: i32, y: i32, inset: i32| {
+        let (ax0, ay0, ax1, ay1, r) = (x0 + inset, y0 + inset, x1 - inset, y1 - inset, R - inset);
+        if x < ax0 || x > ax1 || y < ay0 || y > ay1 {
+            return false;
+        }
+        let cx = x.clamp(ax0 + r, ax1 - r);
+        let cy = y.clamp(ay0 + r, ay1 - r);
+        (x - cx).pow(2) + (y - cy).pow(2) <= r * r
+    };
+    let hex = |v: u32| [(v >> 16) as u8, (v >> 8) as u8, v as u8, 255];
+    let mut rgba = vec![0u8; (N * N * 4) as usize];
+    // Portrait bottom-aligned on the frame's inner edge, centred.
+    let (fx, fy) = ((N - 96) / 2, y1 - 3 - 95);
+    for y in 0..N {
+        for x in 0..N {
+            let c = if !inside(x, y, 0) {
+                [0, 0, 0, 0]
+            } else if !inside(x, y, 1) {
+                hex(0x1c0c16) // outline
+            } else if !inside(x, y, 2) {
+                hex(0xa8703f) // wood light
+            } else if !inside(x, y, 3) {
+                hex(0x5c3a22) // wood dark
+            } else {
+                let (px, py) = (x - fx, y - fy);
+                let p = if (0..96).contains(&px) && (0..96).contains(&py) { ((py * 96 + px) * 4) as usize } else { usize::MAX };
+                if p != usize::MAX && face.rgba[p + 3] == 255 { [face.rgba[p], face.rgba[p + 1], face.rgba[p + 2], 255] } else { hex(0xdccab0) }
+            };
+            rgba[((y * N + x) * 4) as usize..][..4].copy_from_slice(&c);
+        }
+    }
+    let small = Pixels { width: N as u32, height: N as u32, rgba, icc: None };
+    write_png(out, &upscale(&small, 8));
+    println!("  {}  1024×1024", out.display());
+}
+
 /// Renders a `.sprite` source into `<name>.png`; returns its manifest entry.
 pub fn sprites(paths: &Paths, name: &str) -> SpriteManifest {
     let src = paths.out.join("src").join(format!("{name}.sprite"));

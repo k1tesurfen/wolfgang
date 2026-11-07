@@ -1,0 +1,31 @@
+[package]
+name = "wolfgang-app"
+description = "Wolfgang's office: the macOS app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version = "1.90"
+publish = false
+
+[[bin]]
+name = "wolfgang-app"
+path = "src/main.rs"
+
+[features]
+# Embed the UI into the binary (so `cargo run` works without a dev server).
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+wolfgang-core = { path = "../wolfgang-core" }
+wolfgang-dialogue = { path = "../wolfgang-dialogue" }
+fastrand = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tauri = { version = "2", features = [] }
+
+[dev-dependencies]
+tempfile = "3"

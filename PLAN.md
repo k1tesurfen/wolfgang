@@ -3,7 +3,7 @@
 > Wolfgang is the personification of conversion: a cozy, bearded guy in a cardigan who sits behind his desk with a coffee and converts whatever you put in front of him.
 > Usability for non-technical colleagues is the top priority.
 
-Status: **approved**. Milestones 1–5 (spike, core engine, dialogue, CLI, pixel art) are done.
+Status: **approved**. Milestones 1–6 (spike, core engine, dialogue, CLI, pixel art, app) are done.
 
 ---
 
@@ -211,9 +211,7 @@ wolfgang/
 │   │   └── examples/drop.rs  # dev stand-in for the CLI
 │   ├── wolfgang-dialogue/    # dialogue state machine + loader ✅ (examples/chat.rs = text preview)
 │   └── wolfgang-cli/         # binary `wolfgang`: flags, terminal conversation, portrait ✅
-├── app/                      # Tauri app
-│   ├── src-tauri/            # thin Rust layer → wolfgang-core, emits progress events
-│   └── src/                  # frontend: canvas scene, sprites, bubbles, panels (TypeScript)
+│   └── wolfgang-app/         # Tauri app ✅: src/ (Rust), ui/ (HTML/CSS/JS), icons/
 ├── dialogue/de.yaml          # all of Wolfgang's lines and the question tree
 ├── assets/reference/         # the user's reference images (office + 8 portraits)
 ├── assets/pixel/             # generated pixel art + scene.json; src/*.sprite = hand-editable sources
@@ -286,6 +284,20 @@ Findings:
 - **Portrait frame:** a dedicated wooden frame with no gap. The portrait sits flush and the frame crops the bust at the bottom; the backdrop behind him is the office wall colour.
 - **Preview layout (visual-novel style):** Wolfgang's bubble at the top with its tail pointing at him, the mood portrait in a wooden frame at the bottom left, answers at the bottom right, and the desk in the middle as the drop zone. The font in the preview is Pixelify Sans (Google Fonts, OFL); the app will bundle it to work offline.
 
+### Milestone 6 result (2026-11-07) ✅
+
+- **`crates/wolfgang-app`** (Tauri 2.12): `cargo run -p wolfgang-app` opens Wolfgang's office. The UI in `ui/` is plain HTML/CSS/JS with no bundler and no Node. The build script copies `assets/pixel` to `ui/pixel`.
+- **`src/session.rs`** holds the app logic without Tauri (drop → conversation → run → remember, settings, presets) and is tested. `main.rs` exposes it as commands (`drop_files`, `choose`, `type_answer`, `back`, `start`, `cancel`, `settings`, `presets`, `about`, `install_cli`, …) and events (`progress`, `finished`, `files-opened`).
+- **Screen:** the 320×180 scene, scaled by whole numbers. Wolfgang's bubble types out with chiptune blips (click or Space skips it). The mood portrait sits bottom left. Answers sit bottom right, starting just right of Wolfgang; small extras (Zurück, Im Finder zeigen) go side by side. Custom answers are typed in a field styled like an answer.
+- **Controls:** mouse, ↑↓ Enter, Esc = back. Drop files anywhere in the window (the desk lights up).
+- **Working:** Wolfgang types, a pixel progress bar fills, his working lines change every few seconds, and each file gets a stamp sound. Cancel stops after the current file. When he's done he hands over the folder, a jingle plays, and „Im Finder zeigen“ appears.
+- **Objects:** the filing cabinet opens settings (default web format, size, quality, HQ format, separator, sounds). The clipboard opens presets (list, delete). The computer opens about (version, install CLI, credits). Clicking the mug makes him sip, and he also sips now and then when idle.
+- **Sound:** synthesised with WebAudio, no sound files; switched on/off in settings.
+- **Font:** Pixelify Sans (OFL), bundled as WOFF2, converted by Wolfgang himself (80 → 24 KB).
+- **App icon:** the happy portrait in a framed rounded square (`wolfgang-art icon`).
+- **Checks:** `ui/mock.js` fakes the Rust side when `ui/index.html` is opened in a normal browser (`?demo=mode|size|confirm|work|done`, `?panel=settings|presets|about`), which is how the UI was screenshot-tested. In the real app, the UI reports errors to the log, and `WOLFGANG_SELFTEST=1` quits after start-up with exit 1 on any error.
+- **Needs the bundle (M7):** dropping on the Dock icon needs document types in Info.plist, and the „install CLI“ button needs the `wolfgang` binary bundled next to the app executable. The code for both is in place.
+
 ---
 
 ## 8. Milestones
@@ -295,7 +307,7 @@ Findings:
 3. ✅ **Dialogue engine + `dialogue/de.yaml`**: state machine, typed custom answers, written in Wolfgang's voice. 18 tests, including 300 random conversations.
 4. ✅ **CLI**: flags, TUI conversation, `--yes`/`--json`, presets/settings commands, `legacy-reset`. Moved the Bash script to `legacy/`. 17 CLI tests; the interactive mode was driven in a pseudo-terminal.
 5. ✅ **Pixel art**: pixelize tool for the references; office background from #10; mood portraits from the eight studies; animated desk sprite (idle/talk/type/sip/handover) drawn in code; bubbles, panels, object highlights; new-look CLI portrait. See *Milestone 5 result*.
-6. **Tauri app**: scene, drag & drop on the desk, bubbles, progress, result, settings/preset panels, SFX, CLI install.
+6. ✅ **Tauri app**: scene, drag & drop on the desk, bubbles, progress, result, settings/preset panels, SFX, CLI install. See *Milestone 6 result*.
 7. **Release**: `.dmg` build via GitHub Actions (macOS arm64 runner), README rewrite (German), first-launch instructions for the unsigned app. Tag v2.0.0.
 
 ---

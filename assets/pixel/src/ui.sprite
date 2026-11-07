@@ -110,6 +110,25 @@ OeDDDDDDDdO
 OdddddddddO
 .OOOOOOOOO.
 
+# Small buttons (settings, presets).
+frame button 7 7 slice 2
+.vvvvv.
+vAAAAAv
+vAAAAAv
+vAAAAAv
+vAAAAav
+vaaaaav
+.vvvvv.
+
+frame button-on 7 7 slice 2
+.OOOOO.
+OYYYYYO
+OYYYYYO
+OYYYYYO
+OYYYYyO
+OyyyyyO
+.OOOOO.
+
 # Cursor next to the highlighted answer.
 frame cursor 6 7
 OO....
