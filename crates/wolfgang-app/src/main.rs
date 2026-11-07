@@ -168,6 +168,38 @@ fn install_cli() -> Res<About> {
     Ok(about())
 }
 
+/// Scene size in points; the window is always an exact whole multiple of it.
+const SCENE: (f64, f64) = (320.0, 180.0);
+/// Leave room for the menu bar and the Dock.
+const SCREEN_USE: f64 = 0.75;
+
+/// The largest whole scale at which the scene fits on the window's screen.
+fn max_scale(window: &tauri::WebviewWindow) -> u32 {
+    let Ok(Some(m)) = window.current_monitor().or_else(|_| window.primary_monitor()) else { return 4 };
+    let size = m.size().to_logical::<f64>(m.scale_factor());
+    let fit = (size.width * SCREEN_USE / SCENE.0).min(size.height * SCREEN_USE / SCENE.1);
+    (fit.floor() as u32).max(1)
+}
+
+fn current_scale(window: &tauri::WebviewWindow) -> u32 {
+    let sf = window.scale_factor().unwrap_or(1.0);
+    window.inner_size().map(|s| (s.to_logical::<f64>(sf).width / SCENE.0).round() as u32).unwrap_or(4).max(1)
+}
+
+fn set_scale(window: &tauri::WebviewWindow, scale: u32) {
+    let size = tauri::LogicalSize::new(SCENE.0 * scale as f64, SCENE.1 * scale as f64);
+    let _ = window.set_size(size);
+}
+
+/// ⌘+ / ⌘− grow or shrink the office by one whole step, ⌘0 picks the best fit.
+#[tauri::command]
+fn zoom(window: tauri::WebviewWindow, delta: i32) -> u32 {
+    let max = max_scale(&window);
+    let scale = if delta == 0 { max } else { (current_scale(&window) as i32 + delta).clamp(1, max as i32) as u32 };
+    set_scale(&window, scale);
+    scale
+}
+
 /// The UI reports in after starting: errors go to the log, and with
 /// `WOLFGANG_SELFTEST=1` the app quits right away (exit code 1 on errors).
 #[tauri::command]
@@ -205,8 +237,18 @@ fn main() {
             reveal,
             about,
             install_cli,
-            frontend_ready
+            frontend_ready,
+            zoom
         ])
+        .setup(|app| {
+            // Exactly the office, at the largest whole scale that fits this screen.
+            if let Some(window) = app.get_webview_window("main") {
+                set_scale(&window, max_scale(&window));
+                let _ = window.center();
+                let _ = window.show();
+            }
+            Ok(())
+        })
         .build(tauri::generate_context!())
         .expect("Wolfgang's office won't open")
         .run(|_app, _event| {

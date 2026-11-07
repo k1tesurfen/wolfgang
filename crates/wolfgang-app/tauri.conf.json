@@ -15,8 +15,11 @@
         "height": 720,
         "minWidth": 640,
         "minHeight": 360,
-        "resizable": true,
+        "resizable": false,
         "center": true,
+        "visible": false,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
         "dragDropEnabled": true,
         "backgroundColor": "#2a211c"
       }

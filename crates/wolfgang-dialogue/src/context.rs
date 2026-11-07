@@ -128,7 +128,7 @@ pub fn format_duration(d: std::time::Duration) -> String {
     }
 }
 
-/// Short description of image settings, e.g. „fürs Web als WebP, 1400 px, Qualität 80“.
+/// Short description of image settings, e.g. „fürs Web als WebP, 1600 px, Qualität 80“.
 pub fn describe_images(s: &ImageSettings) -> String {
     match s {
         ImageSettings::HighQuality { format } => format!("hochwertig als {}", format.label()),

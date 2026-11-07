@@ -18,7 +18,11 @@ const uiErrors = [];
 addEventListener('error', e => uiErrors.push(`${e.message} (${e.filename?.split('/').pop()}:${e.lineno})`));
 addEventListener('unhandledrejection', e => uiErrors.push(`unhandled: ${e.reason}`));
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Typewriter: a comfortable pace for short lines, but a whole bubble never takes
+// much longer than TYPE_BUDGET_MS (long texts like the summary simply type faster).
 const TYPE_MS = 22;
+const TYPE_MIN_MS = 6;
+const TYPE_BUDGET_MS = 1800;
 
 let SCENE, IMG = {}, UI;
 let scale = 4;
@@ -162,6 +166,10 @@ function say(lines, { mood = null, idle = false } = {}) {
   if (!lines.length) return Promise.resolve();
   if (!idle) play('talk');
 
+  const chars = lines.reduce((n, l) => n + l.length, 0);
+  const per = Math.max(TYPE_MIN_MS, Math.min(TYPE_MS, TYPE_BUDGET_MS / Math.max(1, chars)));
+  const pause = Math.round(per * 5);
+
   return new Promise(done => {
     let li = 0, ci = 0, timer = null;
     const end = () => {
@@ -179,8 +187,8 @@ function say(lines, { mood = null, idle = false } = {}) {
       ci++;
       paras[li].textContent = lines[li].slice(0, ci);
       if (lines[li][ci - 1] && lines[li][ci - 1] !== ' ' && ci % 2) Sound.blip();
-      if (ci >= lines[li].length) { li++; ci = 0; timer = setTimeout(next, 180); }
-      else timer = setTimeout(next, /[.,!?…:]/.test(lines[li][ci - 1]) ? TYPE_MS * 6 : TYPE_MS);
+      if (ci >= lines[li].length) { li++; ci = 0; timer = setTimeout(next, pause + 60); }
+      else timer = setTimeout(next, /[.,!?…:]/.test(lines[li][ci - 1]) ? pause : per);
     };
     next();
   });
@@ -243,6 +251,7 @@ function select(i, quiet) {
 function activate(i) {
   const c = choices[i];
   if (!c) return;
+  typing?.finish(); // answering while Wolfgang still talks is fine
   c.back ? Sound.back() : Sound.confirm();
   c.run();
 }
@@ -272,9 +281,15 @@ function showInput(spec, others = []) {
 }
 
 addEventListener('keydown', e => {
+  // ⌘+ / ⌘− / ⌘0: bigger, smaller, best fit (always whole pixel steps).
+  if (e.metaKey && T && ['=', '+', '-', '0'].includes(e.key)) {
+    e.preventDefault();
+    api.invoke('zoom', { delta: e.key === '-' ? -1 : e.key === '0' ? 0 : 1 });
+    return;
+  }
   if (e.target.tagName === 'INPUT') return;
   if (mode === 'panel') { if (e.key === 'Escape' || e.key === 'Enter') closePanel(); return; }
-  if (typing && [' ', 'Enter'].includes(e.key)) { e.preventDefault(); typing.finish(); return; }
+  if (typing && e.key === ' ') { e.preventDefault(); typing.finish(); return; } // Space skips; Enter answers right away
   if (e.key === 'ArrowDown') { e.preventDefault(); select(sel + 1); }
   else if (e.key === 'ArrowUp') { e.preventDefault(); select(sel - 1); }
   else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(sel); }
@@ -320,13 +335,14 @@ async function render(view) {
 
   if (view.type === 'ask') {
     if (view.node === 'done') play('hand', 2600, 'happy');
-    await say(view.lines, { mood: view.mood });
-    if (my !== token) return;
+    const talking = say(view.lines, { mood: view.mood });
     const list = view.answers.map((a, i) => ({ label: a.label, current: a.current, run: () => act(api.invoke('choose', { index: i })) }));
     if (view.input && list.length) list.push({ label: '✎ Selbst eintippen …', run: () => showInput(view.input, choices) });
     list.push(...extra);
     if (view.can_go_back) list.push({ label: '← Zurück', small: true, back: true, run: back });
+    // Answers show up right away: no need to wait for Wolfgang to finish talking.
     setChoices(list, { input: view.input && !view.answers.length ? view.input : null });
+    await talking;
   } else if (view.type === 'start') {
     await say(view.lines, { mood: view.mood });
     if (my !== token) return;
@@ -496,7 +512,7 @@ async function settingsPanel() {
   const draw = () => {
     body.innerHTML = '';
     row('Fürs Web am liebsten', [['WebP', 'webp'], ['AVIF', 'avif']], d.web_format, 'web_format');
-    row('Größe fürs Web', [['800', 800], ['1400', 1400], ['2400', 2400]], d.max_side, 'max_side');
+    row('Größe fürs Web', [['800', 800], ['1600', 1600], ['2400', 2400]], d.max_side, 'max_side');
     row('Qualität fürs Web', [['65', 65], ['80', 80], ['90', 90]], d.quality, 'quality');
     row('Hochwertig am liebsten', [['JPG', 'jpg'], ['WebP', 'webp'], ['AVIF', 'avif'], ['PNG', 'png']], d.hq_format, 'hq_format');
     row('Wörter trennen mit', [['bild-name', 'dash'], ['bild_name', 'underscore'], ['BildName', 'caps']], d.separator, 'separator');

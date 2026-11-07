@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const SIZE_SMALL: u32 = 800;
-pub const SIZE_NORMAL: u32 = 1400;
+pub const SIZE_NORMAL: u32 = 1600;
 pub const SIZE_LARGE: u32 = 2400;
 
 pub const QUALITY_SMALLER: u8 = 65;

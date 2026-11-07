@@ -16,9 +16,9 @@ if (!window.__TAURI__) {
       mode: ask('mode', 'thinking', ['Moin! Zeig mal her, was du da hast.', 'Ich seh 42 Fotos und 6 Schriften.', 'Mit einer Datei kann ich nix anfangen, die lass ich einfach liegen.', 'Wofür brauchst du die Bilder?'],
         ['Fürs Web vorbereiten – klein und schnell', 'Hochwertig behalten – nur ein anderes Format'], { can_go_back: false }),
       size: ask('web_size', 'thinking', ['Wie groß sollen sie werden? Ich mein die längste Seite.'],
-        ['Klein (800 px) – für Vorschaubilder', { label: 'Normal (1400 px) – passt fast immer', current: true }, 'Groß (2400 px) – für große Titelbilder'],
+        ['Klein (800 px) – für Vorschaubilder', { label: 'Normal (1600 px) – passt fast immer', current: true }, 'Groß (2400 px) – für große Titelbilder'],
         { input: { kind: 'number', placeholder: 'z. B. 1920', unit: 'px', min: 100, max: 8000 } }),
-      confirm: ask('confirm', 'happy', ['Also: 42 Fotos fürs Web als WebP, 1400 px, Qualität 80, Name „Kunde Müller“ – Dateinamen wie „kunde-mueller-buero-0001.webp“, dazu 6 Schriften als WOFF2. Landet alles in „Kunde-wolfgang“.', 'Passt das so?'],
+      confirm: ask('confirm', 'happy', ['Also: 42 Fotos fürs Web als WebP, 1600 px, Qualität 80, Name „Kunde Müller“ – Dateinamen wie „kunde-mueller-buero-0001.webp“, dazu 6 Schriften als WOFF2. Landet alles in „Kunde-wolfgang“.', 'Passt das so?'],
         ["Los geht's!", 'Nochmal ändern', 'Lass mal, doch nicht']),
       start: { type: 'start', mood: 'happy', lines: [], output: null },
       done: ask('done', 'proud', ['So, erledigt. 41,7 MB rein, 1,2 MB raus – 98 Prozent gespart.', 'Liegt alles in „Kunde-wolfgang“.'],
@@ -28,8 +28,8 @@ if (!window.__TAURI__) {
     };
     const next = { mode: ['size', 'confirm'], size: ['confirm', 'confirm', 'confirm'], confirm: ['start', 'mode', 'cancelled'], done: ['end', 'end'] };
     let node = 'mode', history = [];
-    let settings = { web_format: 'webp', max_side: 1400, quality: 80, hq_format: 'jpg', separator: 'dash', sound: true };
-    let presets = [{ name: 'Blog-Bilder', description: 'fürs Web als WebP, 1400 px, Qualität 80' }];
+    let settings = { web_format: 'webp', max_side: 1600, quality: 80, hq_format: 'jpg', separator: 'dash', sound: true };
+    let presets = [{ name: 'Blog-Bilder', description: 'fürs Web als WebP, 1600 px, Qualität 80' }];
 
     const work = () => {
       const total = 42;

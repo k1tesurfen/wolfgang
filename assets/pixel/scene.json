@@ -289,24 +289,6 @@
     ]
   },
   "hotspots": {
-    "cabinet": {
-      "action": "settings",
-      "label": "Aktenschrank: Einstellungen",
-      "rects": [
-        {
-          "x": 0,
-          "y": 112,
-          "w": 34,
-          "h": 68
-        },
-        {
-          "x": 84,
-          "y": 60,
-          "w": 26,
-          "h": 40
-        }
-      ]
-    },
     "clipboard": {
       "action": "presets",
       "label": "Klemmbrett: Vorlagen",
@@ -320,8 +302,8 @@
       ]
     },
     "computer": {
-      "action": "about",
-      "label": "Computer: Über Wolfgang",
+      "action": "settings",
+      "label": "Computer: Einstellungen",
       "rects": [
         {
           "x": 207,
@@ -352,6 +334,18 @@
           "y": 110,
           "w": 9,
           "h": 11
+        }
+      ]
+    },
+    "wolfgang": {
+      "action": "about",
+      "label": "Wolfgang: Über Wolfgang",
+      "rects": [
+        {
+          "x": 145,
+          "y": 52,
+          "w": 36,
+          "h": 46
         }
       ]
     }

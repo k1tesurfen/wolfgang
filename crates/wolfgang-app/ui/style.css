@@ -45,6 +45,10 @@ body { display: grid; place-items: center; }
   image-rendering: pixelated;
 }
 
+/* The title bar is transparent (traffic lights float over the scene);
+   this strip along the top edge moves the window. */
+#drag { position: absolute; left: 0; right: 0; top: 0; height: calc(4 * var(--u)); min-height: 14px; }
+
 .px { position: absolute; }
 [hidden] { display: none !important; }
 

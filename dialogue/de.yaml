@@ -180,8 +180,8 @@ nodes:
           to: web_quality,
         }
       - {
-          label: "Normal (1400 px) – passt fast immer",
-          set: { web.max_side: 1400 },
+          label: "Normal (1600 px) – passt fast immer",
+          set: { web.max_side: 1600 },
           to: web_quality,
         }
       - {

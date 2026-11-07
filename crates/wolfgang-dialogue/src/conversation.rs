@@ -527,7 +527,7 @@ impl Conversation {
         format!("{}.{ext}", naming::seo_name(&n.prefix, &keywords, original, &stem, 1, sep))
     }
 
-    /// „Also: 42 Fotos fürs Web als WebP, 1400 px, Qualität 80 …“
+    /// „Also: 42 Fotos fürs Web als WebP, 1600 px, Qualität 80 …“
     fn summary_text(&self) -> String {
         let s = &self.ctx.summary;
         let d = &self.state.draft;

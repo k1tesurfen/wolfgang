@@ -326,11 +326,12 @@ pub fn manifest(paths: &Paths, wolfgang: SpriteManifest, ui: SpriteManifest) {
     .map(|(m, p)| (m.to_string(), p.into_iter().map(String::from).collect()))
     .collect();
     let hotspots = [
+        // Everything interactive sits on or at the desk.
         ("desk", Hotspot { action: "drop", label: "Leg's auf den Tisch", rects: vec![r(73, 98, 180, 75)] }),
-        ("cabinet", Hotspot { action: "settings", label: "Aktenschrank: Einstellungen", rects: vec![r(0, 112, 34, 68), r(84, 60, 26, 40)] }),
+        ("wolfgang", Hotspot { action: "about", label: "Wolfgang: Über Wolfgang", rects: vec![r(145, 52, 36, 46)] }),
+        ("computer", Hotspot { action: "settings", label: "Computer: Einstellungen", rects: vec![r(207, 76, 38, 43)] }),
         ("clipboard", Hotspot { action: "presets", label: "Klemmbrett: Vorlagen", rects: vec![r(110, 106, 23, 15)] }),
         ("mug", Hotspot { action: "sip", label: "Wolfgangs Kaffee", rects: vec![r(100, 110, 9, 11)] }),
-        ("computer", Hotspot { action: "about", label: "Computer: Über Wolfgang", rects: vec![r(207, 76, 38, 43)] }),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))

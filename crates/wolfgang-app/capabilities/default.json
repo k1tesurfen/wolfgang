@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "What Wolfgang's window may do",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "core:window:allow-start-dragging"]
 }

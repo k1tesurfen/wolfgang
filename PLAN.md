@@ -64,7 +64,7 @@ Files are numbered in **Finder order** (case-insensitive, `IMG_2` before `IMG_10
 ### 3.3 Mode „Fürs Web vorbereiten“ (prepare for web)
 
 - Output: **WebP or AVIF only**. The default is a user setting (initially WebP).
-- **One size** per image: longest side = N px (default 1400), never upscaled
+- **One size** per image: longest side = N px (default 1600 since 2026-11-07, previously 1400), never upscaled
 - Quality configurable (default ~80 equivalent, tuned per codec)
 - Applies EXIF rotation, converts to **sRGB**, then **strips all metadata** (including GPS)
 - **SEO naming** (web mode only): `[PREFIX]-[KEYWORDS]-[ORIGINAL?]-[INDEX].ext`
@@ -115,7 +115,7 @@ When the same input is dropped again: „Kenn ich schon! 10 sind neu. Nur die ne
 2. „So wie letztes Mal?“ (summary of the last run) / named presets / „Lass uns das neu machen“
 3. Mode: „Hochwertig behalten“ / „Fürs Web vorbereiten“
 4. Format: WebP / AVIF (default marked)
-5. Size: Klein (800) / Normal (1400) / Groß (2400) / custom px
+5. Size: Klein (800) / Normal (1600) / Groß (2400) / custom px
 6. Quality: Kleiner / Ausgewogen / Schöner / custom 1–100
 7. Naming: prefix (text), keywords (found `.txt` or ask), separator, append original name
 8. Re-run question if applicable
@@ -288,10 +288,11 @@ Findings:
 
 - **`crates/wolfgang-app`** (Tauri 2.12): `cargo run -p wolfgang-app` opens Wolfgang's office. The UI in `ui/` is plain HTML/CSS/JS with no bundler and no Node. The build script copies `assets/pixel` to `ui/pixel`.
 - **`src/session.rs`** holds the app logic without Tauri (drop → conversation → run → remember, settings, presets) and is tested. `main.rs` exposes it as commands (`drop_files`, `choose`, `type_answer`, `back`, `start`, `cancel`, `settings`, `presets`, `about`, `install_cli`, …) and events (`progress`, `finished`, `files-opened`).
-- **Screen:** the 320×180 scene, scaled by whole numbers. Wolfgang's bubble types out with chiptune blips (click or Space skips it). The mood portrait sits bottom left. Answers sit bottom right, starting just right of Wolfgang; small extras (Zurück, Im Finder zeigen) go side by side. Custom answers are typed in a field styled like an answer.
+- **Window = office:** the window is exactly 320×180 × a whole scale, with no border. At start it picks the largest scale that fits in 75 % of the screen (Full HD → 4, 2560×1440 → 6). ⌘+ / ⌘− / ⌘0 change it in whole steps, and the window isn't freely resizable. The title bar is transparent (`titleBarStyle: Overlay`): the native traffic lights float over the scene, and a strip along the top edge drags the window. A fully custom pixel title bar is possible, but was deliberately not built, to keep native macOS behaviour.
+- **Screen:** Wolfgang's bubble types out with chiptune blips, and a whole bubble takes at most about 1.8 s (long texts type faster). Answers appear immediately and can be picked while he's still talking; Space skips the text, Enter answers. The mood portrait sits bottom left. Answers sit bottom right, starting just right of Wolfgang; small extras (Zurück, Im Finder zeigen) go side by side. Custom answers are typed in a field styled like an answer.
 - **Controls:** mouse, ↑↓ Enter, Esc = back. Drop files anywhere in the window (the desk lights up).
 - **Working:** Wolfgang types, a pixel progress bar fills, his working lines change every few seconds, and each file gets a stamp sound. Cancel stops after the current file. When he's done he hands over the folder, a jingle plays, and „Im Finder zeigen“ appears.
-- **Objects:** the filing cabinet opens settings (default web format, size, quality, HQ format, separator, sounds). The clipboard opens presets (list, delete). The computer opens about (version, install CLI, credits). Clicking the mug makes him sip, and he also sips now and then when idle.
+- **Objects (everything on or at the desk, changed 2026-11-07):** the computer opens settings (default web format, size, quality, HQ format, separator, sounds). The clipboard opens presets (list, delete). Clicking **Wolfgang himself** opens „Über Wolfgang“ (version, install CLI, credits). Clicking the mug makes him sip, and he also sips now and then when idle. The filing cabinet is decoration only.
 - **Sound:** synthesised with WebAudio, no sound files; switched on/off in settings.
 - **Font:** Pixelify Sans (OFL), bundled as WOFF2, converted by Wolfgang himself (80 → 24 KB).
 - **App icon:** the happy portrait in a framed rounded square (`wolfgang-art icon`).
