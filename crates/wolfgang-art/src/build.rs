@@ -78,10 +78,94 @@ pub fn portraits(paths: &Paths) {
     // One palette for all moods, so colours never jump between faces.
     let all: Vec<_> = refs.iter().flat_map(|r| pixelize::colors(r, region)).collect();
     let pal = pixelize::palette(&all, PORTRAIT_COLORS);
+    let touchup_path = paths.out.join("src/portraits.touchup");
+    let touchups = match std::fs::read_to_string(&touchup_path) {
+        Ok(t) => parse_touchups(&t).unwrap_or_else(|e| panic!("{}: {e}", touchup_path.display())),
+        Err(_) => BTreeMap::new(),
+    };
+    for name in touchups.keys() {
+        assert!(PORTRAITS.iter().any(|(_, n)| n == name), "{}: unknown portrait '{name}'", touchup_path.display());
+    }
     for (img, (_, name)) in refs.iter().zip(PORTRAITS) {
         let mut px = pixelize::pixelize(img, region, PORTRAIT_SIZE, PORTRAIT_SIZE, &pal);
         pixelize::cut_background(&mut px, BACKGROUND_TOLERANCE);
-        emit(paths, &format!("portraits/{name}"), &to_pixels(&px), 6);
+        let mut out = to_pixels(&px);
+        for t in touchups.get(*name).into_iter().flatten() {
+            for x in t.x0..=t.x1 {
+                let o = ((t.y * out.width + x) * 4) as usize;
+                out.rgba[o..o + 4].copy_from_slice(&t.rgba);
+            }
+        }
+        emit(paths, &format!("portraits/{name}"), &out, 6);
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct Touchup {
+    pub x0: u32,
+    pub x1: u32,
+    pub y: u32,
+    pub rgba: [u8; 4],
+}
+
+/// Parses `portraits.touchup` (format described in the file itself).
+pub fn parse_touchups(text: &str) -> Result<BTreeMap<String, Vec<Touchup>>, String> {
+    let mut out: BTreeMap<String, Vec<Touchup>> = BTreeMap::new();
+    let mut current: Option<String> = None;
+    for (n, raw) in text.lines().enumerate() {
+        let line = raw.split('#').next().unwrap_or("").trim();
+        if line.is_empty() {
+            continue;
+        }
+        let err = |m: &str| format!("line {}: {m} („{line}“)", n + 1);
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts[0] == "portrait" {
+            current = Some(parts.get(1).ok_or_else(|| err("portrait needs a name"))?.to_string());
+            continue;
+        }
+        let name = current.clone().ok_or_else(|| err("pixel before any `portrait` line"))?;
+        let [xs, y, color] = parts[..] else { return Err(err("expected: X Y COLOR")) };
+        let (x0, x1) = match xs.split_once('-') {
+            Some((a, b)) => (a.parse().map_err(|_| err("bad x"))?, b.parse().map_err(|_| err("bad x"))?),
+            None => {
+                let x = xs.parse().map_err(|_| err("bad x"))?;
+                (x, x)
+            }
+        };
+        let y: u32 = y.parse().map_err(|_| err("bad y"))?;
+        if x0 > x1 || x1 >= PORTRAIT_SIZE || y >= PORTRAIT_SIZE {
+            return Err(err(&format!("outside the {PORTRAIT_SIZE}×{PORTRAIT_SIZE} portrait")));
+        }
+        let rgba = if color == "clear" {
+            [0, 0, 0, 0]
+        } else {
+            let v = u32::from_str_radix(color, 16).ok().filter(|_| color.len() == 6).ok_or_else(|| err("colour must be RRGGBB or clear"))?;
+            [(v >> 16) as u8, (v >> 8) as u8, v as u8, 255]
+        };
+        out.entry(name).or_default().push(Touchup { x0, x1, y, rgba });
+    }
+    Ok(out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn touchups_parse() {
+        let t = parse_touchups("portrait happy\n32 61 d5c1b2  # tooth\n33-40 61 eddcbf\nportrait sorry\n1 2 clear\n").unwrap();
+        assert_eq!(t["happy"][1], Touchup { x0: 33, x1: 40, y: 61, rgba: [0xed, 0xdc, 0xbf, 255] });
+        assert_eq!(t["sorry"][0].rgba, [0, 0, 0, 0]);
+        assert!(parse_touchups("1 2 ffffff").unwrap_err().contains("before any"));
+        assert!(parse_touchups("portrait x\n99 2 ffffff").unwrap_err().contains("outside"));
+        assert!(parse_touchups("portrait x\n1 2 fff").unwrap_err().contains("RRGGBB"));
+    }
+
+    #[test]
+    fn repo_touchups_are_valid() {
+        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/pixel/src/portraits.touchup");
+        let t = parse_touchups(&std::fs::read_to_string(path).unwrap()).unwrap();
+        assert!(t.keys().all(|k| PORTRAITS.iter().any(|(_, n)| n == k)));
     }
 }
 

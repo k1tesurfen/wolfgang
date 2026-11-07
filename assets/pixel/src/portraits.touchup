@@ -1,0 +1,29 @@
+# Pixel touch-ups for the mood portraits, applied after pixelizing.
+#
+# The portraits are regenerated from assets/reference on every build, so fixes
+# made directly in the PNGs would be lost. Put them here instead.
+#
+#   portrait NAME            the portrait the following lines apply to
+#   X Y COLOR                one pixel
+#   X1-X2 Y COLOR            a horizontal run (inclusive)
+#
+# Coordinates are portrait pixels (0–95). COLOR is RRGGBB or `clear`.
+# Tip: colours from the portrait's own palette look best (see the comments).
+
+portrait happy
+# A full row of upper teeth instead of a single lone tooth.
+32 61 d5c1b2          # tooth shade
+33-40 61 eddcbf       # teeth
+41 61 d5c1b2
+33-40 62 5c2b29       # mouth inside below the teeth
+
+portrait laughing
+# Left closed eye was three rows thick; make it match the right eye (two rows).
+26-29 39 d5754c       # eyelid skin
+
+portrait content
+# Dark lump inside the left lens.
+20-21 41 8c4536
+20-21 42 8c4536
+# Lone tooth in a closed-lips smirk.
+36 60 5c2b29
