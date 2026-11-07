@@ -18,6 +18,9 @@ use wolfgang_core::UserStore;
 struct AppState {
     office: Mutex<Office>,
     cancel: Arc<AtomicBool>,
+    /// Files dropped on the Dock icon, kept until the UI picks them up
+    /// (they can arrive before the UI is ready, e.g. when they launch the app).
+    pending: Mutex<Vec<String>>,
 }
 
 type Res<T> = Result<T, String>;
@@ -28,6 +31,7 @@ fn lock<'a>(state: &'a State<'_, AppState>) -> std::sync::MutexGuard<'a, Office>
 
 #[tauri::command]
 async fn drop_files(state: State<'_, AppState>, paths: Vec<String>) -> Res<View> {
+    eprintln!("wolfgang-app: {} item(s) on the desk", paths.len());
     lock(&state).drop_files(paths.into_iter().map(PathBuf::from).collect())
 }
 
@@ -91,6 +95,12 @@ fn start(app: AppHandle, state: State<AppState>) -> Res<()> {
         .ok();
     });
     Ok(())
+}
+
+/// Files that arrived via the Dock icon since the last call.
+#[tauri::command]
+fn take_pending(state: State<AppState>) -> Vec<String> {
+    std::mem::take(&mut *state.pending.lock().unwrap_or_else(|e| e.into_inner()))
 }
 
 #[tauri::command]
@@ -230,7 +240,7 @@ fn main() {
     let store_path = UserStore::default_path();
     let store = UserStore::load(&store_path).map(|l| l.store).unwrap_or_default();
     let script = wolfgang_dialogue::load().unwrap_or_else(|_| wolfgang_dialogue::builtin());
-    let state = AppState { office: Mutex::new(Office::new(store_path, store, script)), cancel: Arc::new(AtomicBool::new(false)) };
+    let state = AppState { office: Mutex::new(Office::new(store_path, store, script)), cancel: Arc::new(AtomicBool::new(false)), pending: Mutex::new(Vec::new()) };
 
     tauri::Builder::default()
         .manage(state)
@@ -251,7 +261,8 @@ fn main() {
             about,
             install_cli,
             frontend_ready,
-            zoom
+            zoom,
+            take_pending
         ])
         .setup(|app| {
             // Exactly the office, at the largest whole scale that fits this screen.
@@ -270,7 +281,8 @@ fn main() {
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = &_event {
                 let paths: Vec<String> = urls.iter().filter_map(|u| u.to_file_path().ok()).map(|p| p.display().to_string()).collect();
-                let _ = _app.emit("files-opened", paths);
+                _app.state::<AppState>().pending.lock().unwrap_or_else(|e| e.into_inner()).extend(paths);
+                let _ = _app.emit("files-opened", ());
             }
         });
 }

@@ -3,7 +3,7 @@
 > Wolfgang is the personification of conversion: a cozy, bearded guy in a cardigan who sits behind his desk with a coffee and converts whatever you put in front of him.
 > Usability for non-technical colleagues is the top priority.
 
-Status: **approved**. Milestones 1–6 (spike, core engine, dialogue, CLI, pixel art, app) are done.
+Status: **approved**. Milestones 1–7 are done; v2 is ready for its first release.
 
 ---
 
@@ -299,6 +299,15 @@ Findings:
 - **Checks:** `ui/mock.js` fakes the Rust side when `ui/index.html` is opened in a normal browser (`?demo=mode|size|confirm|work|done`, `?panel=settings|presets|about`), which is how the UI was screenshot-tested. In the real app, the UI reports errors to the log, and `WOLFGANG_SELFTEST=1` quits after start-up with exit 1 on any error.
 - **Needs the bundle (M7):** dropping on the Dock icon needs document types in Info.plist, and the „install CLI“ button needs the `wolfgang` binary bundled next to the app executable. The code for both is in place.
 
+### Milestone 7 result (2026-11-07) ✅
+
+- **`scripts/build-app.sh`** builds the pixel art, the CLI and then `Wolfgang.app` plus the `.dmg` (`cargo tauri build`), and checks the result: CLI inside the app, signature, document types. Result: app 26 MB, **dmg 9.9 MB**.
+- **CLI inside the app:** `bundle.macOS.files` copies `target/release/wolfgang` to `Contents/MacOS/wolfgang`. „Über Wolfgang → Installieren“ links it to `/usr/local/bin/wolfgang` (admin password via `osascript`).
+- **Dock drop:** `crates/wolfgang-app/Info.plist` adds `CFBundleDocumentTypes` (`public.item`, `public.folder`) with `LSHandlerRank = Alternate`, so Wolfgang never becomes the default app for anything. Paths arriving via LaunchServices are kept in Rust (`take_pending`) until the UI is ready, so dropping on the icon of a closed app works too (tested with `open -a`).
+- **Signing:** ad-hoc (`signingIdentity: "-"`), no notarization. Without any signature, Apple Silicon calls downloaded apps "damaged" with no way past it; ad-hoc gives the normal "can't be checked" dialog, which can be allowed once (README „Erster Start“). Real signing/notarization needs an Apple Developer account and could be added to the release workflow later.
+- **GitHub Actions:** `ci.yml` runs clippy (`-D warnings`) and all tests on macOS 15 for pushes to main/v2 and for PRs. `release.yml` runs on tag `v*`: it checks that the tag matches the app version, tests, builds, and creates a **draft** release with the dmg attached. Not run yet (nothing pushed).
+- **README** rewritten in German: install, first launch, app, CLI, tips, switching from 1.x, developer notes, how to release.
+
 ---
 
 ## 8. Milestones
@@ -309,7 +318,7 @@ Findings:
 4. ✅ **CLI**: flags, TUI conversation, `--yes`/`--json`, presets/settings commands, `legacy-reset`. Moved the Bash script to `legacy/`. 17 CLI tests; the interactive mode was driven in a pseudo-terminal.
 5. ✅ **Pixel art**: pixelize tool for the references; office background from #10; mood portraits from the eight studies; animated desk sprite (idle/talk/type/sip/handover) drawn in code; bubbles, panels, object highlights; new-look CLI portrait. See *Milestone 5 result*.
 6. ✅ **Tauri app**: scene, drag & drop on the desk, bubbles, progress, result, settings/preset panels, SFX, CLI install. See *Milestone 6 result*.
-7. **Release**: `.dmg` build via GitHub Actions (macOS arm64 runner), README rewrite (German), first-launch instructions for the unsigned app. Tag v2.0.0.
+7. ✅ **Release**: `.dmg` build via GitHub Actions (macOS arm64 runner), README rewrite (German), first-launch instructions for the unsigned app. Tagging v2.0.0 is up to the user. See *Milestone 7 result*.
 
 ---
 

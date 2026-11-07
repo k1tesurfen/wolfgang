@@ -50,13 +50,16 @@ async function init() {
   requestAnimationFrame(tick);
 
   api.onDrop(onDrop);
-  api.listen('files-opened', paths => paths.length && dropFiles(paths));
+  // Files dropped on the Dock icon: Rust keeps them until we ask (also covers app launch).
+  const takePending = async () => { const p = await api.invoke('take_pending'); if (p.length) dropFiles(p); };
+  api.listen('files-opened', takePending);
   api.listen('progress', onProgress);
   api.listen('finished', onFinished);
   api.listen('failed', msg => { mode = 'talk'; play('idle'); oops(msg); });
 
   setupStage();
   goIdle();
+  if (T) takePending();
   if (T) setTimeout(() => api.invoke('frontend_ready', { errors: uiErrors, scale }), 1500);
 
   // Demo hooks for looking at the UI in a browser (mock.js).

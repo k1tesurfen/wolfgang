@@ -68,6 +68,7 @@ if (!window.__TAURI__) {
       start: () => { work(); },
       cancel: () => {},
       reveal: () => {},
+      take_pending: () => [],
     };
 
     return {

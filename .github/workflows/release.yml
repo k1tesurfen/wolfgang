@@ -1,0 +1,42 @@
+name: Release
+
+# Push a tag like v2.0.0 → builds Wolfgang.app + .dmg and creates a *draft*
+# GitHub release with the .dmg attached. Check it, then publish it by hand.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  dmg:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Tag matches the app version
+        run: |
+          app=$(python3 -c "import json; print(json.load(open('crates/wolfgang-app/tauri.conf.json'))['version'])")
+          if [ "v$app" != "$GITHUB_REF_NAME" ]; then
+            echo "Tag $GITHUB_REF_NAME, but tauri.conf.json says $app"; exit 1
+          fi
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build tools
+        run: brew install cmake nasm
+      - uses: Swatinem/rust-cache@v2
+      - name: Tauri CLI
+        run: cargo install tauri-cli --version "^2" --locked
+      - name: Test
+        run: cargo test --workspace
+      - name: Build app + dmg
+        run: scripts/build-app.sh
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: target/release/bundle/dmg/*.dmg
+          body: |
+            **Wolfgang ${{ github.ref_name }}** für Macs mit Apple-Chip (macOS 13 oder neuer).
+
+            1. `.dmg` öffnen und Wolfgang in den Programme-Ordner ziehen.
+            2. Beim ersten Start: Wolfgang ist nicht von Apple beglaubigt. Siehe „Erster Start“ im README.
+            3. Die Kommandozeile `wolfgang` installierst du in der App: auf Wolfgang klicken → „Installieren“.
