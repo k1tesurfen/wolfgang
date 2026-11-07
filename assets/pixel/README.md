@@ -1,24 +1,38 @@
 # Wolfgang's pixel art
 
-Everything here except `src/` is generated. Rebuild with:
+**Everything in `src/` is made by hand and edited directly.** Everything else here is generated from it.
+
+| Source (`src/`) | What | Rules |
+|---|---|---|
+| `office.png` | the 320×180 scene background | exactly 320×180 |
+| `portraits/*.png` | the eight 96×96 mood portraits (happy, thinking, surprised, content, laughing, sideeye, dreamy, sorry) | exactly 96×96, transparent background |
+| `wolfgang.sprite` | the animated desk sprite, one character per pixel | format described at the top of the file |
+| `ui.sprite` | speech bubble, answers, panel, portrait frame, cursor, sparkle | same format |
+
+Edit the PNGs in any pixel editor (Aseprite, Pixelorama, Photoshop with nearest-neighbour…).
+Keep pixels fully opaque or fully transparent and avoid smoothing; the build warns about
+half-transparent pixels and about suspiciously many colours.
+
+## Build
 
 ```bash
 cargo run --release -p wolfgang-art -- build
 open target/wolfgang-art/preview.html     # the scene, animated and clickable
 ```
 
-| File | From | What |
-|---|---|---|
-| `office.png` | `assets/reference/office.jpeg` | 320×180 scene background, 48 colours |
-| `portraits/*.png` | `assets/reference/portrait-*.jpeg` + `src/portraits.touchup` | 96×96 mood portraits, shared 40-colour palette, transparent background |
-| `wolfgang.png` | `src/wolfgang.sprite` | animated desk sprite (idle, talk, type, sip, hand …) |
-| `ui.png` | `src/ui.sprite` | speech bubble, tail, answer bubbles, panel, cursor, sparkle |
-| `scene.json` | the build tool | frame rectangles, animations, mood → portrait, clickable hotspots, bubble area |
+`build` checks the sources and writes `wolfgang.png`, `ui.png` (sprite sheets) and `scene.json`
+(frames, animations, mood → portrait, clickable hotspots, bubble area). It never touches `src/`.
 
-The references are AI images in pixel-art *style*. The tool turns them into real pixel art:
-a k-means palette in OKLab, then each target pixel takes the most frequent palette colour
-of its block, plus a pass that keeps thin dark outlines continuous.
+## Where the PNG sources came from
 
-`src/*.sprite` are plain text, one character per pixel, editable by hand. The format is described at the top of `wolfgang.sprite`.
+`office.png` and the portraits were converted once from the reference images in
+`assets/reference/` (AI images in pixel-art *style*) and then touched up by hand:
 
-To fix single pixels in a portrait, don't edit the PNG (it's regenerated on every build). Add a line to `src/portraits.touchup` instead, e.g. `33-40 61 eddcbf` paints x 33–40 in row 61. The format is described at the top of that file.
+```bash
+cargo run --release -p wolfgang-art -- import           # refuses to overwrite existing sources
+cargo run --release -p wolfgang-art -- import --force   # overwrites them: hand edits are lost!
+```
+
+The conversion uses a k-means palette in OKLab, then gives each target pixel the most frequent
+palette colour of its block, plus a pass that keeps thin dark outlines continuous.
+You only need `import` again for new reference images.

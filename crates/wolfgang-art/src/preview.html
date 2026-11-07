@@ -18,7 +18,8 @@
   #say { left: calc(56px * var(--scale)); top: calc(4px * var(--scale)); width: calc(208px * var(--scale)); min-height: calc(30px * var(--scale)); }
   #say p { margin: 0 0 calc(2px * var(--scale)); }
   #tail { width: calc(11px * var(--scale)); height: calc(8px * var(--scale)); }
-  #portrait { left: calc(4px * var(--scale)); top: calc(78px * var(--scale)); width: calc(98px * var(--scale)); height: calc(98px * var(--scale)); padding: calc(1px * var(--scale)); border-style: solid; }
+  /* 96 px portrait + 4 px frame on each side, flush (no gap) */
+  #portrait { left: calc(3px * var(--scale)); top: calc(73px * var(--scale)); width: calc(104px * var(--scale)); height: calc(104px * var(--scale)); padding: 0; border-style: solid; }
   #portrait img { width: 100%; height: 100%; image-rendering: pixelated; display: block; }
   #answers { right: calc(6px * var(--scale)); bottom: calc(5px * var(--scale)); width: calc(150px * var(--scale)); display: flex; flex-direction: column; gap: calc(2px * var(--scale)); }
   .answer { position: relative; cursor: pointer; font-size: calc(5.5px * var(--scale)); padding: calc(3px * var(--scale)) calc(6px * var(--scale)); }
@@ -84,7 +85,7 @@ const ANSWERS = ["Fürs Web vorbereiten – klein und schnell", "Hochwertig beha
   };
   const restyle = () => {
     nine($('say'), 'bubble');
-    nine($('portrait'), 'panel');
+    nine($('portrait'), 'portrait-frame');
     document.querySelectorAll('.answer').forEach(a => nine(a, a.classList.contains('sel') ? 'answer-hover' : 'answer'));
     const k = scale(), t = $('tail');
     t.style.background = `url(${piece('tail')}) 0 0 / 100% 100%`;

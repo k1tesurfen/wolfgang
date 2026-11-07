@@ -1,11 +1,16 @@
-//! `wolfgang-art build`: everything in `assets/pixel/` from `assets/reference/`
-//! (and, later, the code-drawn sprites).
+//! The art pipeline.
+//!
+//! - `import`: turns the reference images into pixel art, **once**. The results
+//!   (`src/office.png`, `src/portraits/*.png`) are then hand-made sources like the
+//!   `.sprite` files; `import` refuses to overwrite them without `--force`.
+//! - `build`: hand-made sources in `assets/pixel/src/` → sprite sheets,
+//!   `scene.json` and the preview. It never touches the sources.
 
 use crate::pixelize::{self, Indexed};
 use crate::sprite::{self, SheetFrame};
-use serde::Serialize;
-use std::collections::BTreeMap;
 use crate::upscale;
+use serde::Serialize;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 use wolfgang_core::image::{decode, encode, ColorTarget, Pixels};
 use wolfgang_core::ImageFormat;
@@ -16,12 +21,16 @@ pub const SCENE_H: u32 = 180;
 const OFFICE_COLORS: usize = 48;
 
 /// Portraits: art pixel = 11.5 reference pixels; 96×96 head-and-shoulders crop.
-const PORTRAIT_SIZE: u32 = 96;
+pub const PORTRAIT_SIZE: u32 = 96;
 const PORTRAIT_CELL: f64 = 11.5;
 /// Top-left of the crop in reference pixels, aligned to the detected grid phase.
 const PORTRAIT_ORIGIN: (f64, f64) = (894.8, 72.7);
 const PORTRAIT_COLORS: usize = 40;
 const BACKGROUND_TOLERANCE: f32 = 0.06;
+
+/// More distinct colours than this in a hand-made source usually means an editor
+/// smoothed something (anti-aliasing, interpolated scaling).
+const MAX_COLORS: usize = 128;
 
 /// (reference file, output name)
 pub const PORTRAITS: &[(&str, &str)] = &[
@@ -42,6 +51,18 @@ pub struct Paths {
     pub preview: Option<PathBuf>,
 }
 
+impl Paths {
+    fn src(&self) -> PathBuf {
+        self.out.join("src")
+    }
+    fn office(&self) -> PathBuf {
+        self.src().join("office.png")
+    }
+    fn portrait(&self, name: &str) -> PathBuf {
+        self.src().join("portraits").join(format!("{name}.png"))
+    }
+}
+
 fn write_png(path: &Path, p: &Pixels) {
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(path, encode(p, ImageFormat::Png, 0.0).expect("png")).unwrap_or_else(|e| panic!("{}: {e}", path.display()));
@@ -51,6 +72,7 @@ fn to_pixels(i: &Indexed) -> Pixels {
     Pixels { width: i.width, height: i.height, rgba: i.rgba(), icc: None }
 }
 
+/// Writes a generated file into `assets/pixel/` (plus an enlarged preview copy).
 fn emit(paths: &Paths, name: &str, img: &Pixels, preview_scale: u32) {
     write_png(&paths.out.join(format!("{name}.png")), img);
     if let Some(dir) = &paths.preview {
@@ -59,113 +81,134 @@ fn emit(paths: &Paths, name: &str, img: &Pixels, preview_scale: u32) {
     println!("  {name}.png  {}×{}", img.width, img.height);
 }
 
-pub fn office(paths: &Paths) -> Pixels {
-    let img = decode(&paths.reference.join("office.jpeg"), None, ColorTarget::Srgb).expect("office reference");
+/// Converts the references into `src/office.png` and `src/portraits/*.png`.
+pub fn import(paths: &Paths, force: bool) -> Result<(), String> {
+    let targets: Vec<PathBuf> = std::iter::once(paths.office()).chain(PORTRAITS.iter().map(|(_, n)| paths.portrait(n))).collect();
+    let existing: Vec<String> = targets.iter().filter(|t| t.exists()).map(|t| t.display().to_string()).collect();
+    if !existing.is_empty() && !force {
+        return Err(format!(
+            "These already exist and may contain hand-drawn pixels:\n  {}\nUse --force to overwrite them with fresh conversions.",
+            existing.join("\n  ")
+        ));
+    }
+
+    let img = decode(&paths.reference.join("office.jpeg"), None, ColorTarget::Srgb).map_err(|e| e.to_string())?;
     let full = (0, 0, img.width, img.height);
     let pal = pixelize::palette(&pixelize::colors(&img, full), OFFICE_COLORS);
-    let px = to_pixels(&pixelize::pixelize(&img, full, SCENE_W, SCENE_H, &pal));
-    emit(paths, "office", &px, 4);
-    px
-}
+    write_png(&paths.office(), &to_pixels(&pixelize::pixelize(&img, full, SCENE_W, SCENE_H, &pal)));
+    println!("  {}", paths.office().display());
 
-pub fn portraits(paths: &Paths) {
     let size = (PORTRAIT_SIZE as f64 * PORTRAIT_CELL).round() as u32;
     let region = (PORTRAIT_ORIGIN.0.round() as u32, PORTRAIT_ORIGIN.1.round() as u32, size, size);
-    let refs: Vec<Pixels> = PORTRAITS
+    let refs = PORTRAITS
         .iter()
-        .map(|(file, _)| decode(&paths.reference.join(file), None, ColorTarget::Srgb).unwrap_or_else(|e| panic!("{file}: {e}")))
-        .collect();
+        .map(|(file, _)| decode(&paths.reference.join(file), None, ColorTarget::Srgb).map_err(|e| format!("{file}: {e}")))
+        .collect::<Result<Vec<_>, _>>()?;
     // One palette for all moods, so colours never jump between faces.
     let all: Vec<_> = refs.iter().flat_map(|r| pixelize::colors(r, region)).collect();
     let pal = pixelize::palette(&all, PORTRAIT_COLORS);
-    let touchup_path = paths.out.join("src/portraits.touchup");
-    let touchups = match std::fs::read_to_string(&touchup_path) {
-        Ok(t) => parse_touchups(&t).unwrap_or_else(|e| panic!("{}: {e}", touchup_path.display())),
-        Err(_) => BTreeMap::new(),
-    };
-    for name in touchups.keys() {
-        assert!(PORTRAITS.iter().any(|(_, n)| n == name), "{}: unknown portrait '{name}'", touchup_path.display());
-    }
     for (img, (_, name)) in refs.iter().zip(PORTRAITS) {
         let mut px = pixelize::pixelize(img, region, PORTRAIT_SIZE, PORTRAIT_SIZE, &pal);
         pixelize::cut_background(&mut px, BACKGROUND_TOLERANCE);
-        let mut out = to_pixels(&px);
-        for t in touchups.get(*name).into_iter().flatten() {
-            for x in t.x0..=t.x1 {
-                let o = ((t.y * out.width + x) * 4) as usize;
-                out.rgba[o..o + 4].copy_from_slice(&t.rgba);
-            }
-        }
-        emit(paths, &format!("portraits/{name}"), &out, 6);
+        write_png(&paths.portrait(name), &to_pixels(&px));
+        println!("  {}", paths.portrait(name).display());
     }
+    Ok(())
 }
 
-#[derive(Debug, PartialEq)]
-pub struct Touchup {
-    pub x0: u32,
-    pub x1: u32,
-    pub y: u32,
-    pub rgba: [u8; 4],
+/// Reads a hand-made PNG exactly as stored (no colour management).
+fn read_png(path: &Path) -> Result<Pixels, String> {
+    let file = std::fs::File::open(path).map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut dec = png::Decoder::new(std::io::BufReader::new(file));
+    dec.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
+    let mut reader = dec.read_info().map_err(|e| format!("{}: {e}", path.display()))?;
+    let mut buf = vec![0; reader.output_buffer_size().unwrap_or(0)];
+    let info = reader.next_frame(&mut buf).map_err(|e| format!("{}: {e}", path.display()))?;
+    let px = &buf[..info.buffer_size()];
+    let rgba: Vec<u8> = match info.color_type {
+        png::ColorType::Rgba => px.to_vec(),
+        png::ColorType::Rgb => px.chunks_exact(3).flat_map(|c| [c[0], c[1], c[2], 255]).collect(),
+        png::ColorType::GrayscaleAlpha => px.chunks_exact(2).flat_map(|c| [c[0], c[0], c[0], c[1]]).collect(),
+        png::ColorType::Grayscale => px.iter().flat_map(|&g| [g, g, g, 255]).collect(),
+        png::ColorType::Indexed => return Err(format!("{}: unexpected indexed colour after expansion", path.display())),
+    };
+    Ok(Pixels { width: info.width, height: info.height, rgba, icc: None })
 }
 
-/// Parses `portraits.touchup` (format described in the file itself).
-pub fn parse_touchups(text: &str) -> Result<BTreeMap<String, Vec<Touchup>>, String> {
-    let mut out: BTreeMap<String, Vec<Touchup>> = BTreeMap::new();
-    let mut current: Option<String> = None;
-    for (n, raw) in text.lines().enumerate() {
-        let line = raw.split('#').next().unwrap_or("").trim();
-        if line.is_empty() {
-            continue;
-        }
-        let err = |m: &str| format!("line {}: {m} („{line}“)", n + 1);
-        let parts: Vec<&str> = line.split_whitespace().collect();
-        if parts[0] == "portrait" {
-            current = Some(parts.get(1).ok_or_else(|| err("portrait needs a name"))?.to_string());
-            continue;
-        }
-        let name = current.clone().ok_or_else(|| err("pixel before any `portrait` line"))?;
-        let [xs, y, color] = parts[..] else { return Err(err("expected: X Y COLOR")) };
-        let (x0, x1) = match xs.split_once('-') {
-            Some((a, b)) => (a.parse().map_err(|_| err("bad x"))?, b.parse().map_err(|_| err("bad x"))?),
-            None => {
-                let x = xs.parse().map_err(|_| err("bad x"))?;
-                (x, x)
-            }
-        };
-        let y: u32 = y.parse().map_err(|_| err("bad y"))?;
-        if x0 > x1 || x1 >= PORTRAIT_SIZE || y >= PORTRAIT_SIZE {
-            return Err(err(&format!("outside the {PORTRAIT_SIZE}×{PORTRAIT_SIZE} portrait")));
-        }
-        let rgba = if color == "clear" {
-            [0, 0, 0, 0]
-        } else {
-            let v = u32::from_str_radix(color, 16).ok().filter(|_| color.len() == 6).ok_or_else(|| err("colour must be RRGGBB or clear"))?;
-            [(v >> 16) as u8, (v >> 8) as u8, v as u8, 255]
-        };
-        out.entry(name).or_default().push(Touchup { x0, x1, y, rgba });
+/// Problems that would look wrong in the scene: the wrong size is an error;
+/// half-transparent pixels and very many colours are warnings (smoothing editors).
+pub fn check_source(img: &Pixels, w: u32, h: u32) -> Result<Vec<String>, String> {
+    if (img.width, img.height) != (w, h) {
+        return Err(format!("is {}×{}, expected {w}×{h}", img.width, img.height));
     }
-    Ok(out)
+    let mut warnings = Vec::new();
+    let soft = img.rgba.chunks_exact(4).filter(|p| p[3] != 0 && p[3] != 255).count();
+    if soft > 0 {
+        warnings.push(format!("{soft} half-transparent pixels (pixel art should be fully opaque or fully transparent)"));
+    }
+    let colors: HashSet<[u8; 3]> = img.rgba.chunks_exact(4).filter(|p| p[3] != 0).map(|p| [p[0], p[1], p[2]]).collect();
+    if colors.len() > MAX_COLORS {
+        warnings.push(format!("{} colours: was it smoothed or scaled with interpolation?", colors.len()));
+    }
+    Ok(warnings)
+}
+
+/// Checks the hand-made PNG sources; panics on errors, prints warnings.
+pub fn check_sources(paths: &Paths) {
+    let mut list = vec![(paths.office(), SCENE_W, SCENE_H)];
+    list.extend(PORTRAITS.iter().map(|(_, n)| (paths.portrait(n), PORTRAIT_SIZE, PORTRAIT_SIZE)));
+    for (path, w, h) in list {
+        let img = read_png(&path).unwrap_or_else(|e| panic!("{e}\n(Run `wolfgang-art import` to create missing sources.)"));
+        match check_source(&img, w, h) {
+            Ok(warnings) => {
+                for warning in warnings {
+                    println!("  ⚠ {}: {warning}", path.display());
+                }
+            }
+            Err(e) => panic!("{}: {e}", path.display()),
+        }
+    }
+    println!("  sources ok: office + {} portraits", PORTRAITS.len());
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn touchups_parse() {
-        let t = parse_touchups("portrait happy\n32 61 d5c1b2  # tooth\n33-40 61 eddcbf\nportrait sorry\n1 2 clear\n").unwrap();
-        assert_eq!(t["happy"][1], Touchup { x0: 33, x1: 40, y: 61, rgba: [0xed, 0xdc, 0xbf, 255] });
-        assert_eq!(t["sorry"][0].rgba, [0, 0, 0, 0]);
-        assert!(parse_touchups("1 2 ffffff").unwrap_err().contains("before any"));
-        assert!(parse_touchups("portrait x\n99 2 ffffff").unwrap_err().contains("outside"));
-        assert!(parse_touchups("portrait x\n1 2 fff").unwrap_err().contains("RRGGBB"));
+    fn img(w: u32, h: u32, f: impl Fn(u32) -> [u8; 4]) -> Pixels {
+        Pixels { width: w, height: h, rgba: (0..w * h).flat_map(f).collect(), icc: None }
     }
 
     #[test]
-    fn repo_touchups_are_valid() {
-        let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/pixel/src/portraits.touchup");
-        let t = parse_touchups(&std::fs::read_to_string(path).unwrap()).unwrap();
-        assert!(t.keys().all(|k| PORTRAITS.iter().any(|(_, n)| n == k)));
+    fn source_checks() {
+        assert!(check_source(&img(4, 4, |_| [1, 2, 3, 255]), 4, 4).unwrap().is_empty());
+        assert!(check_source(&img(4, 4, |_| [1, 2, 3, 255]), 5, 4).unwrap_err().contains("expected 5×4"));
+        let soft = check_source(&img(4, 4, |i| [1, 2, 3, if i == 0 { 128 } else { 255 }]), 4, 4).unwrap();
+        assert!(soft[0].contains("1 half-transparent"));
+        let many = check_source(&img(20, 20, |i| [i as u8, 0, 0, 255]), 20, 20).unwrap();
+        assert!(many[0].contains("smoothed"));
+    }
+
+    #[test]
+    fn repo_sources_pass_the_checks() {
+        let paths = Paths { reference: PathBuf::new(), out: Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/pixel"), preview: None };
+        let office = read_png(&paths.office()).unwrap();
+        assert!(check_source(&office, SCENE_W, SCENE_H).unwrap().is_empty());
+        for (_, n) in PORTRAITS {
+            let p = read_png(&paths.portrait(n)).unwrap();
+            assert!(check_source(&p, PORTRAIT_SIZE, PORTRAIT_SIZE).unwrap().is_empty(), "{n}");
+        }
+    }
+
+    #[test]
+    fn import_never_overwrites_without_force() {
+        let t = tempfile::tempdir().unwrap();
+        let paths = Paths { reference: t.path().join("ref"), out: t.path().to_path_buf(), preview: None };
+        std::fs::create_dir_all(paths.src()).unwrap();
+        std::fs::write(paths.office(), "hand-drawn").unwrap();
+        let err = import(&paths, false).unwrap_err();
+        assert!(err.contains("office.png") && err.contains("--force"), "{err}");
+        assert_eq!(std::fs::read_to_string(paths.office()).unwrap(), "hand-drawn");
     }
 }
 
@@ -227,7 +270,7 @@ pub struct Manifest {
 }
 
 pub fn manifest(paths: &Paths, wolfgang: SpriteManifest, ui: SpriteManifest) {
-    let portraits = PORTRAITS.iter().map(|(_, n)| (n.to_string(), format!("portraits/{n}.png"))).collect();
+    let portraits = PORTRAITS.iter().map(|(_, n)| (n.to_string(), format!("src/portraits/{n}.png"))).collect();
     let moods = [
         ("neutral", vec!["sideeye", "content"]),
         ("happy", vec!["happy"]),
@@ -252,7 +295,7 @@ pub fn manifest(paths: &Paths, wolfgang: SpriteManifest, ui: SpriteManifest) {
     let m = Manifest {
         width: SCENE_W,
         height: SCENE_H,
-        background: "office.png".into(),
+        background: "src/office.png".into(),
         wolfgang,
         ui,
         portraits,

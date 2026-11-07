@@ -276,13 +276,14 @@ Findings:
 
 ### Milestone 5 result (2026-11-07) ✅
 
-- **`crates/wolfgang-art`** (`cargo run --release -p wolfgang-art -- build`) turns `assets/reference/` and `assets/pixel/src/*.sprite` into `assets/pixel/`, and writes a clickable preview to `target/wolfgang-art/preview.html`.
+- **`crates/wolfgang-art`**: `import` converts `assets/reference/` **once** into hand-editable PNG sources (`assets/pixel/src/office.png`, `src/portraits/*.png`), and refuses to overwrite them without `--force`. `build` turns everything in `src/` (PNGs + `*.sprite`) into sprite sheets, `scene.json` and a clickable preview (`target/wolfgang-art/preview.html`). From now on the PNGs are the source of truth and are drawn by hand (2026-11-07).
 - **Scene: 320×180** (16:9, shown at 4× = 1280×720). Office and portraits end up with almost the same pixel size, so the whole scene has one pixel scale.
 - **Pixelizing:** a k-means palette in OKLab, the majority colour per block, and an outline pass so thin dark lines stay continuous. The office has no strict grid (art pixels ≈ 4 reference pixels, not aligned). The portraits have a clean 11.5-pixel grid.
 - **Portraits:** 96×96 head-and-shoulders, one shared 40-colour palette, transparent background (including areas enclosed by an arm). Moods map in `scene.json`: neutral → sideeye/content, happy → happy, thinking → thinking/dreamy, surprised → surprised, proud → laughing/content, sorry → sorry.
 - **Desk sprite:** 46×56, 8 frames (idle, blink, talk, smile, typeA/B, sip, hand), animations idle/talk/type/sip/hand/happy with timings. The source is a plain-text pixel grid (`wolfgang.sprite`), validated by a test.
 - **UI pieces** (`ui.sprite`): speech bubble and tail, answer bubbles (normal and hover), wooden panel, cursor, sparkle. 9-slice insets are in `scene.json`.
 - **Hotspots** (`scene.json`): desk = drop zone, filing cabinets = settings, clipboard = presets, mug = sip coffee, computer = about/CLI install. Speech bubbles go on the free wall above Wolfgang's head.
+- **Portrait frame:** a dedicated wooden frame with no gap. The portrait sits flush and the frame crops the bust at the bottom; the backdrop behind him is the office wall colour.
 - **Preview layout (visual-novel style):** Wolfgang's bubble at the top with its tail pointing at him, the mood portrait in a wooden frame at the bottom left, answers at the bottom right, and the desk in the middle as the drop zone. The font in the preview is Pixelify Sans (Google Fonts, OFL); the app will bundle it to work offline.
 
 ---

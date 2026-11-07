@@ -17,6 +17,7 @@ color D 8a5a34  # wood
 color d 5c3a22  # wood dark
 color W fff6d8  # sparkle light
 color w e6b45a  # sparkle mid
+color b dccab0  # portrait backdrop (office wall)
 
 # Wolfgang's speech bubble.
 frame bubble 13 13 slice 4
@@ -93,6 +94,21 @@ OeDOOOOOOOOODdO
 OeDDDDDDDDDDDdO
 OdddddddddddddO
 .OOOOOOOOOOOOO.
+
+# Frame around Wolfgang's mood portrait: no gap, the picture sits right
+# against the inner outline and the frame crops the bust at the bottom.
+frame portrait-frame 11 11 slice 4
+.OOOOOOOOO.
+OeeeeeeeeeO
+OeDDDDDDDdO
+OeDOOOOODdO
+OeDObbbODdO
+OeDObbbODdO
+OeDObbbODdO
+OeDOOOOODdO
+OeDDDDDDDdO
+OdddddddddO
+.OOOOOOOOO.
 
 # Cursor next to the highlighted answer.
 frame cursor 6 7

@@ -1,6 +1,8 @@
 //! `wolfgang-art`: builds the app's pixel art from `assets/`.
 //!
-//!   cargo run --release -p wolfgang-art -- analyze IMAGE...
+//!   cargo run --release -p wolfgang-art -- build            hand-made sources → sheets, scene.json, preview
+//!   cargo run --release -p wolfgang-art -- import [--force] references → src/ PNGs (once!)
+//!   cargo run --release -p wolfgang-art -- analyze IMAGE... pixel grid detection
 
 mod build;
 mod grid;
@@ -39,22 +41,12 @@ fn main() {
                 }
             }
         }
-        Some("try") => {
-            // try IMAGE OUT_PREFIX COLORS WIDTH...
-            let img = decode(Path::new(&args[1]), None, ColorTarget::Srgb).expect("decode");
-            let full = (0, 0, img.width, img.height);
-            let k: usize = args[3].parse().unwrap();
-            let pal = pixelize::palette(&pixelize::colors(&img, full), k);
-            for w in &args[4..] {
-                let w: u32 = w.parse().unwrap();
-                let h = if w == 320 { 180 } else { (w as f64 * img.height as f64 / img.width as f64).round() as u32 };
-                let px = pixelize::pixelize(&img, full, w, h, &pal);
-                let out = Pixels { width: w, height: h, rgba: px.rgba(), icc: None };
-                let path = format!("{}-{w}.png", args[2]);
-                std::fs::write(&path, wolfgang_core::image::encode(&out, wolfgang_core::ImageFormat::Png, 0.0).unwrap()).unwrap();
-                println!("{path}: {w}x{h}, {} colours", px.palette.len());
-                let view = upscale(&out, (1376 / w).max(1));
-                std::fs::write(format!("{}-{w}-view.png", args[2]), wolfgang_core::image::encode(&view, wolfgang_core::ImageFormat::Png, 0.0).unwrap()).unwrap();
+        Some("import") => {
+            // import [--force]: references → src/office.png + src/portraits/*.png, once.
+            let paths = build::Paths { reference: "assets/reference".into(), out: "assets/pixel".into(), preview: None };
+            if let Err(e) = build::import(&paths, args.iter().any(|a| a == "--force")) {
+                eprintln!("{e}");
+                std::process::exit(1);
             }
         }
         Some("build") => {
@@ -62,13 +54,12 @@ fn main() {
             let preview = args.iter().position(|a| a == "--preview").map(|i| std::path::PathBuf::from(&args[i + 1]));
             let paths = build::Paths { reference: "assets/reference".into(), out: "assets/pixel".into(), preview };
             println!("assets/pixel/");
-            build::office(&paths);
-            build::portraits(&paths);
+            build::check_sources(&paths);
             let wolfgang = build::sprites(&paths, "wolfgang");
             let ui = build::sprites(&paths, "ui");
             build::manifest(&paths, wolfgang, ui);
         }
-        _ => eprintln!("usage: wolfgang-art build [--preview DIR] | analyze IMAGE... | try IMAGE PREFIX COLORS WIDTH..."),
+        _ => eprintln!("usage: wolfgang-art build [--preview DIR] | import [--force] | analyze IMAGE..."),
     }
 }
 

@@ -1,7 +1,7 @@
 {
   "width": 320,
   "height": 180,
-  "background": "office.png",
+  "background": "src/office.png",
   "wolfgang": {
     "sheet": "wolfgang.png",
     "origin": [
@@ -190,7 +190,7 @@
         "slice": 4
       },
       "cursor": {
-        "x": 70,
+        "x": 82,
         "y": 0,
         "w": 6,
         "h": 7
@@ -202,14 +202,21 @@
         "h": 15,
         "slice": 5
       },
+      "portrait-frame": {
+        "x": 70,
+        "y": 0,
+        "w": 11,
+        "h": 11,
+        "slice": 4
+      },
       "sparkle-a": {
-        "x": 77,
+        "x": 89,
         "y": 0,
         "w": 7,
         "h": 7
       },
       "sparkle-b": {
-        "x": 85,
+        "x": 97,
         "y": 0,
         "w": 7,
         "h": 7
@@ -235,14 +242,14 @@
     }
   },
   "portraits": {
-    "content": "portraits/content.png",
-    "dreamy": "portraits/dreamy.png",
-    "happy": "portraits/happy.png",
-    "laughing": "portraits/laughing.png",
-    "sideeye": "portraits/sideeye.png",
-    "sorry": "portraits/sorry.png",
-    "surprised": "portraits/surprised.png",
-    "thinking": "portraits/thinking.png"
+    "content": "src/portraits/content.png",
+    "dreamy": "src/portraits/dreamy.png",
+    "happy": "src/portraits/happy.png",
+    "laughing": "src/portraits/laughing.png",
+    "sideeye": "src/portraits/sideeye.png",
+    "sorry": "src/portraits/sorry.png",
+    "surprised": "src/portraits/surprised.png",
+    "thinking": "src/portraits/thinking.png"
   },
   "moods": {
     "happy": [
