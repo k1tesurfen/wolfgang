@@ -129,6 +129,7 @@ rüber – mit „📂 Im Finder zeigen“ bist du direkt da.
 | Einstellungen | auf den **Computer** klicken: Lieblingsformate für Bilder, Videos und Audio, Größe, Qualität, Schreibweise, Geräusche |
 | Über Wolfgang | auf **Wolfgang selbst** klicken – dort gibt's auch die Kommandozeile |
 | Kaffeepause | auf die **Tasse** klicken |
+| Wilma | die orange Bürokatze wohnt in ihrem Kissen unterm Schreibtisch. Meistens schläft sie, manchmal macht sie eine Runde durchs Büro. Streicheln: draufklicken |
 | Größer / kleiner | **⌘+** / **⌘−** (Wolfgang merkt sich die Größe), **⌘0** = Standard |
 | Alle Tastenkürzel | **?** |
 

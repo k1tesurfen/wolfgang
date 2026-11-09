@@ -57,6 +57,9 @@ const Sound = (() => {
       tone(300 + Math.random() * 90, 0.04, { type: 'triangle', vol: 0.05 });
     },
     move() { tone(660, 0.03, { vol: 0.02 }); },
+    /** Wilma: a sleepy „mrrp“ and a proper „miau“. */
+    mrrp() { tone(380, 0.09, { type: 'triangle', vol: 0.05, slide: 140 }); tone(520, 0.08, { type: 'triangle', vol: 0.04, when: 0.08, slide: -60 }); },
+    meow() { tone(560, 0.12, { type: 'triangle', vol: 0.05, slide: 260 }); tone(820, 0.22, { type: 'triangle', vol: 0.05, when: 0.11, slide: -380 }); },
     confirm() { tone(523, 0.05, { vol: 0.03 }); tone(784, 0.07, { vol: 0.03, when: 0.05 }); },
     back() { tone(523, 0.05, { vol: 0.03 }); tone(392, 0.07, { vol: 0.03, when: 0.05 }); },
     /** A stamp per finished file. */

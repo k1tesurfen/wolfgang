@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn repo_sources_are_valid() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/pixel/src");
-        for name in ["wolfgang.sprite", "ui.sprite"] {
+        for name in ["wolfgang.sprite", "ui.sprite", "wilma.sprite"] {
             let text = std::fs::read_to_string(root.join(name)).unwrap();
             parse(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
         }

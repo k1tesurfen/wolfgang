@@ -1,0 +1,249 @@
+# Wilma, the orange office cat. She lives under Wolfgang's desk in her round cushion.
+#
+# Same format as wolfgang.sprite (`.` is transparent). Every frame has its own size;
+# the app draws frames with their bottom centre on Wilma's spot on the floor.
+# Side views face right; the app mirrors them when she walks left.
+# Her daily routine (sleeping, waking, wandering, washing …) is in app.js (`Wilma`).
+
+size 18 9
+# Bottom centre of her cushion, under the desk between the drawers.
+origin 163 171
+
+color O 2a1710  # outline
+color D a9501f  # tabby stripes
+color M dd7a2e  # orange
+color L f2a650  # light orange
+color C f6e4c2  # cream: muzzle, chest, paws
+color E 8fbe4f  # eyes
+color P e48f86  # nose, tongue
+color T 23383a  # cushion outline
+color t 4d7672  # cushion
+color u 7aa69c  # cushion light
+color i 355754  # cushion hollow
+
+# ── Cushion: `bed` behind her, `bedfront` (its front rim) over her ──
+frame bed 28 8
+.....TTTTTTTTTTTTTTTTTT.....
+...TTuuuuuuuuuuuuuuuuuuTT...
+.TTuuiiiiiiiiiiiiiiiiiiuuTT.
+TuuiiiiiiiiiiiiiiiiiiiiiiuuT
+TtuuuiiiiiiiiiiiiiiiiiiuuutT
+TttuuuuuuuuuuuuuuuuuuuuuuttT
+.TTtttttttttttttttttttttttTT
+...TTTTTTTTTTTTTTTTTTTTTT...
+
+frame bedfront 28 4
+TttuuuuuuuuuuuuuuuuuuuuuuttT
+TttuuuuuuuuuuuuuuuuuuuuuuttT
+.TTtttttttttttttttttttttttTT
+...TTTTTTTTTTTTTTTTTTTTTT...
+
+# ── Asleep, curled up: head on the left, tail around the front ──
+frame sleep1 18 9
+..O...O...........
+.OMO.OMO..OOOOO...
+.OMMOMMMOOMMDMMOO.
+OMMMMMMMODMMMDMMMO
+OMOOMOOMMMMDMMMDMO
+OMMMPMMMMDMMMMDMMO
+.OCCCCMOLLLLLLLMMO
+.OOCCOODDLLDDLLDO.
+...OO..OOOOOOOOO..
+
+frame sleep2 18 9
+..O...O...........
+.OMO.OMO.OOOOOO...
+.OMMOMMMOMMMDMMMO.
+OMMMMMMMODMMMDMMMO
+OMOOMOOMMMMDMMMDMO
+OMMMPMMMMDMMMMDMMO
+.OCCCCMOLLLLLLLMMO
+.OOCCOODDLLDDLLDO.
+...OO..OOOOOOOOO..
+
+frame sleepear 18 9
+..O...............
+.OMO.OOO..OOOOO...
+.OMMOMMMOOMMDMMOO.
+OMMMMMMMODMMMDMMMO
+OMOOMOOMMMMDMMMDMO
+OMMMPMMMMDMMMMDMMO
+.OCCCCMOLLLLLLLMMO
+.OOCCOODDLLDDLLDO.
+...OO..OOOOOOOOO..
+
+# ── Lying, head up, looking into the camera ──
+frame awake 18 10
+..O...O...........
+.OMO.OMO..........
+.OMMOMMMO..OOOOO..
+OMEMMMEMOOOMMDMMO.
+OMMMPMMMODMMMDMMMO
+.OCCCCCOMMDMMMDMMO
+.OMCCCMOMMMMDMMMMO
+.OMMMMOLLLLLLLLMMO
+..OCCOODDLLDDLLDO.
+...OO..OOOOOOOOO..
+
+frame awakeblink 18 10
+..O...O...........
+.OMO.OMO..........
+.OMMOMMMO..OOOOO..
+OMOMMMOMOOOMMDMMO.
+OMMMPMMMODMMMDMMMO
+.OCCCCCOMMDMMMDMMO
+.OMCCCMOMMMMDMMMMO
+.OMMMMOLLLLLLLLMMO
+..OCCOODDLLDDLLDO.
+...OO..OOOOOOOOO..
+
+# ── Sitting, facing the camera ──
+frame sit 13 15
+..O.....O....
+.OMO...OMO...
+.OMMOOOMMO...
+.OMMMMMMMO...
+.OMEMMMEMO...
+.OMMMPMMMO...
+..OCCCCCO....
+..OMCCCMO....
+.OMMCCCMMO...
+.OMDCCCDMO...
+OMMDCCCDMMO..
+OMMMCCCMMMOO.
+OMDMCCCMDMOLO
+OMMCCOCCMMOLO
+.OOOOOOOOOOO.
+
+frame sitblink 13 15
+..O.....O....
+.OMO...OMO...
+.OMMOOOMMO...
+.OMMMMMMMO...
+.OMOMMMOMO...
+.OMMMPMMMO...
+..OCCCCCO....
+..OMCCCMO....
+.OMMCCCMMO...
+.OMDCCCDMO...
+OMMDCCCDMMO..
+OMMMCCCMMMOO.
+OMDMCCCMDMOLO
+OMMCCOCCMMOLO
+.OOOOOOOOOOO.
+
+frame lick1 13 15
+..O.....O....
+.OMO...OMO...
+.OMMOOOMMO...
+.OMMMMMMMO...
+.OMOMMMOMO...
+.OMMMPMMMO...
+..OCCCOOO....
+..OMCOCCCO...
+.OMMCOCCCO...
+.OMDCCOCOO...
+OMMDCCOMMMO..
+OMMMCCOMMMOO.
+OMDMCCOMDMOLO
+OMMCCOOMMMOLO
+.OOOOOOOOOOO.
+
+frame lick2 13 15
+..O.....O....
+.OMO...OMO...
+.OMMOOOMMO...
+.OMMMMMMMO...
+.OMOMMMOMO...
+.OMMMPMMMO...
+..OCCPOOO....
+..OMCOCCCO...
+.OMMCOCCCO...
+.OMDCCOCOO...
+OMMDCCOMMMO..
+OMMMCCOMMMOO.
+OMDMCCOMDMOLO
+OMMCCOOMMMOLO
+.OOOOOOOOOOO.
+
+# ── Walking (side view, facing right) ──
+frame walk1 22 13
+OO..............O...O.
+OMO............OMO.OMO
+.OMO...........OMMOMMO
+..OM..OOOOOOOOOOMMMMMO
+..OMOOMMDMMDMMDOMEMMMO
+...OMMMDMMDMMDMOMMMMPO
+...OMMMDMMDMMDMMOCCCO.
+...OMMMMMMMMMMMMMOOO..
+...OMLLLLLLLLLLLMMO...
+...OMMOOMMOOOOMMOMO...
+...OMO.OMO....OMO.OMO.
+..OMO...OMO...OMO.OMO.
+..OCO...OCO..OCO..OCO.
+
+frame walk2 22 13
+OO..............O...O.
+OMO............OMO.OMO
+.OMO...........OMMOMMO
+..OM..OOOOOOOOOOMMMMMO
+..OMOOMMDMMDMMDOMEMMMO
+...OMMMDMMDMMDMOMMMMPO
+...OMMMDMMDMMDMMOCCCO.
+...OMMMMMMMMMMMMMOOO..
+...OMLLLLLLLLLLLMMO...
+...OMMOOOOOOOOMMOMO...
+....OMOOMO...OMOOMO...
+....OMOOMO...OMOOMO...
+....OCOOCO...OCOOCO...
+
+frame walk3 22 13
+OO..............O...O.
+OMO............OMO.OMO
+.OMO...........OMMOMMO
+..OM..OOOOOOOOOOMMMMMO
+..OMOOMMDMMDMMDOMEMMMO
+...OMMMDMMDMMDMOMMMMPO
+...OMMMDMMDMMDMMOCCCO.
+...OMMMMMMMMMMMMMOOO..
+...OMLLLLLLLLLLLMMO...
+...OMMOOMMOOOOMMOMO...
+....OMOOMO....OMO.OMO.
+.....OMOOMO..OMO...OMO
+.....OCO.OCO.OCO...OCO
+
+frame walk4 22 13
+OO..............O...O.
+OMO............OMO.OMO
+.OMO...........OMMOMMO
+..OM..OOOOOOOOOOMMMMMO
+..OMOOMMDMMDMMDOMEMMMO
+...OMMMDMMDMMDMOMMMMPO
+...OMMMDMMDMMDMMOCCCO.
+...OMMMMMMMMMMMMMOOO..
+...OMLLLLLLLLLLLMMO...
+...OMMOOOOOOOOMMOMO...
+....OMOOMO...OMOOMO...
+....OMOOMO...OMOOMO...
+....OCOOCO...OCOOCO...
+
+# ── Stretching: front down, back up (side view, facing right) ──
+frame stretch 24 11
+O.......................
+OO......................
+.OO.OOOO................
+..OOMMDMOO..............
+...OMDMMDMOO............
+...OMMDMMDMMOO.....O..O.
+...OMLMMDMMDMMOO..OMOOMO
+...OMLLLMMMDMMMMOOOMMMMO
+...OMO.OOLLLLMMMMOMMMEMO
+...OMO...OOOOLLLLOMMMMPO
+...OCO.......OOOOOCCCCCO
+
+anim sleep sleep1:1800 sleep2:1800
+anim awake awake:2400 awakeblink:140 awake:1600 awakeblink:120
+anim sit sit:2200 sitblink:140 sit:2600 sitblink:120 sit:1800
+anim wash lick1:300 lick2:300 lick1:300 lick2:300 lick1:300 lick2:300 sit:900
+anim walk walk1:140 walk2:140 walk3:140 walk4:140
+anim stretch stretch:1600

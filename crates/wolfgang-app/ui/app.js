@@ -38,12 +38,14 @@ const load = src => new Promise((ok, err) => { const i = new Image(); i.onload =
 
 async function init() {
   SCENE = await (await fetch('pixel/scene.json')).json();
-  const files = [SCENE.background, SCENE.wolfgang.sheet, SCENE.ui.sheet, ...Object.values(SCENE.portraits)];
+  const files = [SCENE.background, SCENE.wolfgang.sheet, SCENE.ui.sheet, SCENE.wilma.sheet, ...Object.values(SCENE.portraits)];
   for (const f of files) IMG[f] = await load('pixel/' + f);
   UI = SCENE.ui.frames;
 
   try { Sound.enabled = (await api.invoke('settings')).sound; } catch { /* keep default */ }
 
+  // Preview in a browser: `?wilma` makes her wake up right away.
+  Wilma.init(SCENE, performance.now(), !T && new URLSearchParams(location.search).has('wilma') ? 300 : null);
   fit();
   addEventListener('resize', fit);
   document.fonts?.ready.then(restyle);
@@ -139,13 +141,139 @@ function tick(now) {
   ctx.drawImage(IMG[SCENE.background], 0, 0);
   const f = W.frames[steps[step][0]];
   ctx.drawImage(IMG[W.sheet], f.x, f.y, f.w, f.h, W.origin[0], W.origin[1], f.w, f.h);
-  if (hover && mode !== 'work') {
-    const r = SCENE.hotspots[hover].rects[0];
+  Wilma.update(now);
+  Wilma.draw(ctx, now);
+  if (hover === 'wilma' || (hover && mode !== 'work')) {
+    const r = hover === 'wilma' ? Wilma.box() : SCENE.hotspots[hover].rects[0];
     const sp = SCENE.ui.animations.sparkle, s = UI[sp[Math.floor(now / 260) % sp.length][0]];
     ctx.drawImage(IMG[SCENE.ui.sheet], s.x, s.y, s.w, s.h, r.x + r.w - 4, r.y - 4, s.w, s.h);
   }
   requestAnimationFrame(tick);
 }
+
+/* ── Wilma, the office cat ─────────────────────────────────────────────
+   She lives under the desk in her cushion. Mostly she sleeps; now and then she
+   wakes up, looks into the camera, stretches, wanders along the floor in front of
+   the desk, sits, washes, and goes back to bed. Clicking her gets a „mrrp“ or „miau“. */
+const Wilma = (() => {
+  const SPEED = 15; // scene pixels per second
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches; // then she just sleeps
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  let S, home, floor, last = 0;
+  const st = { act: 'sleep', anim: 'sleep', step: 0, stepAt: 0, until: 0, x: 0, y: 0, face: 1, target: null, trips: 0, homeward: false, settle: false, twitch: 0 };
+
+  const setAnim = (name, now) => { if (st.anim !== name) Object.assign(st, { anim: name, step: 0, stepAt: now }); };
+  const inBed = () => Math.abs(st.x - home.x) < 0.5 && Math.abs(st.y - home.y) < 0.5;
+  const sleep = (now, ms = rnd(60, 180) * 1000) => { st.act = 'sleep'; setAnim('sleep', now); st.until = now + ms; };
+  const awake = (now, ms = rnd(4, 9) * 1000) => { st.act = 'awake'; setAnim('awake', now); st.until = now + ms; };
+  const stretch = now => { st.act = 'stretch'; setAnim('stretch', now); st.until = now + 1600; };
+  const sit = (now, ms = rnd(5, 12) * 1000) => { st.act = 'sit'; setAnim('sit', now); st.until = now + ms; };
+  const wash = now => { st.act = 'wash'; setAnim('wash', now); st.until = now + 2700; };
+  const walkTo = (now, x, y) => { st.act = 'walk'; st.target = { x, y }; st.face = x >= st.x ? 1 : -1; setAnim('walk', now); };
+  const wander = now => walkTo(now, rnd(floor.x0, floor.x1), floor.y);
+  const goHome = now => { st.homeward = true; walkTo(now, home.x, home.y); };
+
+  // What comes after an activity.
+  function next(now) {
+    switch (st.act) {
+      case 'sleep': return reduced ? sleep(now) : awake(now);
+      case 'awake':
+        if (st.settle) { st.settle = false; return sleep(now); }
+        if (!inBed()) return sit(now);
+        return Math.random() < 0.4 ? sleep(now) : stretch(now);
+      case 'stretch': st.trips = 1 + Math.floor(rnd(0, 3)); return wander(now);
+      case 'sit': return Math.random() < 0.4 ? wash(now) : --st.trips > 0 ? wander(now) : goHome(now);
+      case 'wash': return sit(now, rnd(2, 5) * 1000);
+      case 'walk':
+        if (!st.homeward) return sit(now);
+        st.homeward = false;
+        st.face = 1;
+        st.settle = true; // a last look around, then curl up
+        return awake(now, rnd(2, 4) * 1000);
+    }
+  }
+
+  function init(scene, now, firstNap) {
+    S = scene.wilma;
+    home = { x: S.origin[0], y: S.origin[1] };
+    const [x0, x1, y] = scene.wilma_floor;
+    floor = { x0, x1, y };
+    Object.assign(st, { x: home.x, y: home.y });
+    sleep(now, firstNap ?? rnd(20, 90) * 1000); // the first stroll comes soon after the app opens
+    last = now;
+  }
+
+  function update(now) {
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    const steps = S.animations[st.anim];
+    while (steps[st.step][1] > 0 && now - st.stepAt > steps[st.step][1]) {
+      st.stepAt += steps[st.step][1];
+      st.step = (st.step + 1) % steps.length;
+    }
+    if (st.act === 'sleep' && now > st.twitch && Math.random() < dt * 0.05) st.twitch = now + 350; // ear twitch
+    if (st.act === 'walk') {
+      const dx = st.target.x - st.x, dy = st.target.y - st.y, d = Math.hypot(dx, dy), go = SPEED * dt;
+      if (d <= go) { Object.assign(st, st.target); next(now); }
+      else { st.x += (dx / d) * go; st.y += (dy / d) * go; }
+    } else if (now >= st.until) next(now);
+  }
+
+  function frameName(now) {
+    if (st.act === 'sleep' && now < st.twitch) return 'sleepear';
+    const steps = S.animations[st.anim];
+    return steps[st.step][0];
+  }
+
+  /** Bottom centre at (x, y); side views are mirrored when she faces left. */
+  function put(ctx, name, x, y, flip) {
+    const f = S.frames[name], sheet = IMG[S.sheet];
+    const dx = Math.round(x - f.w / 2), dy = Math.round(y - f.h);
+    if (!flip) return ctx.drawImage(sheet, f.x, f.y, f.w, f.h, dx, dy, f.w, f.h);
+    ctx.save();
+    ctx.translate(dx + f.w, dy);
+    ctx.scale(-1, 1);
+    ctx.drawImage(sheet, f.x, f.y, f.w, f.h, 0, 0, f.w, f.h);
+    ctx.restore();
+  }
+
+  function draw(ctx, now) {
+    const name = frameName(now), side = st.anim === 'walk' || st.anim === 'stretch';
+    put(ctx, 'bed', home.x, home.y);
+    if (inBed()) {
+      put(ctx, name, st.x, st.y - 2, side && st.face < 0); // lying in the hollow, the front rim over her
+      put(ctx, 'bedfront', home.x, home.y);
+    } else {
+      put(ctx, 'bedfront', home.x, home.y);
+      put(ctx, name, st.x, st.y, side && st.face < 0);
+    }
+  }
+
+  /** Where she is right now (scene pixels), for hovering and clicking. */
+  function box() {
+    const f = S.frames[frameName(performance.now())];
+    const lift = inBed() ? 2 : 0;
+    return { x: st.x - f.w / 2, y: st.y - lift - f.h, w: f.w, h: f.h };
+  }
+
+  function hit(x, y) {
+    const b = box();
+    return x >= b.x && y >= b.y && x < b.x + b.w && y < b.y + b.h;
+  }
+
+  /** A pat: asleep she lifts her head with a „mrrp“, otherwise she sits down for a „miau“. */
+  function pet() {
+    const now = performance.now();
+    if (st.act === 'sleep') { Sound.mrrp(); awake(now, 5000); st.settle = inBed(); return; }
+    Sound.meow();
+    if (st.act === 'walk') { st.homeward = false; st.trips = Math.max(st.trips, 1); }
+    if (inBed()) awake(now, 4000);
+    else sit(now, rnd(4, 7) * 1000);
+  }
+
+  const label = () => (st.act === 'sleep' ? 'Wilma schläft' : 'Wilma');
+  return { init, update, draw, box, hit, pet, label };
+})();
 
 // Now and then, when nobody needs him, Wolfgang has a sip of coffee.
 setInterval(() => { if (mode === 'idle' && anim === 'idle' && Math.random() < 0.35) { play('sip', 2300); Sound.sip(); } }, 20000);
@@ -527,7 +655,10 @@ function setupStage() {
       .sort(([, a], [, b]) => area(a) - area(b))[0];
   stage.addEventListener('mousemove', e => {
     const overUi = e.target.closest('.bubble, .answer, #panel, #portrait');
-    const h = overUi || mode === 'work' || mode === 'panel' ? null : hit(at(e));
+    const p = at(e);
+    // Wilma can be patted any time (also while Wolfgang works); she's in front of everything.
+    const cat = !overUi && mode !== 'panel' && Wilma.hit(...p);
+    const h = cat ? ['wilma', { label: Wilma.label() }] : overUi || mode === 'work' || mode === 'panel' ? null : hit(p);
     const clickable = !!h;
     hover = clickable ? h[0] : null;
     stage.style.cursor = clickable ? 'pointer' : 'default';
@@ -541,7 +672,9 @@ function setupStage() {
   });
   stage.addEventListener('click', e => {
     if (typing && e.target.closest('#say')) return typing.finish();
-    if (e.target.closest('.bubble, .answer, #panel') || mode === 'work' || mode === 'panel') return;
+    if (e.target.closest('.bubble, .answer, #panel') || mode === 'panel') return;
+    if (Wilma.hit(...at(e))) return Wilma.pet();
+    if (mode === 'work') return;
     const h = hit(at(e));
     if (!h) return;
     const action = h[1].action;

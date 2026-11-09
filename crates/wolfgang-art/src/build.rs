@@ -303,6 +303,10 @@ pub struct Manifest {
     pub background: String,
     pub wolfgang: SpriteManifest,
     pub ui: SpriteManifest,
+    /// Wilma, the office cat: `origin` is her cushion (bottom centre).
+    pub wilma: SpriteManifest,
+    /// The strip of floor in front of the desk where she wanders: x from–to, and the y of her paws.
+    pub wilma_floor: [u32; 3],
     pub portraits: BTreeMap<String, String>,
     /// Dialogue mood → portraits to pick from.
     pub moods: BTreeMap<String, Vec<String>>,
@@ -312,7 +316,7 @@ pub struct Manifest {
     pub speaker: [u32; 2],
 }
 
-pub fn manifest(paths: &Paths, wolfgang: SpriteManifest, ui: SpriteManifest) {
+pub fn manifest(paths: &Paths, wolfgang: SpriteManifest, ui: SpriteManifest, wilma: SpriteManifest) {
     let portraits = PORTRAITS.iter().map(|(_, n)| (n.to_string(), format!("src/portraits/{n}.png"))).collect();
     let moods = [
         ("neutral", vec!["sideeye", "content"]),
@@ -344,6 +348,8 @@ pub fn manifest(paths: &Paths, wolfgang: SpriteManifest, ui: SpriteManifest) {
         background: "src/office.png".into(),
         wolfgang,
         ui,
+        wilma,
+        wilma_floor: [96, 236, 178],
         portraits,
         moods,
         hotspots,
@@ -359,7 +365,7 @@ pub fn manifest(paths: &Paths, wolfgang: SpriteManifest, ui: SpriteManifest) {
 
 /// A self-contained HTML page (images inlined) to look at the scene in a browser.
 fn preview(paths: &Paths, scene_json: &str, m: &Manifest) {
-    let mut files: Vec<String> = vec![m.background.clone(), m.wolfgang.sheet.clone(), m.ui.sheet.clone()];
+    let mut files: Vec<String> = vec![m.background.clone(), m.wolfgang.sheet.clone(), m.ui.sheet.clone(), m.wilma.sheet.clone()];
     files.extend(m.portraits.values().cloned());
     let images: BTreeMap<String, String> = files
         .into_iter()

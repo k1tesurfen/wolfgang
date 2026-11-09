@@ -62,7 +62,8 @@ fn main() {
             build::check_sources(&paths);
             let wolfgang = build::sprites(&paths, "wolfgang");
             let ui = build::sprites(&paths, "ui");
-            build::manifest(&paths, wolfgang, ui);
+            let wilma = build::sprites(&paths, "wilma");
+            build::manifest(&paths, wolfgang, ui, wilma);
         }
         _ => eprintln!("usage: wolfgang-art build [--preview DIR] | import [--force] | icon OUT.png | analyze IMAGE..."),
     }

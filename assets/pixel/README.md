@@ -8,6 +8,7 @@
 | `portraits/*.png` | the eight 96×96 mood portraits (happy, thinking, surprised, content, laughing, sideeye, dreamy, sorry) | exactly 96×96, transparent background |
 | `wolfgang.sprite` | the animated desk sprite, one character per pixel | format described at the top of the file |
 | `ui.sprite` | speech bubble, answers, panel, portrait frame, cursor, sparkle | same format |
+| `wilma.sprite` | Wilma the office cat and her cushion; every frame has its own size, drawn with its bottom centre on her spot | same format; her routine is in the app (`app.js`) |
 
 Edit the PNGs in any pixel editor (Aseprite, Pixelorama, Photoshop with nearest-neighbour…).
 Keep pixels fully opaque or fully transparent and avoid smoothing; the build warns about

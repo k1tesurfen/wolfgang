@@ -20,6 +20,8 @@ idle:
   - "Kaffee ist da, Zeit hab ich auch. Her damit."
   - "Einfach rüberziehen und fallen lassen. Ich kümmer mich drum."
   - "Ruhiger Tag bisher. Hast du was für mich?"
+  - "Wilma schläft schon wieder. Recht hat sie."
+  - "Pssst, Wilma macht gerade Mittagsschlaf. Aber leg ruhig was hin."
 
 working:
   - "Moment, bin dran …"
@@ -30,6 +32,7 @@ working:
   - "Jubdidubdidub. Was? Ja gleich fertig."
   - "Das hier hin und den da dran. So haben wir's bald."
   - "Läuft und läuft. Wie ein guter Film."
+  - "Wilma passt auf, dass nix runterfällt."
 
 nodes:
   # ── Ankommen ───────────────────────────────────────────────────────────────
