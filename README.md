@@ -26,11 +26,11 @@ daneben. **Deine Originale fasst er dabei nie an.**
 
 | | |
 |---|---|
-| 🖼️ **Bilder fürs Web** | WebP oder AVIF, auf die richtige Größe gebracht, ohne Metadaten (auch kein GPS), mit Dateinamen, die Google mag: `hotel-seeblick-terrasse-0001.webp` |
-| 🗄️ **Bilder hochwertig behalten** | nur ein anderes Format (JPG, WebP, AVIF, PNG) – Originalgröße, Farbprofil bleibt erhalten |
-| 🎬 **Videos fürs Web** | MP4 (läuft überall) oder WebM (kleiner), in 720p, 1080p oder Originalgröße, auf Wunsch ohne Ton und mit Vorschaubild. iPhone-Videos in HDR sehen danach nicht flau aus. |
-| 🎧 **Audio** | MP3 oder AAC – passend eingestellt für Sprache (Podcast, Interview) oder Musik |
-| 🔤 **Schriften** | TTF, OTF und WOFF werden zu WOFF2 – eins zu eins, nichts wird weggelassen, und hinterher Glyphe für Glyphe nachgeprüft |
+| **Bilder fürs Web** | WebP oder AVIF, auf die richtige Größe gebracht, ohne Metadaten (auch kein GPS), mit Dateinamen, die Google mag: `hotel-seeblick-terrasse-0001.webp` |
+| **Bilder hochwertig behalten** | nur ein anderes Format (JPG, WebP, AVIF, PNG) – Originalgröße, Farbprofil bleibt erhalten |
+| **Videos fürs Web** | MP4 (läuft überall) oder WebM (kleiner), in 720p, 1080p oder Originalgröße, auf Wunsch ohne Ton und mit Vorschaubild. iPhone-Videos in HDR sehen danach nicht flau aus. |
+| **Audio** | MP3 oder AAC – passend eingestellt für Sprache (Podcast, Interview) oder Musik |
+| **Schriften** | TTF, OTF und WOFF werden zu WOFF2 – eins zu eins, nichts wird weggelassen, und hinterher Glyphe für Glyphe nachgeprüft |
 
 **Er liest fast alles:**
 JPG, PNG, HEIC, AVIF, WebP, GIF, TIFF und Kamera-RAW (CR2, CR3, NEF, ARW, DNG) ·
