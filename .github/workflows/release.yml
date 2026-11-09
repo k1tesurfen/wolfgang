@@ -1,10 +1,15 @@
-name: Release
+name: Release (fallback)
 
-# Push a tag like v2.0.0 → builds Wolfgang.app + .dmg and creates a *draft*
-# GitHub release with the .dmg attached. Check it, then publish it by hand.
+# Releases are normally built on a Mac like the colleagues' and uploaded with
+# scripts/release.sh. This workflow is the fallback when that Mac isn't around:
+# start it by hand (Actions → Release (fallback) → Run workflow) for an existing tag.
+# It builds Wolfgang.app + .dmg and creates a *draft* release; check it, then publish it.
 on:
-  push:
-    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag, e.g. v2.3.0"
+        required: true
 
 permissions:
   contents: write
@@ -14,11 +19,13 @@ jobs:
     runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
       - name: Tag matches the app version
         run: |
           app=$(python3 -c "import json; print(json.load(open('crates/wolfgang-app/tauri.conf.json'))['version'])")
-          if [ "v$app" != "$GITHUB_REF_NAME" ]; then
-            echo "Tag $GITHUB_REF_NAME, but tauri.conf.json says $app"; exit 1
+          if [ "v$app" != "${{ inputs.tag }}" ]; then
+            echo "Tag ${{ inputs.tag }}, but tauri.conf.json says $app"; exit 1
           fi
       - uses: dtolnay/rust-toolchain@stable
       - name: Build tools (only needed to compile the codecs)
@@ -42,8 +49,11 @@ jobs:
         run: |
           scripts/build-app.sh
           test -f target/release/bundle/macos/latest.json || { echo "Update-Dateien fehlen – Secrets gesetzt?"; exit 1; }
+      - name: Release text
+        run: sed "s/{{VERSION}}/${{ inputs.tag }}/" .github/release-body.md > release-body.md
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag }}
           draft: true
           # The app finds updates via releases/latest/download/latest.json,
           # so they reach colleagues only once this draft is published.
@@ -51,11 +61,4 @@ jobs:
             target/release/bundle/dmg/*.dmg
             target/release/bundle/macos/Wolfgang.app.tar.gz
             target/release/bundle/macos/latest.json
-          body: |
-            **Wolfgang ${{ github.ref_name }}** für Macs mit Apple-Chip (macOS 13 oder neuer).
-
-            1. `.dmg` öffnen und Wolfgang in den Programme-Ordner ziehen.
-            2. Beim ersten Start: Wolfgang ist nicht von Apple beglaubigt. Siehe „Erster Start“ im README.
-            3. Die Kommandozeile `wolfgang` installierst du in der App: auf Wolfgang klicken → „Installieren“.
-
-            Wer schon Wolfgang 2.1 oder neuer hat, muss nichts tun: Wolfgang bietet die neue Version beim nächsten Start selbst an.
+          body_path: release-body.md

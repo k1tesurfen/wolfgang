@@ -33,15 +33,16 @@ daneben. **Deine Originale fasst er dabei nie an.**
 |---|---|
 | **Bilder fürs Web** | WebP oder AVIF, auf die richtige Größe gebracht, ohne Metadaten (auch kein GPS), mit Dateinamen, die Google mag: `hotel-seeblick-terrasse-0001.webp` |
 | **Bilder hochwertig behalten** | nur ein anderes Format (JPG, WebP, AVIF, PNG) – Originalgröße, Farbprofil bleibt erhalten |
-| **Videos fürs Web** | MP4 (läuft überall) oder WebM (kleiner), in 720p, 1080p oder Originalgröße, auf Wunsch ohne Ton und mit Vorschaubild. iPhone-Videos in HDR sehen danach nicht flau aus. |
+| **Videos fürs Web** | MP4 (läuft überall) oder WebM (kleiner), in 720p, 1080p oder Originalgröße, auf Wunsch ohne Ton und mit Vorschaubild. iPhone-Videos in HDR sehen danach nicht flau aus. Animierte GIFs werden auch zu Videos – viel kleiner, gleicher Look. |
 | **Audio** | MP3 oder AAC – passend eingestellt für Sprache (Podcast, Interview) oder Musik |
+| **Bilder aus PDFs** | holt die Fotos und Grafiken aus einem PDF (z. B. der Broschüre vom Kunden) – so, wie sie drin sind, Seite für Seite nummeriert |
 | **Schriften** | TTF, OTF und WOFF werden zu WOFF2 – eins zu eins, nichts wird weggelassen, und hinterher Glyphe für Glyphe nachgeprüft |
 
 **Er liest fast alles:**
 JPG, PNG, HEIC, AVIF, WebP, GIF, TIFF und Kamera-RAW (CR2, CR3, NEF, ARW, DNG) ·
 MP4, MOV, M4V, MKV, WebM, AVI, MTS, MPG, WMV, 3GP ·
 WAV, AIFF, FLAC, M4A, MP3, AAC, OGG, Opus, CAF, WMA ·
-TTF, OTF, WOFF
+PDF · TTF, OTF, WOFF
 
 Wolfgang gibt es als **App** – ein kleines Pixel-Büro, in dem du mit ihm redest – und als
 **Kommandozeile** `wolfgang` für Skripte und Terminal-Fans. Beide führen dasselbe Gespräch und
@@ -123,7 +124,7 @@ rüber – mit „📂 Im Finder zeigen“ bist du direkt da.
 | Eigene Antwort | „✎ Selbst eintippen …“, z. B. eine eigene Größe |
 | „So wie letztes Mal“ | Wolfgang merkt sich deine letzte Wahl – für Fotos, Videos und Audio jeweils einzeln |
 | Vorlagen | nach getaner Arbeit „Als Vorlage merken“; ansehen und löschen über das **Klemmbrett** |
-| Einstellungen | auf den **Computer** klicken: Lieblingsformate, Größe, Qualität, Schreibweise, Geräusche |
+| Einstellungen | auf den **Computer** klicken: Lieblingsformate für Bilder, Videos und Audio, Größe, Qualität, Schreibweise, Geräusche |
 | Über Wolfgang | auf **Wolfgang selbst** klicken – dort gibt's auch die Kommandozeile |
 | Kaffeepause | auf die **Tasse** klicken |
 | Größer / kleiner | **⌘+** / **⌘−** (Wolfgang merkt sich die Größe), **⌘0** = Standard |
@@ -146,6 +147,21 @@ nimmt Wolfgang die. Sonst fragt er: *„Worum geht's auf den Bildern?“*
 Videos fliegen alle Metadaten raus (auch der Aufnahmeort), bei Audio bleiben Titel und Interpret
 drin. WebM braucht deutlich länger als MP4 – der Fortschrittsbalken läuft auch innerhalb eines
 langen Videos weiter, und „Abbrechen“ hört sofort auf.
+
+**Lange Videos:** Bevor er loslegt, sagt Wolfgang, wie lange es ungefähr dauert („Das dauert
+etwa 9 Minuten. Zeit für 'nen Kaffee.“). WebM braucht dabei ein Vielfaches von MP4.
+
+**Schon gut gepackte Videos:** Wird ein Video beim Umwandeln größer als vorher und läuft das
+Original schon so im Web, nimmt Wolfgang einfach das Original – ohne Metadaten und so, dass es
+sofort losspielt. Sonst behält er seine Fassung und sagt Bescheid.
+
+**Animierte GIFs** werden zu Videos. Haben sie durchsichtige Stellen, fragt Wolfgang, ob da Weiß
+oder Schwarz hin soll (MP4 kann keine Transparenz). Damit sie auf der Webseite wie GIFs laufen,
+brauchen sie `autoplay muted loop playsinline`. Nicht animierte GIFs bleiben Bilder.
+
+**PDFs:** Wolfgang holt die Bilder raus, ohne sie anzufassen: JPGs bleiben Byte für Byte JPGs,
+alles andere wird PNG. `Broschüre.pdf` → Ordner `broschuere/` mit `seite-01-1.jpg`, `seite-01-2.png` …
+Winzige Schnipsel (Linien, Icons) und Logos, die auf jeder Seite wiederkommen, lässt er weg.
 
 **Nochmal ablegen:** Gibst du Wolfgang denselben Ordner noch einmal, erkennt er, was schon fertig
 ist – *„Moment, die kenn ich doch!“* – und macht auf Wunsch nur die neuen Dateien.
@@ -197,15 +213,18 @@ wolfgang --json --yes ~/Bilder | jq .        # eine JSON-Zeile pro Ereignis
 | `--video-size` | `720`, `1080` (Standard), `original` oder die kürzere Seite in Pixeln |
 | `--video-quality` | `smaller`, `balanced` (Standard), `nicer` |
 | `--no-sound` / `--no-poster` | Videos ohne Ton / ohne Vorschaubild |
+| `--gif-background` | was hinter durchsichtige Stellen animierter GIFs kommt: `white` (Standard) oder `black` |
 | `--audio-format` | `mp3` (Standard) oder `aac` |
 | `--audio` | was drauf ist: `speech`, `music` (Standard), `best` |
 | `-p, --preset` | gespeicherte Vorlage benutzen |
-| `--only images\|videos\|audio\|fonts` | nur einen Stapel bearbeiten |
+| `--only images\|videos\|audio\|pdfs\|fonts` | nur einen Stapel bearbeiten |
 | `--all` | auch schon Umgewandeltes nochmal machen |
 | `-y, --yes` | nicht fragen |
 | `--json` | maschinenlesbare Ausgabe |
 
-Weitere Befehle: `wolfgang presets`, `wolfgang settings`, `wolfgang settings set web-format avif`,
+Weitere Befehle: `wolfgang presets`, `wolfgang settings`, `wolfgang settings set web-format avif`
+(Schlüssel: `web-format`, `size`, `quality`, `hq-format`, `separator`, `video-format`, `video-size`,
+`video-quality`, `audio-format`, `sound`),
 `wolfgang legacy-reset ORDNER` (siehe unten). Exit-Codes: 0 ok, 1 einzelne Dateien fehlgeschlagen,
 2 falsche Bedienung, 130 abgebrochen.
 
@@ -265,12 +284,15 @@ und zimg (HDR → SDR) – kein x264/x265. Neue Versionen: Nummern und Prüfsumm
 CI baut dann neu. Zum Testen mit einem anderen ffmpeg: `WOLFGANG_FFMPEG_DIR=/pfad/zum/ordner`.
 Ohne gebautes ffmpeg werden die Video-/Audio-Tests übersprungen.
 
-**Eine neue Version veröffentlichen:** Version in `Cargo.toml` (workspace) und
-`crates/wolfgang-app/tauri.conf.json` anheben, committen, Tag `vX.Y.Z` pushen. GitHub baut die
-`.dmg` (zweimal: mit Versionsnummer und als `Wolfgang.dmg` für den Download-Knopf im README)
-und die signierten Update-Dateien (`Wolfgang.app.tar.gz`, `latest.json`) und legt ein
-Release als Entwurf an. Sobald es veröffentlicht ist, bieten alle installierten Wolfgangs das
-Update an.
+**Eine neue Version veröffentlichen** – gebaut auf einem Mac wie denen der Kolleg:innen:
+Version in `Cargo.toml` (workspace) und `crates/wolfgang-app/tauri.conf.json` anheben, committen,
+dann `scripts/release.sh` (legt einen Entwurf an) oder `scripts/release.sh --publish`. Das Skript
+prüft, ob alles committet ist, testet, baut die App, schiebt Commit und Tag `vX.Y.Z` zu GitHub und
+lädt die `.dmg` (zweimal: mit Versionsnummer und als `Wolfgang.dmg` für den Download-Knopf), die
+signierten Update-Dateien (`Wolfgang.app.tar.gz`, `latest.json`) und den Text aus
+`.github/release-body.md` hoch. Sobald das Release veröffentlicht ist, bieten alle installierten
+Wolfgangs das Update an. Ist kein passender Mac da: GitHub → Actions → „Release (fallback)“ →
+Run workflow mit dem Tag; das baut dort und legt einen Entwurf an.
 
 **Update-Schlüssel:** Updates werden mit einem eigenen Schlüssel signiert (nicht Apple). Er liegt
 als Secret `TAURI_SIGNING_PRIVATE_KEY` (+ `_PASSWORD`) im GitHub-Repo und lokal in

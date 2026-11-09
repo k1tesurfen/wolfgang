@@ -234,6 +234,51 @@ mod tests {
     }
 
     #[test]
+    fn a_video_on_the_desk() {
+        let Some(tools) = wolfgang_core::media::tools() else {
+            eprintln!("skipped: no ffmpeg in target/ffmpeg (scripts/build-ffmpeg.sh)");
+            return;
+        };
+        let t = tempfile::tempdir().unwrap();
+        let dir = t.path().join("Filme");
+        std::fs::create_dir_all(&dir).unwrap();
+        let ok = std::process::Command::new(&tools.ffmpeg)
+            .args(["-v", "error", "-f", "lavfi", "-i", "testsrc2=s=1280x720:d=3", "-f", "lavfi", "-i", "sine=d=3"])
+            .args(["-c:v", "ffv1", "-c:a", "pcm_s16le", "-f", "matroska"])
+            .arg(dir.join("Rundgang.mkv"))
+            .status()
+            .unwrap();
+        assert!(ok.success());
+
+        let mut o = office(t.path());
+        let mut v = o.drop_files(vec![dir]).unwrap();
+        for answer in ["MP4", "Klein", "Ausgewogen", "Mit Ton", "Ja", "Los"] {
+            v = pick(&mut o, &v, answer);
+        }
+        assert!(matches!(v.step, Step::Start { .. }), "{v:?}");
+        let plan = o.begin_run().unwrap();
+        let progress = std::sync::Mutex::new(Vec::new());
+        let report = wolfgang_core::execute(
+            &plan,
+            &|e| {
+                if let wolfgang_core::Event::FileProgress { fraction, .. } = e {
+                    progress.lock().unwrap().push(fraction);
+                }
+            },
+            &AtomicBool::new(false),
+        )
+        .unwrap();
+        assert!(progress.into_inner().unwrap().len() > 1, "the bar moves while the video runs");
+        let v = o.finished(&report).unwrap();
+        let out = v.output.clone().unwrap();
+        assert!(out.join("rundgang.mp4").exists() && out.join("rundgang.webp").exists());
+        let v = pick(&mut o, &v, "Danke");
+        assert!(matches!(v.step, Step::End { .. }));
+        let saved = UserStore::load(&t.path().join("home/settings.json")).unwrap().store;
+        assert_eq!(saved.last_run.and_then(|r| r.videos).and_then(|v| v.size), Some(720), "remembered for next time");
+    }
+
+    #[test]
     fn settings_and_presets() {
         let t = tempfile::tempdir().unwrap();
         let mut o = office(t.path());

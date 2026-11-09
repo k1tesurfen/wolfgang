@@ -3,7 +3,7 @@
 > Wolfgang is the personification of conversion: a cozy, bearded guy in a cardigan who sits behind his desk with a coffee and converts whatever you put in front of him.
 > Usability for non-technical colleagues is the top priority.
 
-Status: **approved**. Milestones 1–9 are done; v2.2.0 brings video and audio.
+Status: **approved**. Milestones 1–10 are done; v2.2.0 brought video and audio, milestone 10 is waiting for the next release.
 
 ---
 
@@ -366,6 +366,18 @@ Product questions were answered by the user one by one; this is the result. Vide
 - **Tests:** 7 end-to-end media tests on clips generated with lavfi (MP4 + poster, vertical WebM without sound, HDR + 120 fps → SDR 60 fps without upscaling, MP3/AAC, name collisions with photos, progress, cancelling within a second, broken file), 3 new conversation tests plus video/audio drops in the 300 random conversations, CLI flags and an end-to-end CLI run. They're skipped with a note when ffmpeg isn't built; CI builds and caches it.
 - **Still open:** real iPhone footage (HDR, Dolby Vision, rotation) from colleagues to confirm the tone mapping beyond the synthetic test; whether CI's virtual Macs take the software-fallback path (the tests would show it).
 
+### Milestone 10: polish after 2.2 (2026-11-09) ✅
+
+Decided with the user: no paid Apple Developer account, ever (internal tool; colleagues approve it once). Releases are batched, not one per feature, and built on the user's Mac.
+
+- **Settings:** default video format, video size, video quality and audio format, in the app's settings panel (10 rows, still fits) and `wolfgang settings set video-format|video-size|video-quality|audio-format`. They pre-mark the answers in the conversation.
+- **Time estimate:** before the run, Wolfgang says how long the videos take when it's a minute or more („Das dauert etwa 9 Minuten. Zeit für 'nen Kaffee.“). Model from measurements on an M2 Pro: reading an HEVC source ≈ 1.3 Gpx/s, VP9 encoding ≈ 95 Mpx/s, H.264 hardware ≈ 1.5 Gpx/s; MP4 = max(read, encode), WebM = read + encode; several videos ÷ 1.3. 30 s of 4K30 → 1080p: measured 5.5 s (MP4) / 25 s (WebM).
+- **Bigger than before (user's choice: „take the original if possible“):** if the converted video is bigger and the original is already web-ready for the chosen format (MP4: H.264 + AAC; WebM: VP9/VP8 + Opus/Vorbis; 8-bit 4:2:0, no HDR, ≤ 60 fps, not bigger than the chosen size), the original is remuxed (`-c copy`, no metadata, faststart) and taken. Otherwise the bigger file stays and Wolfgang says so. Notes after a run are now typed (`run::Note`).
+- **Animated GIFs → videos** (reversed from 2.2, user's request): GIFs with more than one frame go into the video pile (our own small GIF block reader, `gif.rs`, also finds transparency). For transparent ones Wolfgang asks „Weiß“ / „Schwarz“ (user's choice; MP4 for compatibility). Flattening keeps the GIF's timing: an opaque filled copy of each frame under the frame (`split` + `drawbox replace=1` + `overlay`; both `split` branches must be RGBA, otherwise the alpha is lost — caught by a test). After the run he reminds that web GIF-videos need `autoplay muted loop playsinline`.
+- **Pictures from PDFs (user's choice: embedded pictures, as they are, no questions):** `pdf.rs` with lopdf walks every page including form XObjects (layout programs nest images there). JPEGs are copied byte for byte; CMYK JPEGs, JPEGs with a soft mask and JPEG 2000 go through ImageIO to PNG; raw images (Gray/RGB/CMYK/ICC/Indexed, 1–16 bit, soft masks, `/Decode [1 0]`) become PNG. Skipped: stencil masks, pictures under 48 px, the same object or content twice (logos on every page); JBIG2/CCITT scans and odd colour spaces are counted and mentioned. Output: `broschuere/seite-01-1.jpg` … PDFs don't count towards „gespart“; Wolfgang says how many pictures he got out.
+- **Releases from the Mac:** `scripts/release.sh [--publish]` (checks, tests, builds, pushes commit + tag, uploads via `gh`). `release.yml` is now a manual fallback (`workflow_dispatch` with a tag). Release text in `.github/release-body.md`.
+- **App check:** settings panel and progress checked in the browser mock (headless screenshots); the app logic with a real video drop is a test in `session.rs`. Not done: clicking through the real app window (no desktop control in this environment) — a short manual check before the next release.
+
 ---
 
 ## 8. Milestones
@@ -379,6 +391,7 @@ Product questions were answered by the user one by one; this is the result. Vide
 7. ✅ **Release**: `.dmg` build via GitHub Actions (macOS arm64 runner), README rewrite (German), first-launch instructions for the unsigned app. Released as v2.0.0. See *Milestone 7 result*.
 8. ✅ **Self-update** (v2.1). See *v2.1: self-update*.
 9. ✅ **Video + audio** (v2.2): MP4/WebM for the web, poster frames, MP3/AAC, on a bundled LGPL ffmpeg. See *Milestone 9* and *Milestone 9 result*.
+10. ✅ **Polish** (next release): video/audio settings, time estimates, well-packed videos, animated GIFs → videos, pictures from PDFs, releases from the Mac. See *Milestone 10*.
 
 ---
 
