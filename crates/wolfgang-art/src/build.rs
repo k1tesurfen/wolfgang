@@ -327,7 +327,9 @@ pub fn manifest(paths: &Paths, wolfgang: SpriteManifest, ui: SpriteManifest) {
     .collect();
     let hotspots = [
         // Everything interactive sits on or at the desk.
-        ("desk", Hotspot { action: "drop", label: "Leg's auf den Tisch", rects: vec![r(73, 98, 180, 75)] }),
+        // The whole desk: click → Finder dialog, and it's where drops light up. The first
+        // rect is the green desk mat, where the sparkle shows while hovering the desk.
+        ("desk", Hotspot { action: "pick", label: "Dateien auswählen … (⌘O)", rects: vec![r(128, 101, 73, 19), r(73, 98, 180, 75)] }),
         ("wolfgang", Hotspot { action: "about", label: "Wolfgang: Über Wolfgang", rects: vec![r(145, 52, 36, 46)] }),
         ("computer", Hotspot { action: "settings", label: "Computer: Einstellungen", rects: vec![r(207, 76, 38, 43)] }),
         ("clipboard", Hotspot { action: "presets", label: "Klemmbrett: Vorlagen", rects: vec![r(110, 106, 23, 15)] }),

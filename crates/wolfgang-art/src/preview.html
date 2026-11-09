@@ -153,12 +153,12 @@ const ANSWERS = ["Fürs Web vorbereiten – klein und schnell", "Hochwertig beha
     const h = hit(at(e)); if (!h || e.target.closest('.bubble')) return;
     const act = h[1].action;
     if (act === 'sip') play('sip', 2200);
-    else if (act === 'drop') play('type', 2500);
+    else if (act === 'pick') play('type', 2500);
     else if (act === 'settings') setMood('thinking');
     else if (act === 'presets') setMood('happy');
     else if (act === 'about') setMood('proud');
   });
-  const desk = SCENE.hotspots.desk.rects[0], drop = $('drop');
+  const desk = SCENE.hotspots.desk.rects.reduce((a, b) => (b.w * b.h > a.w * a.h ? b : a)), drop = $('drop');
   const showDrop = on => { const k = scale(); Object.assign(drop.style, { display: on ? 'block' : 'none', left: `${desk.x * k}px`, top: `${desk.y * k}px`, width: `${desk.w * k}px`, height: `${desk.h * k}px` }); };
   stage.addEventListener('dragover', e => { e.preventDefault(); showDrop(true); if (anim !== 'hand') play('happy'); });
   stage.addEventListener('dragleave', () => showDrop(false));

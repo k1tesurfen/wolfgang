@@ -139,7 +139,7 @@ function tick(now) {
   ctx.drawImage(IMG[SCENE.background], 0, 0);
   const f = W.frames[steps[step][0]];
   ctx.drawImage(IMG[W.sheet], f.x, f.y, f.w, f.h, W.origin[0], W.origin[1], f.w, f.h);
-  if (hover && hover !== 'desk' && mode !== 'work') {
+  if (hover && mode !== 'work') {
     const r = SCENE.hotspots[hover].rects[0];
     const sp = SCENE.ui.animations.sparkle, s = UI[sp[Math.floor(now / 260) % sp.length][0]];
     ctx.drawImage(IMG[SCENE.ui.sheet], s.x, s.y, s.w, s.h, r.x + r.w - 4, r.y - 4, s.w, s.h);
@@ -501,7 +501,8 @@ function onUpdateProgress(p) {
 /* ── Drag and drop, hotspots ───────────────────────────────────────────── */
 
 function onDrop(e) {
-  const desk = SCENE.hotspots.desk.rects[0], d = $('drop');
+  // The whole desk lights up (its biggest rect; the first one is the mat, for the sparkle).
+  const desk = SCENE.hotspots.desk.rects.reduce((a, b) => (b.w * b.h > a.w * a.h ? b : a)), d = $('drop');
   if (e.type === 'enter' || e.type === 'over') {
     Object.assign(d.style, { left: `${desk.x * scale}px`, top: `${desk.y * scale}px`, width: `${desk.w * scale}px`, height: `${desk.h * scale}px` });
     d.classList.add('on');
@@ -518,17 +519,22 @@ function onDrop(e) {
 function setupStage() {
   const stage = $('stage'), tip = $('tip');
   const at = e => { const r = stage.getBoundingClientRect(); return [(e.clientX - r.left) / scale, (e.clientY - r.top) / scale]; };
-  const hit = ([x, y]) => Object.entries(SCENE.hotspots).find(([, s]) => s.rects.some(r => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h));
+  // The smallest object under the pointer wins (the mug sits on the desk, not the other way round).
+  const area = s => Math.max(...s.rects.map(r => r.w * r.h));
+  const hit = ([x, y]) =>
+    Object.entries(SCENE.hotspots)
+      .filter(([, s]) => s.rects.some(r => x >= r.x && y >= r.y && x < r.x + r.w && y < r.y + r.h))
+      .sort(([, a], [, b]) => area(a) - area(b))[0];
   stage.addEventListener('mousemove', e => {
     const overUi = e.target.closest('.bubble, .answer, #panel, #portrait');
     const h = overUi || mode === 'work' || mode === 'panel' ? null : hit(at(e));
     const clickable = !!h;
-    hover = clickable && h[0] !== 'desk' ? h[0] : null; // the desk isn't outlined, it's big
+    hover = clickable ? h[0] : null;
     stage.style.cursor = clickable ? 'pointer' : 'default';
     tip.style.display = clickable ? 'block' : 'none';
     if (clickable) {
       const r = stage.getBoundingClientRect();
-      tip.textContent = h[0] === 'desk' ? 'Dateien auswählen … (⌘O)' : h[1].label;
+      tip.textContent = h[1].label;
       tip.style.left = `${e.clientX - r.left + 12}px`;
       tip.style.top = `${e.clientY - r.top + 12}px`;
     }
@@ -540,7 +546,7 @@ function setupStage() {
     if (!h) return;
     const action = h[1].action;
     if (action === 'sip') { play('sip', 2300); Sound.sip(); }
-    else if (action === 'drop') pickFiles();
+    else if (action === 'pick') pickFiles();
     else if (action === 'settings' || action === 'presets' || action === 'about') openPanel(action);
   });
 }

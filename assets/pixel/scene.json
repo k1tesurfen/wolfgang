@@ -314,9 +314,15 @@
       ]
     },
     "desk": {
-      "action": "drop",
-      "label": "Leg's auf den Tisch",
+      "action": "pick",
+      "label": "Dateien auswählen … (⌘O)",
       "rects": [
+        {
+          "x": 128,
+          "y": 101,
+          "w": 73,
+          "h": 19
+        },
         {
           "x": 73,
           "y": 98,
