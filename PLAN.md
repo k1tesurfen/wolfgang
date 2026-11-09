@@ -297,7 +297,7 @@ Findings:
 - **Objects (everything on or at the desk, changed 2026-11-07):** the computer opens settings (default web format, size, quality, HQ format, separator, sounds). The clipboard opens presets (list, delete). Clicking **Wolfgang himself** opens „Über Wolfgang“ (version, install CLI, credits). Clicking the mug makes him sip, and he also sips now and then when idle. The filing cabinet is decoration only.
 - **Sound:** synthesised with WebAudio, no sound files; switched on/off in settings.
 - **Font:** Pixelify Sans (OFL), bundled as WOFF2, converted by Wolfgang himself (80 → 24 KB).
-- **App icon:** the happy portrait in a framed rounded square (`wolfgang-art icon`).
+- **App icon:** the happy portrait in a framed rounded square (`wolfgang-art icon`). Revamped 2026-11-09 (user's request: bigger face, bigger frame, Mac corners): Apple's template (shape 824 of 1024 px, continuous „squircle“ corners as a superellipse, soft shadow below), 10 px per art pixel and the portrait cropped around head and beard (face ≈ 1.25× bigger), a 4-pixel wooden frame. Then `cargo tauri icon crates/wolfgang-app/icons/master.png -o …` and copy the Mac files (icns, 32/128/256 PNGs, icon.png).
 - **Checks:** `ui/mock.js` fakes the Rust side when `ui/index.html` is opened in a normal browser (`?demo=mode|size|confirm|work|done`, `?panel=settings|presets|about`), which is how the UI was screenshot-tested. In the real app, the UI reports errors to the log, and `WOLFGANG_SELFTEST=1` quits after start-up with exit 1 on any error.
 - **Needs the bundle (M7):** dropping on the Dock icon needs document types in Info.plist, and the „install CLI“ button needs the `wolfgang` binary bundled next to the app executable. The code for both is in place.
 

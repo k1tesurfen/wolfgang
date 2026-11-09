@@ -215,43 +215,60 @@ mod tests {
 /// The app icon: the happy portrait in a rounded, framed square (macOS style),
 /// built at 128 px and scaled 8× without smoothing to 1024 px.
 pub fn icon(paths: &Paths, out: &Path) {
-    const N: i32 = 128;
-    const R: i32 = 22; // corner radius
+    // Apple's icon template: the shape is 824 of 1024 px, with continuous („squircle“)
+    // corners and a soft shadow below. One art pixel is 10 px, so Wolfgang's face is
+    // bigger than in the scene; the portrait is cropped around head and beard.
+    const UNIT: i32 = 10;
+    const N: i32 = 1024 / UNIT;
+    const S: f64 = 824.0 / UNIT as f64;
+    const CROP: (i32, i32) = (10, 3); // top-left of the portrait window in the 96×96 portrait
+    // The wooden frame from the outside in: outline, light, middle, dark wood.
+    const FRAME: [u32; 4] = [0x1c0c16, 0xb8804a, 0x8a5a33, 0x5c3a22];
     let face = read_png(&paths.portrait("happy")).expect("happy portrait");
-    let (x0, y0, x1, y1) = (8, 8, N - 9, N - 9); // the rounded square
-    let inside = |x: i32, y: i32, inset: i32| {
-        let (ax0, ay0, ax1, ay1, r) = (x0 + inset, y0 + inset, x1 - inset, y1 - inset, R - inset);
-        if x < ax0 || x > ax1 || y < ay0 || y > ay1 {
-            return false;
-        }
-        let cx = x.clamp(ax0 + r, ax1 - r);
-        let cy = y.clamp(ay0 + r, ay1 - r);
-        (x - cx).pow(2) + (y - cy).pow(2) <= r * r
+    let s = S.round();
+    let o = (N as f64 - s) / 2.0;
+    let inside = |x: i32, y: i32, inset: f64, dy: f64| {
+        let h = s / 2.0 - inset;
+        let (cx, cy) = (o + s / 2.0, o + s / 2.0 + dy);
+        let (nx, ny) = (((x as f64 + 0.5) - cx).abs() / h, ((y as f64 + 0.5) - cy).abs() / h);
+        nx.powi(5) + ny.powi(5) <= 1.0
     };
     let hex = |v: u32| [(v >> 16) as u8, (v >> 8) as u8, v as u8, 255];
+    let window = o.round() as i32 + FRAME.len() as i32;
     let mut rgba = vec![0u8; (N * N * 4) as usize];
-    // Portrait bottom-aligned on the frame's inner edge, centred.
-    let (fx, fy) = ((N - 96) / 2, y1 - 3 - 95);
     for y in 0..N {
         for x in 0..N {
-            let c = if !inside(x, y, 0) {
-                [0, 0, 0, 0]
-            } else if !inside(x, y, 1) {
-                hex(0x1c0c16) // outline
-            } else if !inside(x, y, 2) {
-                hex(0xa8703f) // wood light
-            } else if !inside(x, y, 3) {
-                hex(0x5c3a22) // wood dark
+            let c = if inside(x, y, 0.0, 0.0) {
+                match (0..FRAME.len()).find(|&i| !inside(x, y, i as f64 + 1.0, 0.0)) {
+                    Some(i) => hex(FRAME[i]),
+                    None => {
+                        let (px, py) = (x - window + CROP.0, y - window + CROP.1);
+                        let p = ((py * 96 + px) * 4) as usize;
+                        if (0..96).contains(&px) && (0..96).contains(&py) && face.rgba[p + 3] == 255 {
+                            [face.rgba[p], face.rgba[p + 1], face.rgba[p + 2], 255]
+                        } else {
+                            hex(0xdccab0)
+                        }
+                    }
+                }
+            } else if inside(x, y, 0.0, 1.5) {
+                [0, 0, 0, 70] // shadow
             } else {
-                let (px, py) = (x - fx, y - fy);
-                let p = if (0..96).contains(&px) && (0..96).contains(&py) { ((py * 96 + px) * 4) as usize } else { usize::MAX };
-                if p != usize::MAX && face.rgba[p + 3] == 255 { [face.rgba[p], face.rgba[p + 1], face.rgba[p + 2], 255] } else { hex(0xdccab0) }
+                [0, 0, 0, 0]
             };
             rgba[((y * N + x) * 4) as usize..][..4].copy_from_slice(&c);
         }
     }
-    let small = Pixels { width: N as u32, height: N as u32, rgba, icc: None };
-    write_png(out, &upscale(&small, 8));
+    let art = upscale(&Pixels { width: N as u32, height: N as u32, rgba, icc: None }, UNIT as u32);
+    // 102 × 10 = 1020: centre it on the 1024 canvas.
+    let mut full = vec![0u8; 1024 * 1024 * 4];
+    let off = ((1024 - art.width) / 2) as usize;
+    for y in 0..art.height as usize {
+        let src = &art.rgba[y * art.width as usize * 4..(y + 1) * art.width as usize * 4];
+        let dst = ((y + off) * 1024 + off) * 4;
+        full[dst..dst + src.len()].copy_from_slice(src);
+    }
+    write_png(out, &Pixels { width: 1024, height: 1024, rgba: full, icc: None });
     println!("  {}  1024×1024", out.display());
 }
 
