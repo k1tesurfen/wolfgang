@@ -142,6 +142,7 @@ HQ mode asks only for the format (JPG/WebP/AVIF/PNG). Fonts need no questions: W
   `happy` → #1 smiling · `thinking` → #2 chin / #7 looking up · `surprised` → #3 · `proud` → #5 laughing / #4 content · `sorry` → #8 head scratch · `neutral` → #6 side-eye
 - **Objects:** filing cabinets (left) → settings, clipboard on the desk → presets, mug → his coffee, desk → drop zone
 - **CLI portrait:** stays a tiny 16×16, but gets the new look (bun, clear glasses, striped cardigan)
+- **Visibility (2026-11-09):** Wolfgang's brown beard disappeared against the brown leather armchair behind him. Chosen from four mockups: the armchair is now dark blue-grey (`office.png`), and every sprite frame has a 1-pixel outline in the outline colour `O` (`wolfgang.sprite`). A light chair was rejected (bright slivers next to his ears looked restless); recolouring the whole office or changing the perspective was rejected as too costly for the cosy look.
 - The AI references have garbled text (certificates, „CALEPDAY“). It disappears at the target resolution or gets painted over.
 
 ### 5.1 Scene
