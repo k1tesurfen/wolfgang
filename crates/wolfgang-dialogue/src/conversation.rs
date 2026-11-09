@@ -1,6 +1,6 @@
 //! The state machine. CLI and app only render [`Step`]s and report choices.
 
-use crate::context::{describe_audio, describe_images, describe_videos, format_bytes, format_duration, join_and, pile_list, Context};
+use crate::context::{describe_audio, describe_images, describe_videos, format_bytes, format_duration, format_estimate, join_and, pile_list, Context};
 use crate::draft::{Draft, Mode, Template};
 use crate::script::{Each, Foreach, InputKind, Line, Mood, Node, Script, Value};
 use crate::template::{self, Var};
@@ -8,7 +8,7 @@ use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
 use wolfgang_core::naming::{self, Separator};
-use wolfgang_core::run::Report;
+use wolfgang_core::run::{Note, Report};
 use wolfgang_core::settings::ImageSettings;
 use wolfgang_core::{ImageFormat, RerunPolicy, RunSettings, UserStore};
 
@@ -72,7 +72,13 @@ struct RunInfo {
     converted: usize,
     failed: usize,
     first_error: String,
+    /// Fonts packed the careful way.
     notes: usize,
+    kept_original: usize,
+    grew: usize,
+    pdfs_empty: usize,
+    pdfs_unreadable: usize,
+    pdf_pictures: usize,
     bytes_in: u64,
     bytes_out: u64,
     duration: std::time::Duration,
@@ -192,11 +198,17 @@ impl Conversation {
 
     /// Reports the finished (or cancelled) run, so Wolfgang can talk about it.
     pub fn finished(&mut self, report: &Report) -> &Step {
+        let count = |n: Note| report.notes.iter().filter(|(_, x)| *x == n).count();
         self.run = Some(RunInfo {
             converted: report.converted,
             failed: report.failed.len(),
             first_error: report.failed.first().map(|(p, e)| format!("{}: {e}", p.display())).unwrap_or_default(),
-            notes: report.notes.len(),
+            notes: count(Note::FontUntransformed),
+            kept_original: count(Note::VideoKeptOriginal),
+            grew: count(Note::VideoGrew),
+            pdfs_empty: count(Note::PdfNoPictures),
+            pdfs_unreadable: count(Note::PdfSomeUnreadable),
+            pdf_pictures: report.pdf_pictures,
             bytes_in: report.bytes_in,
             bytes_out: report.bytes_out,
             duration: report.duration,
@@ -450,6 +462,17 @@ impl Conversation {
             "has_videos" => p.videos,
             "has_audio" => p.audio,
             "has_fonts" => p.fonts,
+            "has_pdfs" => p.pdfs,
+            "has_gifs" => p.videos && s.animated_gifs > 0,
+            "transparent_gifs" => p.videos && s.transparent_gifs > 0,
+            "nothing_to_ask" => !p.media() && (p.fonts || p.pdfs),
+            "takes_a_while" => self.estimate().is_some_and(|d| d.as_secs() >= 60),
+            "videos_kept_original" => run.is_some_and(|r| r.kept_original > 0),
+            "videos_grew" => run.is_some_and(|r| r.grew > 0),
+            "pdfs_without_pictures" => run.is_some_and(|r| r.pdfs_empty > 0),
+            "pdfs_unreadable" => run.is_some_and(|r| r.pdfs_unreadable > 0),
+            "pictures_from_pdfs" => run.is_some_and(|r| r.pdf_pictures > 0),
+            "saved_bytes" => run.is_some_and(|r| r.bytes_in > 0),
             "has_media" => p.media(),
             "only_images" => p.images && !p.videos && !p.audio && !p.fonts,
             "several_piles" => piles.len() > 1,
@@ -492,6 +515,13 @@ impl Conversation {
             "images" => num(s.images.total),
             "videos" => num(s.videos.total),
             "audio_files" => num(s.audio.total),
+            "pdfs" => num(s.pdfs.total),
+            "animated_gifs" => num(s.animated_gifs),
+            "videos_kept_original" => num(run.kept_original),
+            "videos_grew" => num(run.grew),
+            "pdfs_without_pictures" => num(run.pdfs_empty),
+            "pdf_pictures" => num(run.pdf_pictures),
+            "estimate" => text(self.estimate().map(format_estimate).unwrap_or_default()),
             "fonts" => num(s.fonts.total),
             "unknown" => num(s.unknown.len()),
             "duplicates" => num(s.duplicates),
@@ -521,6 +551,16 @@ impl Conversation {
             "save_preset_name" => text(self.state.draft.save_preset.clone().unwrap_or_default()),
             _ => None,
         }
+    }
+
+    /// How long the videos will take, from what ffprobe found (`None` without videos
+    /// or if a video couldn't be read). Other piles are quick in comparison.
+    fn estimate(&self) -> Option<std::time::Duration> {
+        let v = self.settings().videos?;
+        let only_new = self.state.draft.rerun == RerunPolicy::OnlyNew;
+        let infos: Option<Vec<&wolfgang_core::media::MediaInfo>> =
+            self.ctx.summary.video_facts.iter().filter(|f| !(only_new && f.known)).map(|f| f.info.as_ref()).collect();
+        wolfgang_core::media::estimate(&infos?, &v)
     }
 
     fn output_folder(&self) -> String {
@@ -569,15 +609,31 @@ impl Conversation {
         if let Some(v) = &settings.videos {
             // Without any sound track, „mit Ton“ would be a promise Wolfgang can't keep.
             let v = wolfgang_core::VideoSettings { sound: v.sound && s.videos_with_sound > 0, ..v.clone() };
-            parts.push(format!("{} {}", what(&s.videos, "ein Video", "Videos", "das neue Video", "neue Videos"), describe_videos(&v)));
+            let mut t = format!("{} {}", what(&s.videos, "ein Video", "Videos", "das neue Video", "neue Videos"), describe_videos(&v));
+            if s.transparent_gifs > 0 {
+                t.push_str(&format!(", Durchsichtiges auf {}", v.background.label()));
+            }
+            parts.push(t);
         }
         if let Some(a) = &settings.audio {
             parts.push(format!("{} {}", what(&s.audio, "eine Audiodatei", "Audiodateien", "die neue Audiodatei", "neue Audiodateien"), describe_audio(a)));
         }
         let mut text = if parts.len() > 2 { parts.join("; ") } else { join_and(&parts) };
+        // Piles without questions come last: „…, dazu die Bilder aus 2 PDFs und eine Schrift als WOFF2“.
+        let mut extras = Vec::new();
+        if settings.pdfs.is_some() {
+            extras.push(if (if only_new { s.pdfs.fresh() } else { s.pdfs.total }) == 1 {
+                "die Bilder aus dem PDF".to_owned()
+            } else {
+                format!("die Bilder aus {}", count(&s.pdfs, "einem PDF", "PDFs"))
+            });
+        }
         if self.ctx.has_fonts() {
-            let fonts = count(&s.fonts, "eine Schrift", "Schriften");
-            text = if text.is_empty() { format!("{fonts} als WOFF2") } else { format!("{text}, dazu {fonts} als WOFF2") };
+            extras.push(format!("{} als WOFF2", count(&s.fonts, "eine Schrift", "Schriften")));
+        }
+        if !extras.is_empty() {
+            let extras = join_and(&extras);
+            text = if text.is_empty() { extras } else { format!("{text}, dazu {extras}") };
         }
         let mut text = format!("Also: {text}.");
         if d.template == Some(Template::LastRun) {

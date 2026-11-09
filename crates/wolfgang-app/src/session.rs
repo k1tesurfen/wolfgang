@@ -118,7 +118,8 @@ impl Office {
     }
 
     pub fn set_defaults(&mut self, d: Defaults) -> Result<Defaults, String> {
-        if !wolfgang_core::settings::MAX_SIDE_RANGE.contains(&d.max_side) || !(1..=100).contains(&d.quality) {
+        let video_ok = d.video_size.is_none_or(|s| wolfgang_core::settings::VIDEO_SIZE_RANGE.contains(&s));
+        if !wolfgang_core::settings::MAX_SIDE_RANGE.contains(&d.max_side) || !(1..=100).contains(&d.quality) || !video_ok {
             return Err("Die Werte passen nicht.".into());
         }
         self.store.defaults = d;
@@ -138,7 +139,7 @@ impl Office {
             .iter()
             .map(|p| PresetView {
                 name: p.name.clone(),
-                description: Some(describe_settings(&p.settings, Piles { images: true, videos: true, audio: true, fonts: true }))
+                description: Some(describe_settings(&p.settings, Piles::ALL))
                     .filter(|d| !d.is_empty())
                     .unwrap_or_else(|| "nur Schriften".into()),
             })

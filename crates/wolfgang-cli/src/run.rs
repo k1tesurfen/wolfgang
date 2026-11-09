@@ -62,6 +62,8 @@ pub fn convert(plan: &Plan, out: Output) -> wolfgang_core::Result<Report> {
                             "bytes_in": f.bytes_in,
                             "bytes_out": f.outcome.as_ref().map(|d| d.bytes_out).unwrap_or(0),
                             "error": f.outcome.as_ref().err(),
+                            "outputs": f.outcome.as_ref().map(|d| d.outputs.clone()).unwrap_or_default(),
+                            "note": f.outcome.as_ref().ok().and_then(|d| d.note),
                         }));
                     }
                 },
@@ -199,14 +201,23 @@ pub fn non_interactive(ui: &Ui, ws: Workspace, store: &mut UserStore, store_path
     };
     if !args.json {
         let saved = (report.bytes_out * 100).checked_div(report.bytes_in).map_or(0, |k| 100u64.saturating_sub(k));
-        let mut lines = vec![format!(
-            "{} {} in {}: {} → {} ({saved} % gespart).",
+        let mut first = format!(
+            "{} {} in {}",
             if report.cancelled { "Abgebrochen nach" } else { "Fertig!" },
             if report.converted == 1 { "1 Datei".to_string() } else { format!("{} Dateien", report.converted) },
             format_duration(report.duration),
-            format_bytes(report.bytes_in),
-            format_bytes(report.bytes_out),
-        )];
+        );
+        if report.bytes_in > 0 {
+            first.push_str(&format!(": {} → {} ({saved} % gespart)", format_bytes(report.bytes_in), format_bytes(report.bytes_out)));
+        }
+        first.push('.');
+        if report.pdf_pictures > 0 {
+            first.push_str(&format!(" Aus den PDFs: {} Bilder.", report.pdf_pictures));
+        }
+        let mut lines = vec![first];
+        for (p, note) in &report.notes {
+            lines.push(format!("ℹ {}: {note}", p.display()));
+        }
         for (p, e) in &report.failed {
             lines.push(format!("✗ {}: {e}", p.display()));
         }

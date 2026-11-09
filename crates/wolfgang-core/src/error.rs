@@ -20,6 +20,8 @@ pub enum Error {
     Font(String),
     #[error("{0}")]
     Media(String),
+    #[error("{0}")]
+    Pdf(String),
     #[error("Ungültige Einstellung: {0}")]
     Settings(String),
     #[error("Abgebrochen")]

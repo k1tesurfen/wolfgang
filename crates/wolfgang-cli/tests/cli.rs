@@ -104,8 +104,13 @@ fn settings_and_presets_commands() {
     assert!(wolfgang(&home, &["settings", "set", "web-format", "avif"]).status.success());
     assert!(wolfgang(&home, &["settings", "set", "quality", "70"]).status.success());
     assert_eq!(wolfgang(&home, &["settings", "set", "quality", "700"]).status.code(), Some(2));
+    assert!(wolfgang(&home, &["settings", "set", "video-format", "webm"]).status.success());
+    assert!(wolfgang(&home, &["settings", "set", "video-size", "original"]).status.success());
+    assert!(wolfgang(&home, &["settings", "set", "audio-format", "aac"]).status.success());
+    assert_eq!(wolfgang(&home, &["settings", "set", "video-size", "9"]).status.code(), Some(2));
     let show = text(&wolfgang(&home, &["settings"]));
-    assert!(show.contains("AVIF") && show.contains("quality     70"), "{show}");
+    assert!(show.contains("AVIF") && show.contains("quality        70"), "{show}");
+    assert!(show.contains("video-format   WebM") && show.contains("video-size     original") && show.contains("audio-format   AAC"), "{show}");
 
     // Defaults are used by the next run.
     let root = t.path().join("D");

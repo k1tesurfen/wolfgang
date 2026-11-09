@@ -3,7 +3,7 @@
 
 use crate::error::{io_err, Error, Result};
 use crate::image::{self, ColorTarget, ImageTask};
-use crate::settings::{AudioContent, AudioFormat, AudioSettings, ImageFormat, VideoFormat, VideoQuality, VideoSettings};
+use crate::settings::{AudioContent, AudioFormat, AudioSettings, Background, ImageFormat, VideoFormat, VideoQuality, VideoSettings};
 use serde::Deserialize;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -73,12 +73,16 @@ pub struct VideoStream {
     pub fps: Option<f64>,
     /// HLG or PQ: needs tone mapping to look right as SDR.
     pub hdr: bool,
+    /// ffmpeg's names, e.g. `h264` / `yuv420p`.
+    pub codec: String,
+    pub pix_fmt: String,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct AudioStream {
     pub channels: u32,
     pub sample_rate: u32,
+    pub codec: String,
 }
 
 pub fn probe(path: &Path) -> Result<MediaInfo> {
@@ -111,6 +115,8 @@ struct ProbeFormat {
 #[serde(default)]
 struct ProbeStream {
     codec_type: String,
+    codec_name: String,
+    pix_fmt: String,
     width: u32,
     height: u32,
     avg_frame_rate: String,
@@ -150,10 +156,17 @@ fn parse_probe(json: &[u8]) -> Option<MediaInfo> {
                 let rotation = s.side_data_list.iter().map(|d| d.rotation).find(|r| *r != 0.0).or_else(|| s.tags.rotate.and_then(|r| r.parse().ok())).unwrap_or(0.0);
                 let quarter = ((rotation / 90.0).round() as i64).rem_euclid(2) == 1;
                 let (width, height) = if quarter { (s.height, s.width) } else { (s.width, s.height) };
-                info.video = Some(VideoStream { width, height, fps: parse_rate(&s.avg_frame_rate), hdr: matches!(s.color_transfer.as_str(), "arib-std-b67" | "smpte2084") });
+                info.video = Some(VideoStream {
+                    width,
+                    height,
+                    fps: parse_rate(&s.avg_frame_rate),
+                    hdr: matches!(s.color_transfer.as_str(), "arib-std-b67" | "smpte2084"),
+                    codec: s.codec_name,
+                    pix_fmt: s.pix_fmt,
+                });
             }
             "audio" if info.audio.is_none() => {
-                info.audio = Some(AudioStream { channels: s.channels, sample_rate: s.sample_rate.parse().unwrap_or(0) });
+                info.audio = Some(AudioStream { channels: s.channels, sample_rate: s.sample_rate.parse().unwrap_or(0), codec: s.codec_name });
             }
             _ => {}
         }
@@ -185,11 +198,25 @@ pub fn video_size(width: u32, height: u32, size: Option<u32>) -> (u32, u32) {
     (even(width), even(height))
 }
 
+impl VideoStream {
+    /// Frames with transparency (animated GIFs, some ProRes/WebM).
+    pub fn has_alpha(&self) -> bool {
+        let p = self.pix_fmt.as_str();
+        p.starts_with("yuva") || p.starts_with("gbrap") || p.starts_with("rgba") || p.starts_with("bgra") || p.starts_with("argb") || p.starts_with("abgr") || p.starts_with("ya")
+    }
+}
+
 /// The filter chain from decoded frames to what gets encoded (rotation is
 /// applied by ffmpeg before this). `pix_fmt` is the final pixel format.
-fn video_filters(v: &VideoStream, size: Option<u32>, pix_fmt: &str) -> String {
+fn video_filters(v: &VideoStream, size: Option<u32>, background: Background, pix_fmt: &str) -> String {
     let (w, h) = video_size(v.width, v.height, size);
     let mut f = Vec::new();
+    if v.has_alpha() {
+        // Transparent areas onto a plain background: an opaque filled copy of each
+        // frame with the frame on top, so the timing stays the source's. Both
+        // branches of `split` share one pixel format, so it has to be RGBA.
+        f.push(format!("format=rgba,split[fg][m];[m]drawbox=c={}:t=fill:replace=1[bg];[bg][fg]overlay=format=auto", background.color()));
+    }
     if v.hdr {
         // HLG/PQ → SDR with reference white at 203 nits (BT.2408). Without this,
         // iPhone videos come out grey and flat.
@@ -248,7 +275,7 @@ fn video_args(info: &MediaInfo, s: &VideoSettings, constant_quality: bool) -> Re
         a.extend(["-map".into(), "0:a:0".into()]);
     }
     a.extend(["-map_metadata", "-1", "-map_chapters", "-1", "-sn", "-dn"].map(String::from));
-    a.extend(["-vf".into(), video_filters(v, s.size, "yuv420p")]);
+    a.extend(["-vf".into(), video_filters(v, s.size, s.background, "yuv420p")]);
     match s.format {
         VideoFormat::Mp4 => {
             a.extend(["-c:v", "h264_videotoolbox", "-allow_sw", "1", "-profile:v", "high"].map(String::from));
@@ -277,9 +304,19 @@ fn video_args(info: &MediaInfo, s: &VideoSettings, constant_quality: bool) -> Re
     Ok(a)
 }
 
+/// What became of a video, besides the file itself.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct VideoResult {
+    pub poster: Option<Vec<u8>>,
+    /// The converted file was bigger, so the original was taken (only tidied up).
+    pub kept_original: bool,
+    /// The converted file is bigger than the original, and the original can't be used as it is.
+    pub grew: bool,
+}
+
 /// Converts one video to `out` (a temporary path; the caller renames it), plus the
-/// poster frame if wanted. Returns the poster's bytes.
-pub fn convert_video(src: &Path, task: &VideoTask, out: &Path, progress: &(dyn Fn(f64) + Sync), cancel: &AtomicBool) -> Result<Option<Vec<u8>>> {
+/// poster frame if wanted.
+pub fn convert_video(src: &Path, task: &VideoTask, out: &Path, progress: &(dyn Fn(f64) + Sync), cancel: &AtomicBool) -> Result<VideoResult> {
     let info = probe(src)?;
     let duration = info.duration;
     // The poster is quick; it counts as the last few percent.
@@ -294,12 +331,89 @@ pub fn convert_video(src: &Path, task: &VideoTask, out: &Path, progress: &(dyn F
         }
         other => other?,
     }
-    if task.poster.is_none() {
-        return Ok(None);
+    let mut result = VideoResult::default();
+    let size = |p: &Path| std::fs::metadata(p).map(|m| m.len()).map_err(io_err(p));
+    let (src_size, out_size) = (size(src)?, size(out)?);
+    if out_size > src_size {
+        // Already well packed. If the original plays on the web as it is, take it (tidied up).
+        if web_ready(&info, &task.settings) {
+            let tidy = out.with_extension("tidy");
+            match ffmpeg(src, &remux_args(&info, &task.settings), &tidy, duration, &|_| {}, cancel) {
+                Err(Error::Cancelled) => return Err(Error::Cancelled),
+                Ok(()) if size(&tidy)? < out_size => {
+                    std::fs::rename(&tidy, out).map_err(io_err(out))?;
+                    result.kept_original = true;
+                }
+                // Didn't work out: the converted file stays.
+                _ => {
+                    let _ = std::fs::remove_file(&tidy);
+                }
+            }
+        }
+        result.grew = !result.kept_original;
     }
-    let poster = poster(src, &info, &task.settings, cancel)?;
-    progress(1.0);
-    Ok(Some(poster))
+    if task.poster.is_some() {
+        result.poster = Some(poster(src, &info, &task.settings, cancel)?);
+        progress(1.0);
+    }
+    Ok(result)
+}
+
+/// The original already is what the settings ask for: right codecs for the
+/// format, no HDR, not bigger than wanted, at most 60 fps.
+fn web_ready(info: &MediaInfo, s: &VideoSettings) -> bool {
+    let Some(v) = &info.video else { return false };
+    let (video_ok, audio_ok): (&[&str], &[&str]) = match s.format {
+        VideoFormat::Mp4 => (&["h264"], &["aac"]),
+        VideoFormat::Webm => (&["vp9", "vp8"], &["opus", "vorbis"]),
+    };
+    let audio_fits = !s.sound || info.audio.as_ref().is_none_or(|a| audio_ok.contains(&a.codec.as_str()));
+    video_ok.contains(&v.codec.as_str())
+        && v.pix_fmt == "yuv420p"
+        && !v.hdr
+        && v.fps.is_none_or(|f| f <= MAX_FPS + 0.5)
+        && s.size.is_none_or(|px| v.width.min(v.height) <= px)
+        && audio_fits
+}
+
+/// Copies the streams as they are, without metadata, MP4s with quick start.
+fn remux_args(info: &MediaInfo, s: &VideoSettings) -> Vec<String> {
+    let mut a: Vec<String> = ["-map", "0:v:0"].map(String::from).to_vec();
+    if s.sound && info.audio.is_some() {
+        a.extend(["-map", "0:a:0"].map(String::from));
+    }
+    a.extend(["-c", "copy", "-map_metadata", "-1", "-map_chapters", "-1"].map(String::from));
+    match s.format {
+        VideoFormat::Mp4 => a.extend(["-tag:v", "avc1", "-movflags", "+faststart", "-f", "mp4"].map(String::from)),
+        VideoFormat::Webm => a.extend(["-f", "webm"].map(String::from)),
+    }
+    a
+}
+
+/// Pixels per second (M2 Pro, 2026-11): reading an HEVC 4K source, encoding VP9
+/// (`-cpu-used 3`), encoding H.264 in hardware. MP4 is limited by reading the
+/// source, VP9 by encoding: 30 s of iPhone-like 4K30 → 1080p took 5.5 s as MP4 and 25 s as WebM.
+const DECODE_RATE: f64 = 1.3e9;
+const VP9_RATE: f64 = 95e6;
+const H264_RATE: f64 = 1.5e9;
+
+/// Roughly how long converting these videos takes (`None` if a length is unknown).
+pub fn estimate(videos: &[&MediaInfo], s: &VideoSettings) -> Option<Duration> {
+    let mut total = 0.0;
+    for info in videos {
+        let (Some(d), Some(v)) = (info.duration, info.video.as_ref()) else { return None };
+        let fps = v.fps.unwrap_or(30.0);
+        let (w, h) = video_size(v.width, v.height, s.size);
+        let decode = v.width as f64 * v.height as f64 * fps / DECODE_RATE;
+        let out = w as f64 * h as f64 * fps.min(MAX_FPS);
+        total += d * match s.format {
+            VideoFormat::Mp4 => decode.max(out / H264_RATE),
+            VideoFormat::Webm => decode + out / VP9_RATE,
+        };
+    }
+    // Several videos run side by side, but VP9 already uses every core.
+    let parallel = if videos.len() > 1 { 1.3 } else { 1.0 };
+    Some(Duration::from_secs_f64(total / parallel))
 }
 
 /// A still from about 10 % into the video, same size as the video, as WebP.
@@ -307,7 +421,7 @@ fn poster(src: &Path, info: &MediaInfo, s: &VideoSettings, cancel: &AtomicBool) 
     let v = info.video.as_ref().expect("checked by video_args");
     let at = info.duration.map_or(0.0, |d| d * POSTER_AT);
     let png = TempFile::new("png");
-    let args: Vec<String> = vec!["-frames:v".into(), "1".into(), "-vf".into(), video_filters(v, s.size, "rgb24"), "-c:v".into(), "png".into(), "-f".into(), "image2".into()];
+    let args: Vec<String> = vec!["-frames:v".into(), "1".into(), "-vf".into(), video_filters(v, s.size, s.background, "rgb24"), "-c:v".into(), "png".into(), "-f".into(), "image2".into()];
     ffmpeg_at(src, Some(at), &args, &png.0, None, &|_| {}, cancel)?;
     image::convert(&png.0, &ImageTask { format: ImageFormat::Webp, max_side: None, quality: POSTER_QUALITY, color: ColorTarget::Srgb })
 }
@@ -462,17 +576,17 @@ mod tests {
     fn reads_ffprobe_output() {
         let json = br#"{
           "streams": [
-            {"codec_type":"video","width":1920,"height":1080,"avg_frame_rate":"240/1","color_transfer":"arib-std-b67",
+            {"codec_type":"video","codec_name":"hevc","pix_fmt":"yuv420p10le","width":1920,"height":1080,"avg_frame_rate":"240/1","color_transfer":"arib-std-b67",
              "side_data_list":[{"side_data_type":"Display Matrix","rotation":-90}]},
-            {"codec_type":"audio","channels":6,"sample_rate":"48000"},
+            {"codec_type":"audio","codec_name":"aac","channels":6,"sample_rate":"48000"},
             {"codec_type":"data"}
           ],
           "format": {"duration":"12.500000"}
         }"#;
         let info = parse_probe(json).unwrap();
         assert_eq!(info.duration, Some(12.5));
-        assert_eq!(info.video, Some(VideoStream { width: 1080, height: 1920, fps: Some(240.0), hdr: true }));
-        assert_eq!(info.audio, Some(AudioStream { channels: 6, sample_rate: 48000 }));
+        assert_eq!(info.video, Some(VideoStream { width: 1080, height: 1920, fps: Some(240.0), hdr: true, codec: "hevc".into(), pix_fmt: "yuv420p10le".into() }));
+        assert_eq!(info.audio, Some(AudioStream { channels: 6, sample_rate: 48000, codec: "aac".into() }));
 
         let cover = br#"{"streams":[{"codec_type":"audio","channels":2,"sample_rate":"44100"},
             {"codec_type":"video","width":600,"height":600,"disposition":{"attached_pic":1}}],"format":{}}"#;
@@ -483,22 +597,24 @@ mod tests {
 
     #[test]
     fn video_filters_fix_hdr_and_slow_motion() {
-        let v = VideoStream { width: 1920, height: 1080, fps: Some(30.0), hdr: false };
+        let v = VideoStream { width: 1920, height: 1080, fps: Some(30.0), ..Default::default() };
         assert_eq!(
-            video_filters(&v, Some(720), "yuv420p"),
+            video_filters(&v, Some(720), Background::White, "yuv420p"),
             "scale=1280:720:flags=lanczos:out_color_matrix=bt709:out_range=tv,setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709:range=tv,setsar=1,format=yuv420p"
         );
-        let hdr = VideoStream { hdr: true, fps: Some(240.0), ..v };
-        let f = video_filters(&hdr, None, "yuv420p");
+        let hdr = VideoStream { hdr: true, fps: Some(240.0), ..v.clone() };
+        let f = video_filters(&hdr, None, Background::White, "yuv420p");
         assert!(f.contains("tonemap=tonemap=mobius") && f.contains("fps=60"), "{f}");
+        let gif = VideoStream { pix_fmt: "bgra".into(), ..v.clone() };
+        assert!(video_filters(&gif, None, Background::Black, "yuv420p").starts_with("format=rgba,split[fg][m];[m]drawbox=c=black:t=fill:replace=1"));
     }
 
     #[test]
     fn video_arguments() {
         let info = MediaInfo {
             duration: Some(3.0),
-            video: Some(VideoStream { width: 1920, height: 1080, fps: Some(30.0), hdr: false }),
-            audio: Some(AudioStream { channels: 2, sample_rate: 48000 }),
+            video: Some(VideoStream { width: 1920, height: 1080, fps: Some(30.0), ..Default::default() }),
+            audio: Some(AudioStream { channels: 2, sample_rate: 48000, ..Default::default() }),
         };
         let mp4 = video_args(&info, &VideoSettings::default(), true).unwrap().join(" ");
         assert!(mp4.contains("h264_videotoolbox") && mp4.contains("-q:v 58") && mp4.contains("aac_at") && mp4.contains("+faststart"), "{mp4}");
@@ -519,12 +635,39 @@ mod tests {
 
     #[test]
     fn audio_arguments() {
-        let info = MediaInfo { audio: Some(AudioStream { channels: 6, sample_rate: 96000 }), ..Default::default() };
+        let info = MediaInfo { audio: Some(AudioStream { channels: 6, sample_rate: 96000, ..Default::default() }), ..Default::default() };
         let speech = audio_args(&info, &AudioSettings { format: AudioFormat::Mp3, content: AudioContent::Speech }).unwrap().join(" ");
         assert!(speech.contains("-ac 1") && speech.contains("-b:a 64k") && speech.contains("-ar 48000"), "{speech}");
         let music = audio_args(&info, &AudioSettings { format: AudioFormat::Aac, content: AudioContent::Music }).unwrap().join(" ");
         assert!(music.contains("-ac 2") && music.contains("aac_at -b:a 192k") && music.contains("-f ipod"), "{music}");
         assert!(audio_args(&MediaInfo::default(), &AudioSettings::default()).is_err());
+    }
+
+    #[test]
+    fn web_ready_originals_and_estimates() {
+        let h264 = MediaInfo {
+            duration: Some(30.0),
+            video: Some(VideoStream { width: 1920, height: 1080, fps: Some(30.0), codec: "h264".into(), pix_fmt: "yuv420p".into(), hdr: false }),
+            audio: Some(AudioStream { channels: 2, sample_rate: 48000, codec: "aac".into() }),
+        };
+        let mp4 = VideoSettings::default();
+        assert!(web_ready(&h264, &mp4));
+        assert!(!web_ready(&h264, &VideoSettings { size: Some(720), ..mp4.clone() }), "too big for 720p");
+        assert!(!web_ready(&h264, &VideoSettings { format: VideoFormat::Webm, ..mp4.clone() }));
+        let mut hevc = h264.clone();
+        hevc.video.as_mut().unwrap().codec = "hevc".into();
+        assert!(!web_ready(&hevc, &mp4));
+        let mut mp3 = h264.clone();
+        mp3.audio.as_mut().unwrap().codec = "mp3".into();
+        assert!(!web_ready(&mp3, &mp4) && web_ready(&mp3, &VideoSettings { sound: false, ..mp4.clone() }), "sound is dropped anyway");
+        assert!(remux_args(&h264, &mp4).join(" ").contains("-c copy -map_metadata -1"));
+
+        // The measured 4K30 clip: ~5.5 s as MP4, ~25 s as WebM.
+        let iphone = MediaInfo { video: Some(VideoStream { width: 3840, height: 2160, ..h264.video.clone().unwrap() }), ..h264.clone() };
+        let secs = |s: &VideoSettings| estimate(&[&iphone], s).unwrap().as_secs_f64();
+        assert!((4.0..8.0).contains(&secs(&mp4)), "{}", secs(&mp4));
+        assert!((20.0..30.0).contains(&secs(&VideoSettings { format: VideoFormat::Webm, ..mp4.clone() })));
+        assert_eq!(estimate(&[&MediaInfo::default()], &mp4), None);
     }
 
     #[test]

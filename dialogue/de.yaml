@@ -15,7 +15,7 @@ after_run: done
 after_cancel: stopped
 
 idle:
-  - "Leg mir einfach was auf den Tisch. Bilder, Videos, Musik, Schriften … ich guck's mir an."
+  - "Leg mir einfach was auf den Tisch. Bilder, Videos, Musik, PDFs, Schriften … ich guck's mir an."
   - "Na? Was gibt's heute zu tun?"
   - "Kaffee ist da, Zeit hab ich auch. Her damit."
   - "Einfach rüberziehen und fallen lassen. Ich kümmer mich drum."
@@ -67,7 +67,7 @@ nodes:
 
   begin:
     go:
-      - { when: [only_fonts], to: fonts_only }
+      - { when: [nothing_to_ask], to: nothing_to_ask }
       - { when: [has_last_run], to: how }
       - { when: [has_presets], to: how }
       - { to: piles }
@@ -78,18 +78,27 @@ nodes:
       - when: [media_tools_missing]
         text: "Videos und Audio würd ich ja machen, aber mir fehlt mein Werkzeug dafür. Installier mich am besten nochmal neu."
       - when: [has_unknown, "!media_tools_missing"]
-        text: "Hm. Da ist nix bei, was ich umwandeln kann. Fotos, Videos, Musik und Schriften, das ist mein Ding."
+        text: "Hm. Da ist nix bei, was ich umwandeln kann. Fotos, Videos, Musik, PDFs und Schriften, das ist mein Ding."
       - when: ["!has_unknown", "!media_tools_missing"]
         text: "Hm, da ist ja gar nix drin. Leer gefegt."
     answers:
       - { label: "Okay, schade", to: "@end" }
 
-  fonts_only:
+  # Schriften und PDFs brauchen keine Fragen.
+  nothing_to_ask:
     say:
-      - [
-          "Die mach ich dir zu WOFF2. Ganz ohne Rumschnippeln, alle Zeichen bleiben drin.",
-          "Schriften? Easy. Gibt's als WOFF2, eins zu eins, nix wird weggelassen.",
-        ]
+      - when: [has_fonts]
+        text:
+          [
+            "Die Schriften mach ich dir zu WOFF2. Ganz ohne Rumschnippeln, alle Zeichen bleiben drin.",
+            "Schriften? Easy. Gibt's als WOFF2, eins zu eins, nix wird weggelassen.",
+          ]
+      - when: [has_pdfs]
+        text:
+          [
+            "Aus {pdfs:dem PDF:den PDFs} hol ich dir die Bilder raus, so wie sie drin sind.",
+            "PDFs? Da fummel ich die Bilder raus. Eins zu eins, nix wird verändert.",
+          ]
     go:
       - { to: rerun_check }
 
@@ -377,6 +386,8 @@ nodes:
     say:
       - when: [several_piles, images_asked]
         text: ["Jetzt noch {videos:ein Video:Videos}.", "So, und dann {videos:ein Video:Videos}."]
+      - when: [has_gifs]
+        text: "Die animierten GIFs mach ich zu Videos – die werden viel kleiner und sehen genauso aus."
     go:
       - { to: video_format }
 
@@ -455,18 +466,31 @@ nodes:
   video_sound_check:
     go:
       - { when: [videos_have_sound], to: video_sound }
-      - { to: video_poster }
+      - { to: video_background_check }
 
   video_sound:
     say:
       - ["Ton behalten?", "Und der Ton? Bleibt der drin?"]
     answers:
-      - { label: "Mit Ton", set: { video.sound: true }, to: video_poster }
+      - { label: "Mit Ton", set: { video.sound: true }, to: video_background_check }
       - {
           label: "Ohne Ton – für Hintergrund- und Loop-Videos",
           set: { video.sound: false },
-          to: video_poster,
+          to: video_background_check,
         }
+
+  video_background_check:
+    go:
+      - { when: [transparent_gifs], to: video_background }
+      - { to: video_poster }
+
+  video_background:
+    mood: thinking
+    say:
+      - "Ein paar GIFs haben durchsichtige Stellen. Das kann MP4 nicht – was soll da hin?"
+    answers:
+      - { label: "Weiß", set: { video.background: white }, to: video_poster }
+      - { label: "Schwarz", set: { video.background: black }, to: video_poster }
 
   video_poster:
     say:
@@ -563,6 +587,12 @@ nodes:
     mood: happy
     say:
       - "{summary}"
+      - when: [takes_a_while]
+        text:
+          [
+            "Das dauert {estimate}. Zeit für 'nen Kaffee.",
+            "Die Videos brauchen {estimate}. Ich hab Geduld – du auch?",
+          ]
       - ["Passt das so?", "Soll ich?", "Einverstanden?"]
     answers:
       - { label: "Los geht's!", to: "@start" }
@@ -589,18 +619,32 @@ nodes:
   done:
     mood: proud
     say:
-      - when: ["!failed_any"]
+      - when: ["!failed_any", saved_bytes]
         text:
           [
             "Fertig! {converted:Eine Datei:Dateien} in {duration}, aus {bytes_in} sind {bytes_out} geworden.",
             "So, erledigt. {bytes_in} rein, {bytes_out} raus – {saved_percent} Prozent gespart.",
           ]
+      - when: ["!failed_any", "!saved_bytes"]
+        text: ["Fertig! Hat {duration} gedauert.", "So, erledigt."]
+      - when: [pictures_from_pdfs]
+        text: "Aus {pdfs:dem PDF:den PDFs} hab ich {pdf_pictures:ein Bild:Bilder} rausgeholt."
       - when: [failed_any, "!all_failed"]
         text: "{converted:Eine Datei hat:Dateien haben} geklappt, aber bei {failed:einer:} hat's gehakt. Zum Beispiel: {first_error}"
       - when: [all_failed]
         text: "Mist, da hat gar nix geklappt. {first_error}"
       - when: [has_notes]
         text: "Bei manchen Schriften war ich extra vorsichtig. Die sind dafür ein kleines bisschen größer."
+      - when: [videos_kept_original]
+        text: "{videos_kept_original:Ein Video war:Videos waren} schon richtig gut gepackt. Da hab ich das Original genommen und nur aufgeräumt."
+      - when: [videos_grew]
+        text: "{videos_grew:Ein Video ist:Videos sind} etwas größer geworden als vorher – {videos_grew:war:waren} wohl schon gut gepackt."
+      - when: [pdfs_without_pictures]
+        text: "In {pdfs_without_pictures:einem PDF:PDFs} war gar kein Bild drin."
+      - when: [pdfs_unreadable]
+        text: "Ein paar Bilder in den PDFs konnte ich nicht lesen, zum Beispiel eingescannte Fax-Seiten."
+      - when: [has_gifs, converted_any]
+        text: "Die GIFs sind jetzt Videos. Damit sie auf der Webseite wie GIFs laufen, brauchen sie autoplay, muted, loop und playsinline."
       - when: [converted_any]
         text: "Liegt alles in „{output_folder}“."
     answers:

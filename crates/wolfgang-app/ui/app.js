@@ -558,7 +558,7 @@ async function settingsPanel() {
     const seg = document.createElement('div');
     seg.className = 'seg';
     const values = options.map(o => o[1]);
-    if (!values.includes(value)) options = [...options, [String(value), value]];
+    if (!values.includes(value)) options = [...options, [value === null ? 'Original' : `${value}${key === 'video_size' ? 'p' : ''}`, value]];
     options.forEach(([text, v]) => seg.appendChild(button(text, v === value, () => save({ [key]: v }))));
     r.appendChild(seg);
     body.appendChild(r);
@@ -570,6 +570,10 @@ async function settingsPanel() {
     row('Qualität fürs Web', [['65', 65], ['80', 80], ['90', 90]], d.quality, 'quality');
     row('Hochwertig am liebsten', [['JPG', 'jpg'], ['WebP', 'webp'], ['AVIF', 'avif'], ['PNG', 'png']], d.hq_format, 'hq_format');
     row('Wörter trennen mit', [['bild-name', 'dash'], ['bild_name', 'underscore'], ['BildName', 'caps']], d.separator, 'separator');
+    row('Videos am liebsten', [['MP4', 'mp4'], ['WebM', 'webm']], d.video_format, 'video_format');
+    row('Videogröße', [['720p', 720], ['1080p', 1080], ['Original', null]], d.video_size, 'video_size');
+    row('Videoqualität', [['Kleiner', 'smaller'], ['Ausgewogen', 'balanced'], ['Schöner', 'nicer']], d.video_quality, 'video_quality');
+    row('Audio am liebsten', [['MP3', 'mp3'], ['AAC', 'aac']], d.audio_format, 'audio_format');
     row('Geräusche', [['An', true], ['Aus', false]], d.sound, 'sound');
     restyle();
   };

@@ -169,7 +169,7 @@ mod tests {
         touch(&root.join("a.JPG"), "x");
         touch(&root.join("Strand/b.heic"), "x");
         touch(&root.join("Fonts/Inter.otf"), "x");
-        touch(&root.join("notes.pdf"), "x");
+        touch(&root.join("notes.docx"), "x");
         touch(&root.join(".DS_Store"), "x");
         touch(&root.join(".hidden/c.jpg"), "x");
         touch(&root.join("Urlaub-wolfgang/old.webp"), "x");
@@ -182,7 +182,7 @@ mod tests {
             vec![
                 ("a.JPG".into(), FileKind::Image),
                 ("Fonts/Inter.otf".into(), FileKind::Font),
-                ("notes.pdf".into(), FileKind::Unknown),
+                ("notes.docx".into(), FileKind::Unknown),
                 ("Strand/b.heic".into(), FileKind::Image),
             ]
         );

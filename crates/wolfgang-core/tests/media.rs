@@ -271,3 +271,84 @@ fn broken_video_fails_politely() {
     assert_eq!(report.failed.len(), 1);
     assert!(report.failed[0].1.contains("kaputt.mp4"), "{:?}", report.failed);
 }
+
+const ANIM_GIF: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/transparent-anim.gif");
+
+/// Average colour of the left (transparent) quarter of a video's poster.
+fn left_edge_of_poster(poster: &Path) -> u32 {
+    let px = image::decode(poster, None, ColorTarget::Srgb).unwrap();
+    let mut sum = 0u32;
+    for y in 0..px.height {
+        let i = ((y * px.width + 2) * 4) as usize;
+        sum += px.rgba[i] as u32;
+    }
+    sum / px.height
+}
+
+#[test]
+fn animated_gifs_become_videos_on_the_chosen_background() {
+    if tools().is_none() {
+        return;
+    }
+    let t = tempfile::tempdir().unwrap();
+    let dir = t.path().join("Gifs");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::copy(ANIM_GIF, dir.join("Tanzende Katze.gif")).unwrap();
+    let still = Pixels { width: 60, height: 60, rgba: [10, 200, 10, 255].repeat(3600), icc: None };
+    std::fs::write(dir.join("logo.gif"), image::encode(&still, ImageFormat::Png, 0.0).unwrap()).unwrap(); // not a GIF inside: stays a photo
+
+    let ws = Workspace::open(std::slice::from_ref(&dir)).unwrap();
+    let s = ws.summary();
+    assert_eq!((s.videos.total, s.animated_gifs, s.transparent_gifs, s.videos_with_sound), (1, 1, 1, 0));
+    assert_eq!(s.images.total, 1, "the still one stays a photo");
+
+    for (bg, expect_dark) in [(Background::White, false), (Background::Black, true)] {
+        let out = t.path().join(format!("out-{bg:?}"));
+        let _ = std::fs::remove_dir_all(t.path().join("Gifs-wolfgang"));
+        let settings = videos(VideoSettings { size: None, background: bg, ..Default::default() });
+        let (plan, _) = run(&dir, &settings);
+        let video = plan.output_root.join("tanzende-katze.mp4");
+        let info = probe(&video);
+        assert_eq!(info.video.as_ref().map(|v| (v.width, v.height)), Some((96, 64)));
+        assert!((info.duration.unwrap() - 0.6).abs() < 0.15, "GIF timing kept: {:?}", info.duration);
+        let edge = left_edge_of_poster(&plan.output_root.join("tanzende-katze.webp"));
+        assert_eq!(edge < 60, expect_dark, "{bg:?}: transparent part is {edge}");
+        std::fs::rename(&plan.output_root, out).unwrap();
+    }
+}
+
+#[test]
+fn a_well_packed_video_keeps_its_original_or_says_it_grew() {
+    if tools().is_none() {
+        return;
+    }
+    let t = tempfile::tempdir().unwrap();
+    let make = |dir: &Path, name: &str, args: &[&str]| {
+        std::fs::create_dir_all(dir).unwrap();
+        let ok = Command::new(&media::tools().unwrap().ffmpeg)
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=640x360:r=25:d=2", "-pix_fmt", "yuv420p"])
+            .args(args)
+            .arg(dir.join(name))
+            .status()
+            .unwrap();
+        assert!(ok.success());
+    };
+    // A tiny H.264 MP4 that plays on the web as it is.
+    let web = t.path().join("Web");
+    make(&web, "fertig.mp4", &["-c:v", "h264_videotoolbox", "-b:v", "150k", "-f", "mp4"]);
+    let nicer = VideoSettings { quality: VideoQuality::Nicer, poster: false, ..Default::default() };
+    let ws = Workspace::open(std::slice::from_ref(&web)).unwrap();
+    let plan = ws.plan(&videos(nicer.clone()), RerunPolicy::OnlyNew).unwrap();
+    let report = execute(&plan, &|_| {}, &AtomicBool::new(false)).unwrap();
+    assert_eq!(report.notes, vec![(PathBuf::from("fertig.mp4"), Note::VideoKeptOriginal)]);
+    assert!(report.bytes_out <= report.bytes_in, "{} → {}", report.bytes_in, report.bytes_out);
+    assert_eq!(codecs(&plan.output_root.join("fertig.mp4")).0.split(',').next(), Some("h264"));
+
+    // A tiny WebM can't just be copied into an MP4: kept, but Wolfgang says it grew.
+    let webm = t.path().join("Webm");
+    make(&webm, "klein.webm", &["-c:v", "libvpx-vp9", "-b:v", "60k", "-f", "webm"]);
+    let ws = Workspace::open(&[webm]).unwrap();
+    let plan = ws.plan(&videos(nicer), RerunPolicy::OnlyNew).unwrap();
+    let report = execute(&plan, &|_| {}, &AtomicBool::new(false)).unwrap();
+    assert_eq!(report.notes, vec![(PathBuf::from("klein.webm"), Note::VideoGrew)]);
+}

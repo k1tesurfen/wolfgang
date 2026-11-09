@@ -155,6 +155,32 @@ impl VideoQuality {
     }
 }
 
+/// What goes behind transparent areas of animated GIFs (MP4 can't be transparent).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Background {
+    #[default]
+    White,
+    Black,
+}
+
+impl Background {
+    /// ffmpeg's colour name.
+    pub fn color(self) -> &'static str {
+        match self {
+            Self::White => "white",
+            Self::Black => "black",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::White => "Weiß",
+            Self::Black => "Schwarz",
+        }
+    }
+}
+
 /// Videos are always prepared for the web.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -168,11 +194,13 @@ pub struct VideoSettings {
     pub sound: bool,
     /// Also write a still image (WebP) named like the video.
     pub poster: bool,
+    /// Behind transparent areas of animated GIFs.
+    pub background: Background,
 }
 
 impl Default for VideoSettings {
     fn default() -> Self {
-        Self { format: VideoFormat::Mp4, size: Some(VIDEO_NORMAL), quality: VideoQuality::Balanced, sound: true, poster: true }
+        Self { format: VideoFormat::Mp4, size: Some(VIDEO_NORMAL), quality: VideoQuality::Balanced, sound: true, poster: true, background: Background::White }
     }
 }
 
@@ -230,6 +258,10 @@ pub struct AudioSettings {
     pub content: AudioContent,
 }
 
+/// Pictures are pulled out of PDFs as they are; nothing to configure.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct PdfSettings {}
+
 /// Fonts are converted 1:1 to WOFF2; nothing to configure yet.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct FontSettings {}
@@ -241,6 +273,7 @@ pub struct RunSettings {
     pub images: Option<ImageSettings>,
     pub videos: Option<VideoSettings>,
     pub audio: Option<AudioSettings>,
+    pub pdfs: Option<PdfSettings>,
     pub fonts: Option<FontSettings>,
 }
 
@@ -305,6 +338,7 @@ mod tests {
             })),
             videos: Some(VideoSettings { format: VideoFormat::Webm, size: None, ..Default::default() }),
             audio: Some(AudioSettings { format: AudioFormat::Aac, content: AudioContent::Speech }),
+            pdfs: Some(PdfSettings {}),
             fonts: Some(FontSettings {}),
         };
         let json = serde_json::to_string(&s).unwrap();

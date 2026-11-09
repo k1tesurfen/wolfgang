@@ -14,6 +14,17 @@ pub const FLAGS: &[&str] = &[
     "has_videos",
     "has_audio",
     "has_fonts",
+    "has_pdfs",
+    "has_gifs",
+    "transparent_gifs",
+    "nothing_to_ask",
+    "takes_a_while",
+    "videos_kept_original",
+    "videos_grew",
+    "pdfs_without_pictures",
+    "pdfs_unreadable",
+    "pictures_from_pdfs",
+    "saved_bytes",
     "has_media",
     "only_images",
     "several_piles",
@@ -49,6 +60,12 @@ pub const NUMBER_VARS: &[&str] = &[
     "images",
     "videos",
     "audio_files",
+    "pdfs",
+    "animated_gifs",
+    "videos_kept_original",
+    "videos_grew",
+    "pdfs_without_pictures",
+    "pdf_pictures",
     "fonts",
     "unknown",
     "duplicates",
@@ -69,6 +86,7 @@ pub const NUMBER_VARS: &[&str] = &[
 pub const TEXT_VARS: &[&str] = &[
     "last_run",
     "pile_list",
+    "estimate",
     "summary",
     "output_folder",
     "default_web_format",
@@ -135,17 +153,41 @@ impl Context {
 /// „42 Fotos, 3 Videos und eine Schrift“
 pub fn pile_list(s: &Summary) -> String {
     let p = s.piles();
+    let n = |n: usize, one: &str, many: &str| if n == 1 { one.to_owned() } else { format!("{n} {many}") };
     let mut parts = Vec::new();
-    let mut add = |on: bool, n: usize, one: &str, many: &str| {
-        if on {
-            parts.push(if n == 1 { one.to_owned() } else { format!("{n} {many}") });
-        }
-    };
-    add(p.images, s.images.total, "ein Foto", "Fotos");
-    add(p.videos, s.videos.total, "ein Video", "Videos");
-    add(p.audio, s.audio.total, "eine Audiodatei", "Audiodateien");
-    add(p.fonts, s.fonts.total, "eine Schrift", "Schriften");
+    if p.images {
+        parts.push(n(s.images.total, "ein Foto", "Fotos"));
+    }
+    if p.videos {
+        let gifs = s.animated_gifs;
+        parts.push(match gifs {
+            0 => n(s.videos.total, "ein Video", "Videos"),
+            g if g == s.videos.total => n(g, "ein animiertes GIF", "animierte GIFs"),
+            1 => format!("{} (eins davon ein animiertes GIF)", n(s.videos.total, "ein Video", "Videos")),
+            g => format!("{} (davon {g} animierte GIFs)", n(s.videos.total, "ein Video", "Videos")),
+        });
+    }
+    if p.audio {
+        parts.push(n(s.audio.total, "eine Audiodatei", "Audiodateien"));
+    }
+    if p.pdfs {
+        parts.push(n(s.pdfs.total, "ein PDF", "PDFs"));
+    }
+    if p.fonts {
+        parts.push(n(s.fonts.total, "eine Schrift", "Schriften"));
+    }
     join_and(&parts)
+}
+
+/// `etwa eine Minute`, `etwa 12 Minuten`, `etwa 2 Stunden`
+pub fn format_estimate(d: std::time::Duration) -> String {
+    let min = (d.as_secs_f64() / 60.0).round() as u64;
+    match min {
+        0 | 1 => "etwa eine Minute".into(),
+        2..=59 => format!("etwa {min} Minuten"),
+        60..=89 => "etwa eine Stunde".into(),
+        _ => format!("etwa {} Stunden", (min as f64 / 60.0).round()),
+    }
 }
 
 /// `a`, `a und b`, `a, b und c`
@@ -247,11 +289,24 @@ mod tests {
     }
 
     #[test]
+    fn piles_and_estimates_in_words() {
+        let mut s = Summary::default();
+        s.videos.total = 3;
+        s.animated_gifs = 1;
+        s.pdfs.total = 2;
+        assert_eq!(pile_list(&s), "3 Videos (eins davon ein animiertes GIF) und 2 PDFs");
+        s.animated_gifs = 3;
+        assert_eq!(pile_list(&s), "3 animierte GIFs und 2 PDFs");
+        let m = |s: u64| format_estimate(std::time::Duration::from_secs(s));
+        assert_eq!((m(50), m(130), m(3600), m(9000)), ("etwa eine Minute".into(), "etwa 2 Minuten".into(), "etwa eine Stunde".into(), "etwa 3 Stunden".into()));
+    }
+
+    #[test]
     fn describes_videos_and_audio() {
         assert_eq!(describe_videos(&VideoSettings::default()), "als MP4, 1080p, mit Ton und Vorschaubild");
-        let v = VideoSettings { format: wolfgang_core::VideoFormat::Webm, size: None, sound: false, poster: false, quality: wolfgang_core::VideoQuality::Nicer };
+        let v = VideoSettings { format: wolfgang_core::VideoFormat::Webm, size: None, sound: false, poster: false, quality: wolfgang_core::VideoQuality::Nicer, ..Default::default() };
         assert_eq!(describe_videos(&v), "als WebM, Originalgröße, schöner, ohne Ton");
-        let all = Piles { images: true, videos: true, audio: true, fonts: false };
+        let all = Piles { fonts: false, ..Piles::ALL };
         let s = RunSettings { videos: Some(VideoSettings::default()), audio: Some(AudioSettings::default()), ..Default::default() };
         assert_eq!(describe_settings(&s, all), "Videos als MP4, 1080p, mit Ton und Vorschaubild; Audio als MP3 (Musik)");
         assert_eq!(describe_settings(&s, Piles { audio: true, ..Default::default() }), "als MP3 (Musik)");

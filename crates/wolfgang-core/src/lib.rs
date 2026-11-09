@@ -9,10 +9,12 @@
 
 pub mod error;
 pub mod font;
+pub mod gif;
 pub mod image;
 pub mod kind;
 pub mod media;
 pub mod naming;
+pub mod pdf;
 pub mod run;
 pub mod runlog;
 pub mod scan;
@@ -22,9 +24,9 @@ pub mod workspace;
 
 pub use error::{Error, Result};
 pub use kind::FileKind;
-pub use run::{execute, Event, Report};
+pub use run::{execute, Event, Note, Report};
 pub use settings::{
-    AudioContent, AudioFormat, AudioSettings, FontSettings, ImageFormat, ImageSettings, Naming, RunSettings, VideoFormat, VideoQuality, VideoSettings,
+    AudioContent, AudioFormat, AudioSettings, Background, FontSettings, ImageFormat, ImageSettings, Naming, RunSettings, VideoFormat, VideoQuality, VideoSettings,
     WebFormat, WebSettings,
 };
 pub use store::UserStore;

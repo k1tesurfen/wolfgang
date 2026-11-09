@@ -103,6 +103,7 @@ fn convert(ui: &Ui, store: &mut UserStore, store_path: &Path, mut args: flags::R
         Some(OnlyArg::Images) => ws.keep_only(FileKind::Image),
         Some(OnlyArg::Videos) => ws.keep_only(FileKind::Video),
         Some(OnlyArg::Audio) => ws.keep_only(FileKind::Audio),
+        Some(OnlyArg::Pdfs) => ws.keep_only(FileKind::Pdf),
         Some(OnlyArg::Fonts) => ws.keep_only(FileKind::Font),
         None => {}
     }

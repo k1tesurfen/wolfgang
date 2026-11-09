@@ -11,8 +11,8 @@ use wolfgang_dialogue::script::Value;
 #[command(
     name = "wolfgang",
     version,
-    about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Schriften zu WOFF2.",
-    long_about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Schriften zu WOFF2.\n\n\
+    about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs, Schriften zu WOFF2.",
+    long_about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs, Schriften zu WOFF2.\n\n\
         Im Terminal fragt er dich, was du willst. Optionen beantworten seine Fragen vorab; \
         mit --yes (oder ohne Terminal) fragt er gar nicht und nimmt deine Standards.",
     args_conflicts_with_subcommands = true
@@ -71,6 +71,9 @@ pub struct RunArgs {
     /// Kein Vorschaubild zu Videos
     #[arg(long)]
     pub no_poster: bool,
+    /// Was hinter durchsichtige Stellen animierter GIFs kommt
+    #[arg(long, value_enum)]
+    pub gif_background: Option<BackgroundArg>,
     /// Audioformat
     #[arg(long, value_enum)]
     pub audio_format: Option<AudioFormatArg>,
@@ -143,6 +146,10 @@ pub enum SettingKey {
     Quality,
     HqFormat,
     Separator,
+    VideoFormat,
+    VideoSize,
+    VideoQuality,
+    AudioFormat,
     Sound,
 }
 
@@ -166,6 +173,7 @@ pub enum OnlyArg {
     Images,
     Videos,
     Audio,
+    Pdfs,
     Fonts,
 }
 
@@ -197,6 +205,12 @@ pub enum VideoQualityArg {
     Smaller,
     Balanced,
     Nicer,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BackgroundArg {
+    White,
+    Black,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -347,6 +361,9 @@ impl RunArgs {
         if self.no_poster {
             put("video.poster", yaml("false"));
         }
+        if let Some(b) = self.gif_background {
+            put("video.background", text(&arg_name(b)));
+        }
         if let Some(a) = self.audio_format {
             put("audio.format", text(&arg_name(a)));
         }
@@ -385,7 +402,7 @@ mod tests {
     use super::*;
     use wolfgang_core::{ImageFormat, ImageSettings, WebFormat};
 
-    const IMAGES: Piles = Piles { images: true, videos: false, audio: false, fonts: false };
+    const IMAGES: Piles = Piles { images: true, videos: false, audio: false, pdfs: false, fonts: false };
 
     fn args(v: &[&str]) -> RunArgs {
         Cli::try_parse_from(std::iter::once("wolfgang").chain(v.iter().copied())).unwrap().run
@@ -430,7 +447,7 @@ mod tests {
     #[test]
     fn video_and_audio_flags() {
         let store = UserStore::default();
-        let all = Piles { images: true, videos: true, audio: true, fonts: true };
+        let all = Piles::ALL;
         let (s, _) = args(&["x"]).settings(&store, all).unwrap();
         assert_eq!(s.videos, Some(wolfgang_core::VideoSettings::default()), "Wolfgang's defaults without a conversation");
         assert_eq!(s.audio, Some(wolfgang_core::AudioSettings::default()));

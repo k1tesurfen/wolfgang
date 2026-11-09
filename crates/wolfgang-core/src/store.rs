@@ -3,7 +3,7 @@
 
 use crate::error::{io_err, Error, Result};
 use crate::naming::Separator;
-use crate::settings::{ImageFormat, RunSettings, WebFormat, QUALITY_BALANCED, SIZE_NORMAL};
+use crate::settings::{AudioFormat, ImageFormat, RunSettings, VideoFormat, VideoQuality, WebFormat, QUALITY_BALANCED, SIZE_NORMAL, VIDEO_NORMAL};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -18,6 +18,11 @@ pub struct Defaults {
     pub quality: u8,
     pub hq_format: ImageFormat,
     pub separator: Separator,
+    pub video_format: VideoFormat,
+    /// Shorter side of videos; `None` = original size.
+    pub video_size: Option<u32>,
+    pub video_quality: VideoQuality,
+    pub audio_format: AudioFormat,
     pub sound: bool,
     /// App window size as a whole multiple of the scene; `None` = the app's default.
     pub window_scale: Option<u32>,
@@ -31,6 +36,10 @@ impl Default for Defaults {
             quality: QUALITY_BALANCED,
             hq_format: ImageFormat::Jpg,
             separator: Separator::Dash,
+            video_format: VideoFormat::Mp4,
+            video_size: Some(VIDEO_NORMAL),
+            video_quality: VideoQuality::Balanced,
+            audio_format: AudioFormat::Mp3,
             sound: true,
             window_scale: None,
         }
@@ -202,5 +211,8 @@ mod tests {
         let s: UserStore = serde_json::from_str(r#"{"defaults":{"quality":70},"future_field":1}"#).unwrap();
         assert_eq!(s.defaults.quality, 70);
         assert_eq!(s.defaults.max_side, SIZE_NORMAL);
+        assert_eq!(s.defaults.video_size, Some(VIDEO_NORMAL), "settings from 2.2 get the video defaults");
+        let original: UserStore = serde_json::from_str(r#"{"defaults":{"video_size":null}}"#).unwrap();
+        assert_eq!(original.defaults.video_size, None, "null = original size");
     }
 }

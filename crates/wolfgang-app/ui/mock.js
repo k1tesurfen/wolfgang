@@ -30,7 +30,7 @@ if (!window.__TAURI__) {
     };
     const next = { mode: ['size', 'confirm'], size: ['confirm', 'confirm', 'confirm'], confirm: ['start', 'mode', 'cancelled'], done: ['end', 'end'] };
     let node = 'mode', history = [];
-    let settings = { web_format: 'webp', max_side: 1600, quality: 80, hq_format: 'jpg', separator: 'dash', sound: true };
+    let settings = { web_format: 'webp', max_side: 1600, quality: 80, hq_format: 'jpg', separator: 'dash', video_format: 'mp4', video_size: 1080, video_quality: 'balanced', audio_format: 'mp3', sound: true };
     let presets = [{ name: 'Blog-Bilder', description: 'fürs Web als WebP, 1600 px, Qualität 80' }];
 
     const work = () => {

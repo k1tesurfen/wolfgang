@@ -19,7 +19,7 @@ fn jpg(path: &Path) {
     std::fs::write(path, image::encode(&px, ImageFormat::Jpg, 80.0).unwrap()).unwrap();
 }
 
-/// Hotel/{Zimmer/1.jpg, Zimmer/2.jpg, Garten/3.jpg, Arial.ttf, preise.pdf}
+/// Hotel/{Zimmer/1.jpg, Zimmer/2.jpg, Garten/3.jpg, Arial.ttf, preise.docx}
 fn hotel(t: &Path) -> PathBuf {
     let root = t.join("Hotel");
     jpg(&root.join("Zimmer/1.jpg"));
@@ -28,7 +28,7 @@ fn hotel(t: &Path) -> PathBuf {
     if Path::new(ARIAL).exists() {
         std::fs::copy(ARIAL, root.join("Arial.ttf")).unwrap();
     }
-    std::fs::write(root.join("preise.pdf"), "%PDF").unwrap();
+    std::fs::write(root.join("preise.docx"), "PK").unwrap();
     root
 }
 
@@ -230,7 +230,7 @@ fn nothing_useful_on_the_desk() {
     let t = tempfile::tempdir().unwrap();
     let root = t.path().join("Docs");
     std::fs::create_dir_all(&root).unwrap();
-    std::fs::write(root.join("a.pdf"), "x").unwrap();
+    std::fs::write(root.join("a.docx"), "x").unwrap();
     let (_, mut c) = talk(&[root], &UserStore::default());
     assert_eq!(node(&c), "nothing");
     c.choose(0);
@@ -511,4 +511,73 @@ fn flags_override_a_preset() {
     }
     assert_eq!(node(&c), "confirm");
     assert!(said(&c).contains("800 px, Qualität 55"), "{}", said(&c));
+}
+
+#[test]
+fn pdfs_need_no_questions() {
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("Kunde");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("Broschüre.pdf"), "%PDF").unwrap();
+    if Path::new(ARIAL).exists() {
+        std::fs::copy(ARIAL, root.join("Arial.ttf")).unwrap();
+    }
+    let (_, c) = talk(&[root], &UserStore::default());
+    assert_eq!(node(&c), "confirm", "straight to the summary");
+    let text = said(&c);
+    assert!(text.contains("Ich seh ein PDF") && text.contains("Bilder raus"), "{text}");
+    assert!(text.contains("Also: die Bilder aus dem PDF"), "{text}");
+}
+
+#[test]
+fn transparent_gifs_ask_for_a_background() {
+    if !media_tools() {
+        return;
+    }
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("Gifs");
+    std::fs::create_dir_all(&root).unwrap();
+    let gif = concat!(env!("CARGO_MANIFEST_DIR"), "/../wolfgang-core/tests/fixtures/transparent-anim.gif");
+    std::fs::copy(gif, root.join("katze.gif")).unwrap();
+    let (_, mut c) = talk(&[root], &UserStore::default());
+    let text = said(&c);
+    assert!(text.contains("Ich seh ein animiertes GIF") && text.contains("GIFs mach ich zu Videos"), "{text}");
+    pick(&mut c, "MP4");
+    pick(&mut c, "Original");
+    pick(&mut c, "Ausgewogen");
+    assert_eq!(node(&c), "video_background", "no sound question for a GIF");
+    pick(&mut c, "Schwarz");
+    pick(&mut c, "Nee");
+    assert!(said(&c).contains("ohne Ton, Durchsichtiges auf Schwarz"), "{}", said(&c));
+}
+
+#[test]
+fn long_videos_come_with_an_estimate() {
+    use wolfgang_core::media::{MediaInfo, VideoStream};
+    use wolfgang_core::workspace::VideoFacts;
+    let mut s = wolfgang_core::Summary::default();
+    s.videos.total = 1;
+    let clip = MediaInfo { duration: Some(600.0), video: Some(VideoStream { width: 3840, height: 2160, fps: Some(30.0), ..Default::default() }), audio: None };
+    s.video_facts = vec![VideoFacts { info: Some(clip), known: false }];
+    let mut store = UserStore::default();
+    store.defaults.video_format = wolfgang_core::VideoFormat::Webm;
+    let ctx = Context { summary: s, output_root: "/x/Filme-wolfgang".into(), store, keyword_words: Default::default(), sample_image: None };
+    let mut c = Conversation::new(builtin(), ctx, 2);
+    let Step::Ask { answers, .. } = c.step() else { panic!() };
+    assert!(answers[1].current && answers[1].label.starts_with("WebM"), "the default from the settings is marked: {answers:?}");
+    pick(&mut c, "WebM");
+    pick(&mut c, "Normal");
+    pick(&mut c, "Ausgewogen");
+    pick(&mut c, "Ja");
+    let text = said(&c);
+    assert!(text.contains("etwa 9 Minuten") || text.contains("etwa 8 Minuten") || text.contains("etwa 10 Minuten"), "{text}");
+    c.back();
+    c.back();
+    c.back();
+    c.back();
+    pick(&mut c, "MP4");
+    for a in ["Normal", "Ausgewogen", "Ja"] {
+        pick(&mut c, a);
+    }
+    assert!(said(&c).contains("etwa 2 Minuten"), "MP4 is much quicker (reading 4K is what takes time): {}", said(&c));
 }

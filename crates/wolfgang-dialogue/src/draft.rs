@@ -4,7 +4,7 @@
 use crate::script::Value;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use wolfgang_core::settings::{AudioSettings, FontSettings, ImageFormat, ImageSettings, RunSettings, VideoSettings, WebSettings};
+use wolfgang_core::settings::{AudioSettings, FontSettings, ImageFormat, ImageSettings, PdfSettings, RunSettings, VideoSettings, WebSettings};
 use wolfgang_core::workspace::Piles;
 use wolfgang_core::store::{Defaults, UserStore};
 use wolfgang_core::RerunPolicy;
@@ -28,6 +28,7 @@ pub const KEYS: &[&str] = &[
     "video.quality",
     "video.sound",
     "video.poster",
+    "video.background",
     "video.asked",
     "audio.format",
     "audio.content",
@@ -81,9 +82,9 @@ impl Draft {
             web,
             hq_format: d.hq_format,
             images_asked: false,
-            video: VideoSettings::default(),
+            video: VideoSettings { format: d.video_format, size: d.video_size, quality: d.video_quality, ..Default::default() },
             videos_asked: false,
-            audio: AudioSettings::default(),
+            audio: AudioSettings { format: d.audio_format, ..Default::default() },
             audio_asked: false,
             rerun: RerunPolicy::OnlyNew,
             template: None,
@@ -116,6 +117,7 @@ impl Draft {
             "video.quality" => self.video.quality = typed(value)?,
             "video.sound" => self.video.sound = typed(value)?,
             "video.poster" => self.video.poster = typed(value)?,
+            "video.background" => self.video.background = typed(value)?,
             "video.asked" => self.videos_asked = typed(value)?,
             "audio.format" => self.audio.format = typed(value)?,
             "audio.content" => self.audio.content = typed(value)?,
@@ -172,6 +174,7 @@ impl Draft {
             "video.quality" => serde_norway::to_value(self.video.quality),
             "video.sound" => serde_norway::to_value(self.video.sound),
             "video.poster" => serde_norway::to_value(self.video.poster),
+            "video.background" => serde_norway::to_value(self.video.background),
             "audio.format" => serde_norway::to_value(self.audio.format),
             "audio.content" => serde_norway::to_value(self.audio.content),
             "rerun" => serde_norway::to_value(self.rerun),
@@ -217,6 +220,7 @@ impl Draft {
             images,
             videos: (piles.videos && self.videos_asked).then(|| self.video.clone()),
             audio: (piles.audio && self.audio_asked).then_some(self.audio),
+            pdfs: piles.pdfs.then(PdfSettings::default),
             fonts: piles.fonts.then(FontSettings::default),
         }
     }
@@ -277,7 +281,7 @@ mod tests {
     #[test]
     fn builds_run_settings_per_pile() {
         let store = UserStore::default();
-        let all = Piles { images: true, videos: true, audio: true, fonts: true };
+        let all = Piles::ALL;
         let mut d = Draft::new(&store.defaults);
         assert_eq!(d.settings(all).images, None, "no mode chosen yet");
         assert_eq!(d.settings(all).videos, None, "videos not asked yet");

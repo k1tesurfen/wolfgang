@@ -73,7 +73,7 @@ fn run(plan: &Plan) -> Report {
     execute(plan, &|_| {}, &AtomicBool::new(false)).unwrap()
 }
 
-/// Folder: Urlaub/{a.jpg, b.png (alpha), Strand/{c.jpg, keywords.txt}, Fonts/Arial.ttf, notes.pdf}
+/// Folder: Urlaub/{a.jpg, b.png (alpha), Strand/{c.jpg, keywords.txt}, Fonts/Arial.ttf, notes.docx}
 fn holiday_folder(t: &Path) -> PathBuf {
     let root = t.join("Urlaub");
     write_image(&root.join("a.jpg"), &pixels(3000, 2000, false), ImageFormat::Jpg);
@@ -84,7 +84,7 @@ fn holiday_folder(t: &Path) -> PathBuf {
         std::fs::create_dir_all(root.join("Fonts")).unwrap();
         std::fs::copy(ARIAL, root.join("Fonts/Arial.ttf")).unwrap();
     }
-    std::fs::write(root.join("notes.pdf"), "%PDF").unwrap();
+    std::fs::write(root.join("notes.docx"), "PK").unwrap();
     root
 }
 
@@ -99,7 +99,7 @@ fn web_run_end_to_end() {
     let s = ws.summary();
     assert_eq!((s.images.total, s.images.known), (3, 0));
     assert_eq!(s.fonts.total, has_font as usize);
-    assert_eq!(s.unknown, vec![PathBuf::from("notes.pdf")]);
+    assert_eq!(s.unknown, vec![PathBuf::from("notes.docx")]);
     assert_eq!(s.folders_without_keywords, vec![""]);
     assert_eq!(s.keyword_files.iter().map(|k| k.0.as_str()).collect::<Vec<_>>(), vec!["Strand"]);
 
