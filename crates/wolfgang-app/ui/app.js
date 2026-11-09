@@ -153,8 +153,9 @@ function tick(now) {
 
 /* ── Wilma, the office cat ─────────────────────────────────────────────
    She lives under the desk in her cushion. Mostly she sleeps; now and then she
-   wakes up, looks into the camera, stretches, wanders along the floor in front of
-   the desk, sits, washes, and goes back to bed. Clicking her gets a „mrrp“ or „miau“. */
+   wakes up, looks into the camera, sits up for a yawn, wanders along the floor in
+   front of the desk, sits, washes, and goes back to bed. Clicking her gets a „mrrp“
+   or „miau“. Her looks are in assets/pixel/src/wilma.sprite. */
 const Wilma = (() => {
   const SPEED = 15; // scene pixels per second
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches; // then she just sleeps
@@ -166,7 +167,7 @@ const Wilma = (() => {
   const inBed = () => Math.abs(st.x - home.x) < 0.5 && Math.abs(st.y - home.y) < 0.5;
   const sleep = (now, ms = rnd(60, 180) * 1000) => { st.act = 'sleep'; setAnim('sleep', now); st.until = now + ms; };
   const awake = (now, ms = rnd(4, 9) * 1000) => { st.act = 'awake'; setAnim('awake', now); st.until = now + ms; };
-  const stretch = now => { st.act = 'stretch'; setAnim('stretch', now); st.until = now + 1600; };
+  const yawn = now => { st.act = 'yawn'; setAnim('yawn', now); st.until = now + S.animations.yawn.reduce((t, [, ms]) => t + ms, 0); };
   const sit = (now, ms = rnd(5, 12) * 1000) => { st.act = 'sit'; setAnim('sit', now); st.until = now + ms; };
   const wash = now => { st.act = 'wash'; setAnim('wash', now); st.until = now + 2700; };
   const walkTo = (now, x, y) => { st.act = 'walk'; st.target = { x, y }; st.face = x >= st.x ? 1 : -1; setAnim('walk', now); };
@@ -180,8 +181,8 @@ const Wilma = (() => {
       case 'awake':
         if (st.settle) { st.settle = false; return sleep(now); }
         if (!inBed()) return sit(now);
-        return Math.random() < 0.4 ? sleep(now) : stretch(now);
-      case 'stretch': st.trips = 1 + Math.floor(rnd(0, 3)); return wander(now);
+        return Math.random() < 0.4 ? sleep(now) : yawn(now);
+      case 'yawn': st.trips = 1 + Math.floor(rnd(0, 3)); return wander(now);
       case 'sit': return Math.random() < 0.4 ? wash(now) : --st.trips > 0 ? wander(now) : goHome(now);
       case 'wash': return sit(now, rnd(2, 5) * 1000);
       case 'walk':
@@ -237,11 +238,14 @@ const Wilma = (() => {
     ctx.restore();
   }
 
+  // In her cushion she lies one row above the top of its front rim, which hides her lowest row.
+  const bedLift = () => S.frames.bedfront.h - 1;
+
   function draw(ctx, now) {
-    const name = frameName(now), side = st.anim === 'walk' || st.anim === 'stretch';
+    const name = frameName(now), side = st.anim === 'walk';
     put(ctx, 'bed', home.x, home.y);
     if (inBed()) {
-      put(ctx, name, st.x, st.y - 2, side && st.face < 0); // lying in the hollow, the front rim over her
+      put(ctx, name, st.x, st.y - bedLift(), side && st.face < 0);
       put(ctx, 'bedfront', home.x, home.y);
     } else {
       put(ctx, 'bedfront', home.x, home.y);
@@ -252,7 +256,7 @@ const Wilma = (() => {
   /** Where she is right now (scene pixels), for hovering and clicking. */
   function box() {
     const f = S.frames[frameName(performance.now())];
-    const lift = inBed() ? 2 : 0;
+    const lift = inBed() ? bedLift() : 0;
     return { x: st.x - f.w / 2, y: st.y - lift - f.h, w: f.w, h: f.h };
   }
 

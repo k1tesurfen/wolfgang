@@ -349,7 +349,7 @@ pub fn manifest(paths: &Paths, wolfgang: SpriteManifest, ui: SpriteManifest, wil
         wolfgang,
         ui,
         wilma,
-        wilma_floor: [96, 236, 178],
+        wilma_floor: [116, 232, 178],
         portraits,
         moods,
         hotspots,
