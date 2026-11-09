@@ -46,6 +46,27 @@ pub fn keyword_words(text: &str) -> Vec<String> {
     text.lines().flat_map(words).collect()
 }
 
+/// A web-safe dashed name (`Broschüre Frühjahr` → `broschuere-fruehjahr`), cut at a
+/// word boundary so it stays at most `max` characters (a single long word is cut hard).
+pub fn short_web_name(text: &str, max: usize) -> String {
+    let mut out = String::new();
+    for w in words(text) {
+        let w = w.to_lowercase();
+        let extra = if out.is_empty() { w.len() } else { w.len() + 1 };
+        if out.len() + extra > max {
+            if out.is_empty() {
+                out = w.chars().take(max).collect();
+            }
+            break;
+        }
+        if !out.is_empty() {
+            out.push('-');
+        }
+        out.push_str(&w);
+    }
+    out
+}
+
 /// Joins words in the given style. Dash and underscore names are lowercase.
 pub fn join(words: &[String], sep: Separator) -> String {
     match sep {
@@ -125,6 +146,14 @@ mod tests {
     #[test]
     fn falls_back_to_original_stem_when_everything_is_empty() {
         assert_eq!(seo_name("", &[], None, "IMG_0001 Kopie", 2, Separator::Dash), "img-0001-kopie-0002");
+    }
+
+    #[test]
+    fn short_web_names() {
+        assert_eq!(short_web_name("Broschüre Frühjahr.final", 40), "broschuere-fruehjahr-final");
+        assert_eq!(short_web_name("Broschüre Frühjahr 2026 final v3 Kunde Müller Korrektur", 40), "broschuere-fruehjahr-2026-final-v3-kunde");
+        assert_eq!(short_web_name("Donaudampfschifffahrtsgesellschaftskapitän", 12), "donaudampfsc");
+        assert_eq!(short_web_name("!!!", 40), "");
     }
 
     #[test]

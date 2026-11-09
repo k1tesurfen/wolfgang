@@ -375,7 +375,7 @@ impl Workspace {
                 }
                 (FileKind::Pdf, _) => {
                     job.task = Task::Pdf;
-                    web_safe_stem(&f.rel, "pdf")
+                    pdf_name(&f.rel)
                 }
                 (FileKind::Font, _) => match std::fs::read(&f.path).map_err(io_err(&f.path)).and_then(|d| font::to_sfnt(&d)) {
                     Ok(sfnt) => font::web_name(&sfnt).unwrap_or_else(|| naming::join(&naming::words(&file_stem(&f.rel)), naming::Separator::Dash)),
@@ -443,6 +443,14 @@ impl Workspace {
 
 pub(crate) fn rel_string(p: &Path) -> String {
     p.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/")
+}
+
+/// Longest PDF-derived name: the folder, and the start of every picture's name.
+pub const PDF_NAME_MAX: usize = 40;
+
+/// `Broschüre Frühjahr.pdf` → `broschuere-fruehjahr` (folder and picture prefix).
+pub fn pdf_name(p: &Path) -> String {
+    Some(naming::short_web_name(&file_stem(p), PDF_NAME_MAX)).filter(|n| !n.is_empty()).unwrap_or_else(|| "pdf".into())
 }
 
 /// `name.ext`, or just `name` for folders.

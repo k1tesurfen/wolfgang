@@ -106,14 +106,18 @@ fn pictures_come_out_as_they_are() {
     let folder = plan.output_root.join("broschuere-fruehjahr");
     let mut files: Vec<String> = std::fs::read_dir(&folder).unwrap().map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
     files.sort();
-    assert_eq!(files, ["seite-01-1.jpg", "seite-01-2.png", "seite-01-3.png"], "no repeated logo, no icon");
+    assert_eq!(
+        files,
+        ["broschuere-fruehjahr-seite-01-1.jpg", "broschuere-fruehjahr-seite-01-2.png", "broschuere-fruehjahr-seite-01-3.png"],
+        "the PDF's name in every picture; no repeated logo, no icon"
+    );
 
-    assert_eq!(std::fs::read(folder.join("seite-01-1.jpg")).unwrap(), jpeg, "JPEGs are copied byte for byte");
-    let masked = image::decode(&folder.join("seite-01-2.png"), None, ColorTarget::Srgb).unwrap();
+    assert_eq!(std::fs::read(folder.join("broschuere-fruehjahr-seite-01-1.jpg")).unwrap(), jpeg, "JPEGs are copied byte for byte");
+    let masked = image::decode(&folder.join("broschuere-fruehjahr-seite-01-2.png"), None, ColorTarget::Srgb).unwrap();
     assert_eq!((masked.width, masked.height), (100, 80));
     assert_eq!(masked.rgba[3], 0, "left half transparent from the soft mask");
     assert_eq!(masked.rgba[(99 * 4 + 3) as usize], 255);
-    let indexed = image::decode(&folder.join("seite-01-3.png"), None, ColorTarget::Srgb).unwrap();
+    let indexed = image::decode(&folder.join("broschuere-fruehjahr-seite-01-3.png"), None, ColorTarget::Srgb).unwrap();
     assert_eq!(&indexed.rgba[..3], &[255, 0, 0], "palette colours, found inside a form");
 
     assert!(!plan.output_root.join("nur-text").exists(), "no empty folder for a PDF without pictures");

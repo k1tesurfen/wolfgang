@@ -206,13 +206,16 @@ fn convert_job(job: &Job, output_root: &Path, progress: &(dyn Fn(f64) + Sync), c
     Ok(Done { bytes_out: bytes.len() as u64, note, outputs: outputs() })
 }
 
-/// `Broschüre.pdf` → `broschuere/seite-03-1.jpg`, … (pages zero-padded so they sort).
+/// `Broschüre.pdf` → `broschuere/broschuere-seite-03-1.jpg`, … The PDF's name is in every
+/// picture's name, so they can still be found once they're copied elsewhere; pages are
+/// zero-padded so they sort.
 fn extract_pdf(job: &Job, output_root: &Path, progress: &(dyn Fn(f64) + Sync), cancel: &AtomicBool) -> Result<Done> {
     let found = pdf::extract(&job.source, progress, cancel)?;
     let digits = found.pages.to_string().len().max(2);
+    let name = crate::workspace::pdf_name(&job.rel);
     let mut done = Done { bytes_out: 0, note: None, outputs: Vec::new() };
     for p in &found.pictures {
-        let rel = job.target.join(format!("seite-{:0digits$}-{}.{}", p.page, p.number, p.ext));
+        let rel = job.target.join(format!("{name}-seite-{:0digits$}-{}.{}", p.page, p.number, p.ext));
         write_atomic(&output_root.join(&rel), &p.data)?;
         done.bytes_out += p.data.len() as u64;
         done.outputs.push(rel);

@@ -173,7 +173,9 @@ oder Schwarz hin soll (MP4 kann keine Transparenz). Damit sie auf der Webseite w
 brauchen sie `autoplay muted loop playsinline`. Nicht animierte GIFs bleiben Bilder.
 
 **PDFs:** Wolfgang holt die Bilder raus, ohne sie anzufassen: JPGs bleiben Byte für Byte JPGs,
-alles andere wird PNG. `Broschüre.pdf` → Ordner `broschuere/` mit `seite-01-1.jpg`, `seite-01-2.png` …
+alles andere wird PNG. `Broschüre.pdf` → Ordner `broschuere/` mit `broschuere-seite-01-1.jpg`, `broschuere-seite-01-2.png` …
+Der PDF-Name steckt in jedem Bild, damit man es auch woanders noch wiederfindet (lange Namen
+kürzt Wolfgang auf etwa 40 Zeichen).
 Winzige Schnipsel (Linien, Icons) und Logos, die auf jeder Seite wiederkommen, lässt er weg.
 
 **Nochmal ablegen:** Gibst du Wolfgang denselben Ordner noch einmal, erkennt er, was schon fertig
