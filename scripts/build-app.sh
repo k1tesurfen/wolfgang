@@ -50,6 +50,11 @@ done
 codesign --verify --deep --strict "$APP" && echo "Signatur (ad-hoc) ok"
 /usr/libexec/PlistBuddy -c "Print :CFBundleDocumentTypes:0:LSHandlerRank" "$APP/Contents/Info.plist" | grep -q Alternate && echo "Dock-Ablage ok"
 
+# A copy with a fixed name, so the README's download button
+# (releases/latest/download/Wolfgang.dmg) always gets the newest version.
+APP_VERSION=$(python3 -c "import json; print(json.load(open('crates/wolfgang-app/tauri.conf.json'))['version'])")
+cp "target/release/bundle/dmg/Wolfgang_${APP_VERSION}_aarch64.dmg" target/release/bundle/dmg/Wolfgang.dmg
+
 MACOS="target/release/bundle/macos"
 if [[ -f "$MACOS/Wolfgang.app.tar.gz.sig" ]]; then
   step "Update-Datei latest.json"

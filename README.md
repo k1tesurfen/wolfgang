@@ -10,6 +10,11 @@
   <sub>Für Macs mit Apple-Chip · macOS 13 oder neuer · Deutsch · ganz ohne Zusatzinstallationen</sub>
 </p>
 
+<p align="center">
+  <a href="https://github.com/k1tesurfen/wolfgang/releases/latest/download/Wolfgang.dmg"><img src="https://img.shields.io/badge/Wolfgang_herunterladen-f%C3%BCr_Macs_mit_Apple--Chip-8a5a35?style=for-the-badge" alt="Wolfgang herunterladen (für Macs mit Apple-Chip)" height="40"></a><br>
+  <img src="https://img.shields.io/github/v/release/k1tesurfen/wolfgang?label=neueste%20Version&style=flat-square&color=8a5a35" alt="neueste Version">
+</p>
+
 ---
 
 > *„Moin! Leg mir einfach was auf den Tisch. Bilder, Videos, Musik, Schriften … ich guck's mir an.
@@ -46,8 +51,21 @@ teilen sich Einstellungen und Vorlagen.
 
 ## So kommst du zu Wolfgang
 
-1. Die neueste `Wolfgang_….dmg` von der [Releases-Seite](../../releases) laden.
-2. Öffnen und **Wolfgang** in den Ordner **Programme** ziehen.
+<p>
+  <a href="https://github.com/k1tesurfen/wolfgang/releases/latest/download/Wolfgang.dmg"><img src="https://img.shields.io/badge/Wolfgang_herunterladen-f%C3%BCr_Macs_mit_Apple--Chip-8a5a35?style=for-the-badge" alt="Wolfgang herunterladen (für Macs mit Apple-Chip)" height="40"></a>
+</p>
+
+**Was dein Mac braucht:**
+
+- einen **Apple-Chip** (M1, M2, M3, M4 …). Auf Macs mit Intel-Prozessor läuft Wolfgang nicht.
+- **macOS 13 Ventura** oder neuer
+
+Nachschauen kannst du das im Apple-Menü (oben links) → **Über diesen Mac**: Steht bei „Chip“ etwas mit
+„Apple M…“ und bei „macOS“ eine 13 oder höher, passt alles.
+
+1. Auf den Knopf oben klicken – das lädt `Wolfgang.dmg`, immer die neueste Version.
+   (Ältere Versionen gibt's auf der [Releases-Seite](../../releases).)
+2. Die Datei öffnen und **Wolfgang** in den Ordner **Programme** ziehen.
 3. Wolfgang starten. Beim allerersten Mal braucht macOS einen kleinen Schubs (siehe unten).
 
 Mehr musst du nicht installieren – kein Homebrew, kein ffmpeg, nichts. Wolfgang bringt alles mit.
@@ -249,7 +267,8 @@ Ohne gebautes ffmpeg werden die Video-/Audio-Tests übersprungen.
 
 **Eine neue Version veröffentlichen:** Version in `Cargo.toml` (workspace) und
 `crates/wolfgang-app/tauri.conf.json` anheben, committen, Tag `vX.Y.Z` pushen. GitHub baut die
-`.dmg` und die signierten Update-Dateien (`Wolfgang.app.tar.gz`, `latest.json`) und legt ein
+`.dmg` (zweimal: mit Versionsnummer und als `Wolfgang.dmg` für den Download-Knopf im README)
+und die signierten Update-Dateien (`Wolfgang.app.tar.gz`, `latest.json`) und legt ein
 Release als Entwurf an. Sobald es veröffentlicht ist, bieten alle installierten Wolfgangs das
 Update an.
 
