@@ -28,15 +28,27 @@ jobs:
         run: cargo install tauri-cli --version "^2" --locked
       - name: Test
         run: cargo test --workspace
-      - name: Build app + dmg
-        run: scripts/build-app.sh
+      - name: Build app + dmg (+ signed update files)
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          scripts/build-app.sh
+          test -f target/release/bundle/macos/latest.json || { echo "Update-Dateien fehlen – Secrets gesetzt?"; exit 1; }
       - uses: softprops/action-gh-release@v2
         with:
           draft: true
-          files: target/release/bundle/dmg/*.dmg
+          # The app finds updates via releases/latest/download/latest.json,
+          # so they reach colleagues only once this draft is published.
+          files: |
+            target/release/bundle/dmg/*.dmg
+            target/release/bundle/macos/Wolfgang.app.tar.gz
+            target/release/bundle/macos/latest.json
           body: |
             **Wolfgang ${{ github.ref_name }}** für Macs mit Apple-Chip (macOS 13 oder neuer).
 
             1. `.dmg` öffnen und Wolfgang in den Programme-Ordner ziehen.
             2. Beim ersten Start: Wolfgang ist nicht von Apple beglaubigt. Siehe „Erster Start“ im README.
             3. Die Kommandozeile `wolfgang` installierst du in der App: auf Wolfgang klicken → „Installieren“.
+
+            Wer schon Wolfgang 2.1 oder neuer hat, muss nichts tun: Wolfgang bietet die neue Version beim nächsten Start selbst an.

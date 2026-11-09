@@ -56,16 +56,19 @@ async function init() {
   api.listen('progress', onProgress);
   api.listen('finished', onFinished);
   api.listen('failed', msg => { mode = 'talk'; play('idle'); oops(msg); });
+  api.listen('update-progress', onUpdateProgress);
 
   setupStage();
   goIdle();
   if (T) takePending();
   if (T) setTimeout(() => api.invoke('frontend_ready', { errors: uiErrors, scale }), 1500);
+  setTimeout(checkUpdate, 2500);
 
   // Demo hooks for looking at the UI in a browser (mock.js).
   const q = new URLSearchParams(location.search);
   if (!T && q.has('demo')) dropFiles(['/demo/' + q.get('demo')]);
   if (!T && q.has('panel')) openPanel(q.get('panel'));
+  if (!T && q.get('update') === 'install') setTimeout(installUpdate, 3500);
 }
 
 /* ── Scaling and pixel frames ──────────────────────────────────────────── */
@@ -362,6 +365,7 @@ async function render(view) {
 function back() { act(api.invoke('back')); }
 
 async function goIdle() {
+  if (update && !update.offered) return offerUpdate();
   const my = ++token;
   mode = 'idle';
   setChoices([]);
@@ -407,6 +411,53 @@ function onFinished(view) {
   $('progress').hidden = true;
   Sound.jingle();
   render(view);
+}
+
+/* ── Updates ───────────────────────────────────────────────────────────── */
+
+let update = null; // { version, offered } when a newer Wolfgang is on GitHub
+
+async function checkUpdate() {
+  const found = await api.invoke('check_update').catch(() => null);
+  if (!found) return;
+  update = { ...found, offered: false };
+  if (mode === 'idle') offerUpdate(); // otherwise he asks once the current pile is done
+}
+
+async function offerUpdate() {
+  update.offered = true;
+  token++;
+  mode = 'talk';
+  play('happy', 900);
+  const talking = say([`Psst – es gibt 'nen neuen Wolfgang: Version ${update.version}.`, 'Soll ich mich mal eben auffrischen? Dauert nur kurz, dann bin ich gleich wieder da.'], { mood: 'happy' });
+  setChoices([{ label: 'Ja, mach mal!', run: installUpdate }, { label: 'Später', run: goIdle }]);
+  await talking;
+}
+
+function installUpdate() {
+  closePanel();
+  token++;
+  mode = 'work';
+  play('type');
+  setChoices([]);
+  setFace(null);
+  $('say').hidden = false;
+  $('say').classList.remove('idle');
+  $('say-text').innerHTML = `<p>Ich mach mich mal eben frisch …</p>`;
+  $('progress').hidden = false;
+  $('fill').style.width = '0%';
+  $('progress-label').textContent = 'Hole den neuen Wolfgang …';
+  placeTail();
+  // On success the app restarts as the new version; we only come back here on errors.
+  api.invoke('install_update').catch(e => { update = null; mode = 'talk'; play('idle'); oops(e); });
+}
+
+function onUpdateProgress(p) {
+  if (mode !== 'work') return;
+  const mb = n => (n / 1e6).toFixed(1).replace('.', ',');
+  $('fill').style.width = p.total ? `${Math.round((p.done / p.total) * 100)}%` : '50%';
+  $('progress-label').textContent = p.total && p.done >= p.total ? 'Gleich wieder da!' : `${mb(p.done)}${p.total ? ` von ${mb(p.total)}` : ''} MB`;
+  placeTail();
 }
 
 /* ── Drag and drop, hotspots ───────────────────────────────────────────── */
@@ -551,10 +602,12 @@ async function aboutPanel() {
   const draw = (a, note = '') => {
     body.innerHTML = `
       <p>Wolfgang ${escapeHtml(a.version)}<br><span class="muted">Wandelt Bilder und Schriften um, damit du's nicht musst.</span></p>
-      <div class="row"><div class="label">Wolfgang im Terminal (<code>wolfgang</code>)</div></div>
+      ${update ? `<div class="row update"><div class="label">Neu: Version ${escapeHtml(update.version)}</div></div>` : ''}
+      <div class="row cli"><div class="label">Wolfgang im Terminal (<code>wolfgang</code>)</div></div>
       <p class="muted">${escapeHtml(note)}</p>
       <p class="muted">Schrift: Pixelify Sans (SIL Open Font License)</p>`;
-    const r = body.querySelector('.row');
+    body.querySelector('.update')?.appendChild(button('Auffrischen', false, installUpdate));
+    const r = body.querySelector('.cli');
     r.appendChild(a.cli_installed ? button('Installiert ✓', true, () => {}) : button('Installieren', false, async () => {
       try { draw(await api.invoke('install_cli'), 'Fertig! Probier mal „wolfgang“ in einem neuen Terminal.'); }
       catch (e) { draw(a, String(e)); }

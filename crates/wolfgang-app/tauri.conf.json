@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Wolfgang",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "identifier": "de.artismedia.wolfgang",
   "build": {
     "frontendDist": "ui"
@@ -48,6 +48,15 @@
       "files": {
         "MacOS/wolfgang": "../../target/release/wolfgang"
       }
+    },
+    "createUpdaterArtifacts": true
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEI3M0ZDQjZBMTIxMDJBMkQKUldRdEtoQVNhc3MvdHlILzRDYnVwZ0Q3blVRMEgvdmtsTXVSK0E1emRZSUU3SC9ueU1kM1M1STIK",
+      "endpoints": [
+        "https://github.com/k1tesurfen/wolfgang/releases/latest/download/latest.json"
+      ]
     }
   }
 }

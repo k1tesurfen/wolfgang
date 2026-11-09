@@ -308,6 +308,15 @@ Findings:
 - **GitHub Actions:** `ci.yml` runs clippy (`-D warnings`) and all tests on macOS 15 for pushes to main/v2 and for PRs. `release.yml` runs on tag `v*`: it checks that the tag matches the app version, tests, builds, and creates a **draft** release with the dmg attached. Not run yet (nothing pushed).
 - **README** rewritten in German: install, first launch, app, CLI, tips, switching from 1.x, developer notes, how to release.
 
+### v2.1: self-update (2026-11-09) ✅
+
+- **Why:** colleagues never update anything by hand. Wolfgang has to bring new versions himself, and that also keeps a bundled ffmpeg (video/audio, next) from going stale.
+- **How:** `tauri-plugin-updater`, driven from Rust (`check_update`, `install_update`; no JS permissions). On start the UI asks for an update; if there is one, Wolfgang offers it as soon as he's idle („Psst – es gibt 'nen neuen Wolfgang …“, *Ja, mach mal! / Später*). After „Später“ the offer stays in „Über Wolfgang“. The download shows in the progress bubble, then the app swaps itself and restarts. If `/Applications` isn't writable, the plugin asks for the admin password. Dev builds and `WOLFGANG_NO_UPDATE=1` never check.
+- **Feed:** `https://github.com/k1tesurfen/wolfgang/releases/latest/download/latest.json`, so only *published* releases count (drafts stay invisible). The release workflow uploads `Wolfgang.app.tar.gz` + `latest.json` next to the dmg.
+- **Signing:** updates are signed with a minisign key (not Apple). The private key is in `~/.tauri/wolfgang.key` (+ `.password`) and in the GitHub secrets `TAURI_SIGNING_PRIVATE_KEY(_PASSWORD)`; the public key is in `tauri.conf.json`. `build-app.sh` uses the key when present, otherwise it builds without update files.
+- **Tested:** a 2.0.9 build pointed at a local server updated itself to 2.1.0 and restarted (`WOLFGANG_SELFTEST=update` checks and installs without asking). The swapped app passes `codesign --verify`, and the CLI inside it reports 2.1.0. UI screenshots via the mock (`?update`, `?update=install`).
+- **Limit:** 2.0.0 has no updater, so anyone on 2.0.0 installs 2.1 once by hand.
+
 ---
 
 ## 8. Milestones
@@ -319,6 +328,8 @@ Findings:
 5. ✅ **Pixel art**: pixelize tool for the references; office background from #10; mood portraits from the eight studies; animated desk sprite (idle/talk/type/sip/handover) drawn in code; bubbles, panels, object highlights; new-look CLI portrait. See *Milestone 5 result*.
 6. ✅ **Tauri app**: scene, drag & drop on the desk, bubbles, progress, result, settings/preset panels, SFX, CLI install. See *Milestone 6 result*.
 7. ✅ **Release**: `.dmg` build via GitHub Actions (macOS arm64 runner), README rewrite (German), first-launch instructions for the unsigned app. Released as v2.0.0. See *Milestone 7 result*.
+8. ✅ **Self-update** (v2.1). See *v2.1: self-update*.
+9. **Video** (next): MP4/WebM for the web, poster frames, with a bundled LGPL ffmpeg (Apple's hardware H.264/HEVC encoders, SVT-AV1, libvpx). Then **audio** (MP3/AAC/Opus) on the same ffmpeg.
 
 ---
 

@@ -11,6 +11,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_updater::{Update, UpdaterExt};
 use wolfgang_core::run::Event;
 use wolfgang_core::store::Defaults;
 use wolfgang_core::UserStore;
@@ -21,6 +22,8 @@ struct AppState {
     /// Files dropped on the Dock icon, kept until the UI picks them up
     /// (they can arrive before the UI is ready, e.g. when they launch the app).
     pending: Mutex<Vec<String>>,
+    /// A newer Wolfgang found on GitHub, waiting for a yes.
+    update: Mutex<Option<Update>>,
 }
 
 type Res<T> = Result<T, String>;
@@ -178,6 +181,52 @@ fn install_cli() -> Res<About> {
     Ok(about())
 }
 
+#[derive(Clone, Serialize)]
+struct UpdateInfo {
+    version: String,
+}
+
+/// Looks on GitHub for a newer Wolfgang. Offline, or in a dev build: nothing.
+#[tauri::command]
+async fn check_update(app: AppHandle, state: State<'_, AppState>) -> Res<Option<UpdateInfo>> {
+    if cfg!(debug_assertions) || std::env::var_os("WOLFGANG_NO_UPDATE").is_some() {
+        return Ok(None);
+    }
+    let found = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
+    let info = found.as_ref().map(|u| UpdateInfo { version: u.version.clone() });
+    if let Some(i) = &info {
+        eprintln!("wolfgang-app: update available: {}", i.version);
+    }
+    *state.update.lock().unwrap_or_else(|e| e.into_inner()) = found;
+    Ok(info)
+}
+
+#[derive(Clone, Serialize)]
+struct Download {
+    done: usize,
+    total: Option<u64>,
+}
+
+/// Downloads the update found by `check_update` (progress as `update-progress`
+/// events), swaps the app and starts the new one.
+#[tauri::command]
+async fn install_update(app: AppHandle, state: State<'_, AppState>) -> Res<()> {
+    let update = state.update.lock().unwrap_or_else(|e| e.into_inner()).take().ok_or("Da ist gerade kein neuer Wolfgang.")?;
+    let mut done = 0;
+    update
+        .download_and_install(
+            |chunk, total| {
+                done += chunk;
+                let _ = app.emit("update-progress", Download { done, total });
+            },
+            || {},
+        )
+        .await
+        .map_err(|e| format!("Das Auffrischen hat nicht geklappt: {e}"))?;
+    eprintln!("wolfgang-app: updated to {}, restarting", update.version);
+    app.restart()
+}
+
 /// Scene size in points; the window is always an exact whole multiple of it.
 const SCENE: (f64, f64) = (320.0, 180.0);
 /// 1280×720: comfortable on Full HD and on Retina screens alike.
@@ -231,8 +280,24 @@ fn frontend_ready(app: AppHandle, errors: Vec<String>, scale: f64) {
     for e in &errors {
         eprintln!("  ui error: {e}");
     }
-    if std::env::var_os("WOLFGANG_SELFTEST").is_some() {
-        app.exit(if errors.is_empty() && scale > 0.0 { 0 } else { 1 });
+    match std::env::var("WOLFGANG_SELFTEST").as_deref() {
+        // Checks for an update and installs it without asking (tests the whole round trip).
+        Ok("update") => {
+            tauri::async_runtime::spawn(async move {
+                let state = app.state::<AppState>();
+                let result = match check_update(app.clone(), state.clone()).await {
+                    Ok(Some(_)) => install_update(app.clone(), state).await,
+                    Ok(None) => Err("no update found".into()),
+                    Err(e) => Err(e),
+                };
+                if let Err(e) = result {
+                    eprintln!("wolfgang-app: update self-test failed: {e}");
+                    app.exit(1);
+                }
+            });
+        }
+        Ok(_) => app.exit(if errors.is_empty() && scale > 0.0 { 0 } else { 1 }),
+        Err(_) => {}
     }
 }
 
@@ -240,9 +305,10 @@ fn main() {
     let store_path = UserStore::default_path();
     let store = UserStore::load(&store_path).map(|l| l.store).unwrap_or_default();
     let script = wolfgang_dialogue::load().unwrap_or_else(|_| wolfgang_dialogue::builtin());
-    let state = AppState { office: Mutex::new(Office::new(store_path, store, script)), cancel: Arc::new(AtomicBool::new(false)), pending: Mutex::new(Vec::new()) };
+    let state = AppState { office: Mutex::new(Office::new(store_path, store, script)), cancel: Arc::new(AtomicBool::new(false)), pending: Mutex::new(Vec::new()), update: Mutex::new(None) };
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             drop_files,
@@ -262,7 +328,9 @@ fn main() {
             install_cli,
             frontend_ready,
             zoom,
-            take_pending
+            take_pending,
+            check_update,
+            install_update
         ])
         .setup(|app| {
             // Exactly the office, at the largest whole scale that fits this screen.

@@ -41,6 +41,13 @@ Das muss man nur einmal machen. Wer lieber das Terminal nimmt:
 xattr -dr com.apple.quarantine /Applications/Wolfgang.app
 ```
 
+### Neue Versionen
+
+Wolfgang schaut beim Start selbst nach, ob es eine neue Version gibt, und fragt dann:
+„Soll ich mich mal eben auffrischen?“ – ein Klick, kurz warten, fertig. Wer „Später“ sagt,
+findet das Angebot auch noch, wenn man auf Wolfgang klickt. (Das gibt's ab Version 2.1 –
+von 2.0 aus einmal die neue `.dmg` von Hand installieren.)
+
 ### Kommandozeile
 
 In der App auf **Wolfgang selbst** klicken → **Installieren**. macOS fragt einmal nach deinem
@@ -166,7 +173,15 @@ Die Oberfläche lässt sich auch im normalen Browser ansehen (mit Platzhalter-Da
 
 **Eine neue Version veröffentlichen:** Version in `Cargo.toml` (workspace) und
 `crates/wolfgang-app/tauri.conf.json` anheben, committen, Tag `vX.Y.Z` pushen. GitHub baut die
-`.dmg` und legt ein Release als Entwurf an.
+`.dmg` und die signierten Update-Dateien (`Wolfgang.app.tar.gz`, `latest.json`) und legt ein
+Release als Entwurf an. Sobald es veröffentlicht ist, bieten alle installierten Wolfgangs das
+Update an.
+
+**Update-Schlüssel:** Updates werden mit einem eigenen Schlüssel signiert (nicht Apple). Er liegt
+als Secret `TAURI_SIGNING_PRIVATE_KEY` (+ `_PASSWORD`) im GitHub-Repo und lokal in
+`~/.tauri/wolfgang.key`. **Gut aufheben:** Geht er verloren, nehmen installierte Wolfgangs keine
+Updates mehr an und müssen einmal von Hand neu installiert werden. Der öffentliche Teil steht in
+`tauri.conf.json`.
 
 ---
 
