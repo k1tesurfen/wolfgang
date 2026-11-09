@@ -102,7 +102,8 @@ fertig. Wer „Später“ sagt, findet das Angebot wieder, wenn man auf Wolfgang
 </p>
 
 Zieh Dateien oder ganze Ordner ins Fenster – direkt auf seinen Schreibtisch – oder aufs
-Dock-Symbol. Wolfgang guckt sich den Stapel an und erzählt dir, was er sieht:
+Dock-Symbol. Kein Fan von Ziehen? Dann klick auf den Schreibtisch oder drück **⌘O** und such dir
+im Finder-Fenster Dateien oder Ordner aus. Wolfgang guckt sich den Stapel an und erzählt dir, was er sieht:
 
 > *„Ich seh 42 Fotos, 3 Videos und eine Schrift. Mit einer Datei kann ich nix anfangen,
 > die lass ich einfach liegen.“*
@@ -120,7 +121,8 @@ rüber – mit „📂 Im Finder zeigen“ bist du direkt da.
 
 | Was | Wie |
 |---|---|
-| Antworten | anklicken, oder **↑ ↓** und **Enter**. **Esc** = zurück, **Leertaste** = Wolfgangs Text sofort ganz zeigen |
+| Dateien auswählen | auf den **Schreibtisch** klicken, **⌘O** oder „Dateien auswählen …“ |
+| Antworten | anklicken, oder **↑ ↓** und **Enter**, oder gleich die Nummer **1–9**. **Esc** = zurück, **Leertaste** = Wolfgangs Text sofort ganz zeigen |
 | Eigene Antwort | „✎ Selbst eintippen …“, z. B. eine eigene Größe |
 | „So wie letztes Mal“ | Wolfgang merkt sich deine letzte Wahl – für Fotos, Videos und Audio jeweils einzeln |
 | Vorlagen | nach getaner Arbeit „Als Vorlage merken“; ansehen und löschen über das **Klemmbrett** |
@@ -128,6 +130,14 @@ rüber – mit „📂 Im Finder zeigen“ bist du direkt da.
 | Über Wolfgang | auf **Wolfgang selbst** klicken – dort gibt's auch die Kommandozeile |
 | Kaffeepause | auf die **Tasse** klicken |
 | Größer / kleiner | **⌘+** / **⌘−** (Wolfgang merkt sich die Größe), **⌘0** = Standard |
+| Alle Tastenkürzel | **?** |
+
+**Für Tastatur- und Vim-Leute:** Wolfgang lässt sich komplett ohne Maus bedienen. Zusätzlich zu den
+Pfeiltasten gibt's **j k** (runter, rauf), **l** (antworten), **h** (zurück), **g G** (erste, letzte
+Antwort), **i** oder **/** (selbst eintippen), **o** (Dateien auswählen), **s** (Einstellungen),
+**p** (Vorlagen), **q** (Fenster zu) und **Ctrl-[** wie Esc. In den Einstellungen gehen
+**j k** durch die Zeilen und **h l** durch die Knöpfe, **Enter** drückt. Wer nur die Maus nimmt,
+merkt davon nichts, und solange du in einem Textfeld tippst, sind die Buchstaben ganz normal Buchstaben.
 
 ---
 

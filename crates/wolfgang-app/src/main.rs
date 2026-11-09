@@ -115,6 +115,42 @@ fn start(app: AppHandle, state: State<AppState>) -> Res<()> {
     Ok(())
 }
 
+/// The Finder dialog (desk click, ⌘O): files and folders, several at once.
+/// Returns the chosen paths; empty if the user cancelled.
+#[tauri::command]
+async fn pick_files(app: AppHandle) -> Res<Vec<String>> {
+    let (tx, rx) = std::sync::mpsc::channel();
+    app.run_on_main_thread(move || {
+        let _ = tx.send(open_panel());
+    })
+    .map_err(|e| e.to_string())?;
+    // The dialog is modal on the main thread; wait for it off the async workers.
+    tauri::async_runtime::spawn_blocking(move || rx.recv()).await.map_err(|e| e.to_string())?.map_err(|e| e.to_string())
+}
+
+#[cfg(target_os = "macos")]
+fn open_panel() -> Vec<String> {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSModalResponseOK, NSOpenPanel};
+    use objc2_foundation::NSString;
+    let Some(mtm) = MainThreadMarker::new() else { return Vec::new() };
+    let panel = NSOpenPanel::openPanel(mtm);
+    panel.setCanChooseFiles(true);
+    panel.setCanChooseDirectories(true);
+    panel.setAllowsMultipleSelection(true);
+    panel.setPrompt(Some(&NSString::from_str("Auf den Tisch")));
+    panel.setMessage(Some(&NSString::from_str("Was soll Wolfgang sich angucken? Dateien oder ganze Ordner, gern mehrere.")));
+    if panel.runModal() != NSModalResponseOK {
+        return Vec::new();
+    }
+    panel.URLs().iter().filter_map(|url| url.path()).map(|p| p.to_string()).collect()
+}
+
+#[cfg(not(target_os = "macos"))]
+fn open_panel() -> Vec<String> {
+    Vec::new()
+}
+
 /// Files that arrived via the Dock icon since the last call.
 #[tauri::command]
 fn take_pending(state: State<AppState>) -> Vec<String> {
@@ -344,6 +380,7 @@ fn main() {
             frontend_ready,
             zoom,
             take_pending,
+            pick_files,
             check_update,
             install_update
         ])

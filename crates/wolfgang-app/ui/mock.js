@@ -70,6 +70,7 @@ if (!window.__TAURI__) {
       start: () => { work(); },
       cancel: () => {},
       reveal: () => {},
+      pick_files: () => ['/demo/mode'],
       take_pending: () => [],
       check_update: () => (new URLSearchParams(location.search).has('update') ? { version: '2.2.0' } : null),
       install_update: () => new Promise(() => {

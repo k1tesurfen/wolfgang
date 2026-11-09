@@ -104,6 +104,7 @@ function restyle() {
   document.querySelectorAll('.answer').forEach((a, i) => nine(a, i === sel && !a.classList.contains('input') ? 'answer-hover' : 'answer'));
   document.querySelectorAll('.btn').forEach(b => nine(b, b.classList.contains('on') ? 'button-on' : 'button'));
   document.querySelectorAll('.cursor').forEach(c => (c.style.backgroundImage = `url(${piece('cursor')})`));
+  markPanelFocus();
   placeTail();
 }
 
@@ -280,12 +281,15 @@ function showInput(spec, others = []) {
   field.onkeydown = e => {
     e.stopPropagation();
     if (e.key === 'Enter' && field.value.trim()) { Sound.confirm(); act(api.invoke('type_answer', { text: field.value })); }
-    if (e.key === 'Escape') { Sound.back(); others.length ? setChoices(others) : back(); }
+    if (e.key === 'Escape' || (e.ctrlKey && e.key === '[')) { Sound.back(); others.length ? setChoices(others) : back(); }
   };
   restyle();
   setTimeout(() => field.focus(), 0);
 }
 
+/* Keyboard. Everyone: ↑↓ Enter Esc Space, 1–9, ⌘O, ⌘,, ?. On top, for vim
+   people, letters that do nothing otherwise: j k l h g G i / o s p q, Ctrl-[.
+   None of it applies while typing in a text field. */
 addEventListener('keydown', e => {
   // ⌘+ / ⌘− / ⌘0: bigger, smaller, best fit (always whole pixel steps).
   if (e.metaKey && T && ['=', '+', '-', '0'].includes(e.key)) {
@@ -294,13 +298,47 @@ addEventListener('keydown', e => {
     return;
   }
   if (e.target.tagName === 'INPUT') return;
-  if (mode === 'panel') { if (e.key === 'Escape' || e.key === 'Enter') closePanel(); return; }
-  if (typing && e.key === ' ') { e.preventDefault(); typing.finish(); return; } // Space skips; Enter answers right away
-  if (e.key === 'ArrowDown') { e.preventDefault(); select(sel + 1); }
-  else if (e.key === 'ArrowUp') { e.preventDefault(); select(sel - 1); }
-  else if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); activate(sel); }
-  else if (e.key === 'Escape') { const b = choices.findIndex(c => c.back); if (b >= 0) activate(b); }
+  if (e.metaKey && e.key === 'o') { e.preventDefault(); pickFiles(); return; }
+  if (e.metaKey && e.key === ',') { e.preventDefault(); openPanel('settings'); return; }
+  const key = e.ctrlKey && e.key === '[' ? 'Escape' : e.key;
+  if ((e.metaKey || e.ctrlKey || e.altKey) && key !== 'Escape') return; // leave other shortcuts to macOS
+  if (mode === 'panel') return panelKey(e, key);
+  if (typing && key === ' ') { e.preventDefault(); typing.finish(); return; } // Space skips; Enter answers right away
+  const first = choices.findIndex(c => !c.small);
+  switch (key) {
+    case 'ArrowDown': case 'j': select(sel + 1); break;
+    case 'ArrowUp': case 'k': select(sel - 1); break;
+    case 'g': select(0); break;
+    case 'G': select(choices.length - 1); break;
+    case 'Enter': case ' ': case 'l': activate(sel); break;
+    case 'Escape': case 'h': { const b = choices.findIndex(c => c.back); if (b >= 0) activate(b); break; }
+    case 'i': case '/': { const t = choices.findIndex(c => c.typed); if (t >= 0) activate(t); break; }
+    case 'o': pickFiles(); break;
+    case 's': openPanel('settings'); break;
+    case 'p': openPanel('presets'); break;
+    case '?': openPanel('keys'); break;
+    default:
+      // 1–9: that answer right away (the big ones, in the order shown).
+      if (/^[1-9]$/.test(key) && first >= 0 && choices[first + Number(key) - 1] && !choices[first + Number(key) - 1].small) activate(first + Number(key) - 1);
+      else return;
+  }
+  e.preventDefault();
 });
+
+/** The Finder dialog: files and folders, several at once (desk click, ⌘O, o). */
+async function pickFiles() {
+  if (mode === 'work' || picking) return;
+  picking = true;
+  try {
+    const paths = await api.invoke('pick_files');
+    if (paths.length) dropFiles(paths);
+  } catch (e) {
+    oops(e);
+  } finally {
+    picking = false;
+  }
+}
+let picking = false;
 
 /* ── Conversation ──────────────────────────────────────────────────────── */
 
@@ -343,7 +381,7 @@ async function render(view) {
     if (view.node === 'done') play('hand', 2600, 'happy');
     const talking = say(view.lines, { mood: view.mood });
     const list = view.answers.map((a, i) => ({ label: a.label, current: a.current, run: () => act(api.invoke('choose', { index: i })) }));
-    if (view.input && list.length) list.push({ label: '✎ Selbst eintippen …', run: () => showInput(view.input, choices) });
+    if (view.input && list.length) list.push({ label: '✎ Selbst eintippen …', typed: true, run: () => showInput(view.input, choices) });
     list.push(...extra);
     if (view.can_go_back) list.push({ label: '← Zurück', small: true, back: true, run: back });
     // Answers show up right away: no need to wait for Wolfgang to finish talking.
@@ -368,7 +406,7 @@ async function goIdle() {
   if (update && !update.offered) return offerUpdate();
   const my = ++token;
   mode = 'idle';
-  setChoices([]);
+  setChoices([{ label: 'Dateien auswählen …', small: true, run: pickFiles }]);
   play('idle');
   const line = await api.invoke('idle_line').catch(() => 'Leg mir einfach was auf den Tisch.');
   if (my === token) say([line], { idle: true });
@@ -484,13 +522,13 @@ function setupStage() {
   stage.addEventListener('mousemove', e => {
     const overUi = e.target.closest('.bubble, .answer, #panel, #portrait');
     const h = overUi || mode === 'work' || mode === 'panel' ? null : hit(at(e));
-    const clickable = h && h[0] !== 'desk';
-    hover = clickable ? h[0] : null;
+    const clickable = !!h;
+    hover = clickable && h[0] !== 'desk' ? h[0] : null; // the desk isn't outlined, it's big
     stage.style.cursor = clickable ? 'pointer' : 'default';
     tip.style.display = clickable ? 'block' : 'none';
     if (clickable) {
       const r = stage.getBoundingClientRect();
-      tip.textContent = h[1].label;
+      tip.textContent = h[0] === 'desk' ? 'Dateien auswählen … (⌘O)' : h[1].label;
       tip.style.left = `${e.clientX - r.left + 12}px`;
       tip.style.top = `${e.clientY - r.top + 12}px`;
     }
@@ -502,6 +540,7 @@ function setupStage() {
     if (!h) return;
     const action = h[1].action;
     if (action === 'sip') { play('sip', 2300); Sound.sip(); }
+    else if (action === 'drop') pickFiles();
     else if (action === 'settings' || action === 'presets' || action === 'about') openPanel(action);
   });
 }
@@ -520,8 +559,90 @@ function openPanel(kind) {
   $('answers').hidden = true;
   $('say').hidden = true;
   $('tail').hidden = true;
-  ({ settings: settingsPanel, presets: presetsPanel, about: aboutPanel })[kind]?.();
+  panelFocus = { row: 0, col: 0, shown: false };
+  ({ settings: settingsPanel, presets: presetsPanel, about: aboutPanel, keys: keysPanel })[kind]?.();
   restyle();
+}
+
+/* Keyboard in panels: j/k (↑↓) rows, h/l (←→) buttons in a row, Enter/Space
+   presses, Esc/q closes. The highlight shows only once the keyboard is used. */
+let panelFocus = { row: 0, col: 0, shown: false };
+
+function panelRows() {
+  const rows = [...$('panel-body').querySelectorAll('.row, .preset')].filter(r => r.querySelector('.btn'));
+  return [...rows, $('panel-close')];
+}
+
+function panelKey(e, key) {
+  const rows = panelRows();
+  const f = panelFocus;
+  const buttons = r => (r.classList.contains('btn') ? [r] : [...r.querySelectorAll('.btn')]);
+  const move = () => { f.shown = true; f.row = Math.max(0, Math.min(rows.length - 1, f.row)); f.col = Math.max(0, Math.min(buttons(rows[f.row]).length - 1, f.col)); Sound.move(); markPanelFocus(); };
+  // The first arrow or vim key only shows where you are (the chosen option of the first row).
+  if (!f.shown && ['ArrowDown', 'ArrowUp', 'ArrowLeft', 'ArrowRight', 'j', 'k', 'h', 'l', 'g', 'G'].includes(key)) {
+    f.col = Math.max(0, buttons(rows[0]).findIndex(b => b.classList.contains('on')));
+    move();
+    e.preventDefault();
+    return;
+  }
+  switch (key) {
+    case 'Escape': case 'q': Sound.confirm(); closePanel(); break;
+    case 'ArrowDown': case 'j': f.row++; f.col = Math.max(0, buttons(rows[Math.min(f.row, rows.length - 1)]).findIndex(b => b.classList.contains('on'))); move(); break;
+    case 'ArrowUp': case 'k': f.row--; f.col = Math.max(0, buttons(rows[Math.max(f.row, 0)]).findIndex(b => b.classList.contains('on'))); move(); break;
+    case 'ArrowRight': case 'l': f.col++; move(); break;
+    case 'ArrowLeft': case 'h': f.col--; move(); break;
+    case 'g': f.row = 0; move(); break;
+    case 'G': f.row = rows.length - 1; move(); break;
+    case 'Enter': case ' ':
+      if (!f.shown) { Sound.confirm(); closePanel(); break; } // as before: Enter closes
+      buttons(rows[f.row])[f.col]?.click();
+      break;
+    default: return;
+  }
+  e.preventDefault();
+}
+
+function markPanelFocus() {
+  document.querySelectorAll('#panel .kbd, #panel .kbd-row').forEach(el => el.classList.remove('kbd', 'kbd-row'));
+  if (mode !== 'panel' || !panelFocus.shown) return;
+  const rows = panelRows();
+  const row = rows[Math.min(panelFocus.row, rows.length - 1)];
+  if (!row) return;
+  const buttons = row.classList.contains('btn') ? [row] : [...row.querySelectorAll('.btn')];
+  row.classList.add('kbd-row');
+  buttons[Math.min(panelFocus.col, buttons.length - 1)]?.classList.add('kbd');
+}
+
+function keysPanel() {
+  $('panel-title').textContent = 'Tastatur';
+  const line = (k, what) => `<div class="key"><span class="k">${k}</span><span>${what}</span></div>`;
+  $('panel-body').innerHTML = `
+    <div class="keys">
+      <div>
+        <p class="muted">Für alle</p>
+        ${line('↑ ↓', 'Antwort aussuchen')}
+        ${line('Enter', 'antworten')}
+        ${line('1 – 9', 'Antwort direkt')}
+        ${line('Esc', 'zurück')}
+        ${line('Leertaste', 'Text ganz zeigen')}
+        ${line('⌘O', 'Dateien auswählen')}
+        ${line('⌘,', 'Einstellungen')}
+        ${line('⌘+ ⌘−', 'größer, kleiner')}
+        ${line('?', 'diese Übersicht')}
+      </div>
+      <div>
+        <p class="muted">Für Vim-Leute</p>
+        ${line('j k', 'runter, rauf')}
+        ${line('l', 'antworten')}
+        ${line('h', 'zurück')}
+        ${line('g G', 'erste, letzte Antwort')}
+        ${line('i /', 'selbst eintippen')}
+        ${line('o', 'Dateien auswählen')}
+        ${line('s p', 'Einstellungen, Vorlagen')}
+        ${line('q', 'Fenster zu')}
+        ${line('Ctrl-[', 'wie Esc')}
+      </div>
+    </div>`;
 }
 
 function closePanel() {
@@ -609,6 +730,7 @@ async function aboutPanel() {
       ${update ? `<div class="row update"><div class="label">Neu: Version ${escapeHtml(update.version)}</div></div>` : ''}
       <div class="row cli"><div class="label">Wolfgang im Terminal (<code>wolfgang</code>)</div></div>
       <p class="muted">${escapeHtml(note)}</p>
+      <p class="muted">Tastenkürzel: <b>?</b> zeigt alle, auch für Vim-Leute.</p>
       <p class="muted">Schrift: Pixelify Sans (SIL Open Font License)<br>Videos und Audio: FFmpeg (LGPL 2.1, ffmpeg.org)</p>`;
     body.querySelector('.update')?.appendChild(button('Auffrischen', false, installUpdate));
     const r = body.querySelector('.cli');
