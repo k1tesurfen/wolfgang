@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/readme/office.png" alt="Wolfgang sitzt in seinem Pixel-Büro hinter dem Schreibtisch, davor sitzt Wilma, die orange Bürokatze" width="100%">
+  <img src="docs/readme/screenshot.png" alt="Die Wolfgang-App: Wolfgang sitzt in seinem Pixel-Büro hinter dem Schreibtisch und fragt „Na? Was gibt's heute zu tun?“, davor sitzt Wilma, die orange Bürokatze" width="100%">
 </p>
 
 <h1 align="center">Wolfgang</h1>
