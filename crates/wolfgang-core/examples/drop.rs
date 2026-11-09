@@ -32,7 +32,7 @@ fn main() -> Result<()> {
             ..Default::default()
         }),
     };
-    let settings = RunSettings { images: Some(images), fonts: Some(FontSettings {}) };
+    let settings = RunSettings { images: Some(images), fonts: Some(FontSettings {}), ..Default::default() };
     let plan = ws.plan(&settings, if all { RerunPolicy::All } else { RerunPolicy::OnlyNew })?;
     for (p, why) in &plan.problems {
         println!("  ⚠ {}: {why}", p.display());

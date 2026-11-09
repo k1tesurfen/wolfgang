@@ -18,6 +18,8 @@ pub enum Error {
     Encode { format: &'static str, reason: String },
     #[error("Mit der Schrift stimmt was nicht: {0}")]
     Font(String),
+    #[error("{0}")]
+    Media(String),
     #[error("Ungültige Einstellung: {0}")]
     Settings(String),
     #[error("Abgebrochen")]

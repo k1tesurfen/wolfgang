@@ -6,6 +6,7 @@ use indicatif::{ProgressBar, ProgressStyle};
 use serde_json::json;
 use std::io::IsTerminal;
 use std::path::Path;
+use std::collections::HashMap;
 use std::process::ExitCode;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -22,7 +23,7 @@ static CONVERTING: AtomicBool = AtomicBool::new(false);
 pub fn install_ctrlc() {
     let _ = ctrlc::set_handler(|| {
         if CONVERTING.load(Ordering::SeqCst) && !CANCEL.swap(true, Ordering::SeqCst) {
-            eprintln!("\n  Okay, ich hör nach der aktuellen Datei auf …");
+            eprintln!("\n  Okay, ich hör auf …");
             return;
         }
         let _ = crossterm::execute!(std::io::stdout(), crossterm::cursor::Show);
@@ -109,9 +110,11 @@ fn with_progress(plan: &Plan, ui: &Ui, working: &[String]) -> wolfgang_core::Res
             &CANCEL,
         );
     }
-    let pb = ProgressBar::new(plan.jobs.len() as u64);
+    // The bar counts thousandths of files, so a long video moves it while it runs.
+    let total = plan.jobs.len();
+    let pb = ProgressBar::new(total as u64 * 1000);
     pb.set_style(
-        ProgressStyle::with_template("  {spinner:.yellow} {wide_msg}\n  {bar:32.yellow/238} {pos}/{len} · {elapsed}")
+        ProgressStyle::with_template("  {spinner:.yellow} {wide_msg}\n  {bar:32.yellow/238} {prefix} · {elapsed}")
             .expect("valid template")
             .progress_chars("█▓░")
             .tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
@@ -119,12 +122,28 @@ fn with_progress(plan: &Plan, ui: &Ui, working: &[String]) -> wolfgang_core::Res
     pb.enable_steady_tick(Duration::from_millis(120));
     let line = |i: usize| working.get(i % working.len().max(1)).cloned().unwrap_or_else(|| "Bin dran …".into());
     pb.set_message(line(0));
+    pb.set_prefix(format!("0/{total}"));
     let changed = Mutex::new((Instant::now(), 0usize));
+    // Files done, and how far each running file is.
+    let state = Mutex::new((0usize, HashMap::<std::path::PathBuf, f64>::new()));
     let report = execute(
         plan,
         &|e| {
+            let mut st = state.lock().unwrap();
+            match &e {
+                Event::FileProgress { rel, fraction, .. } => {
+                    st.1.insert(rel.clone(), *fraction);
+                }
+                Event::FileDone(f) => {
+                    st.0 += 1;
+                    st.1.remove(&f.rel);
+                }
+                _ => {}
+            }
+            let partial: f64 = st.1.values().sum();
+            pb.set_position(st.0 as u64 * 1000 + (partial * 1000.0) as u64);
+            pb.set_prefix(format!("{}/{total}", st.0));
             if let Event::FileDone(_) = e {
-                pb.inc(1);
                 let mut c = changed.lock().unwrap();
                 if c.0.elapsed() > Duration::from_secs(4) {
                     *c = (Instant::now(), c.1 + 1);
@@ -141,7 +160,10 @@ fn with_progress(plan: &Plan, ui: &Ui, working: &[String]) -> wolfgang_core::Res
 /// No questions: defaults, preset and flags decide.
 pub fn non_interactive(ui: &Ui, ws: Workspace, store: &mut UserStore, store_path: &Path, args: &RunArgs) -> ExitCode {
     let s = ws.summary();
-    let (settings, rerun) = match args.settings(store, s.images.total > 0, s.fonts.total > 0) {
+    if s.media_tools_missing {
+        ui.note("Für Videos und Audio fehlt mir mein Werkzeug (ffmpeg), die lass ich liegen. Installier mich am besten neu.");
+    }
+    let (settings, rerun) = match args.settings(store, s.piles()) {
         Ok(v) => v,
         Err(e) => {
             ui.error(&e);
@@ -190,8 +212,8 @@ pub fn non_interactive(ui: &Ui, ws: Workspace, store: &mut UserStore, store_path
         }
         ui.say(&lines, None);
     }
-    if settings.images.is_some() && report.converted > 0 {
-        store.last_run = Some(settings);
+    if report.converted > 0 {
+        store.remember_run(&settings);
         let _ = store.save(store_path);
     }
     if report.failed.is_empty() {

@@ -15,7 +15,7 @@ fn jpg(path: &Path) {
     // or Wolfgang rightly treats them as duplicates.
     static NEXT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
     let shade = NEXT.fetch_add(37, std::sync::atomic::Ordering::Relaxed);
-    let px = Pixels { width: 120, height: 80, rgba: vec![shade; 120 * 80 * 4], icc: None };
+    let px = Pixels { width: 120, height: 80, rgba: [shade, shade, shade, 255].repeat(120 * 80), icc: None };
     std::fs::write(path, image::encode(&px, ImageFormat::Jpg, 80.0).unwrap()).unwrap();
 }
 
@@ -30,6 +30,22 @@ fn hotel(t: &Path) -> PathBuf {
     }
     std::fs::write(root.join("preise.pdf"), "%PDF").unwrap();
     root
+}
+
+/// A file with a video/audio extension. The conversation only needs the pile;
+/// unreadable files count as "has sound" so Wolfgang still asks.
+fn fake_media(path: &Path) {
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    std::fs::write(path, path.to_string_lossy().as_bytes()).unwrap();
+}
+
+/// Videos and audio need the bundled ffmpeg (`scripts/build-ffmpeg.sh`); CI builds it.
+fn media_tools() -> bool {
+    let ok = wolfgang_core::media::tools().is_some();
+    if !ok {
+        eprintln!("skipped: no ffmpeg in target/ffmpeg (scripts/build-ffmpeg.sh)");
+    }
+    ok
 }
 
 fn talk(items: &[PathBuf], store: &UserStore) -> (Workspace, Conversation) {
@@ -165,7 +181,7 @@ fn everything_known_is_said_up_front() {
     let root = t.path().join("Alt");
     jpg(&root.join("a.jpg"));
     let ws = Workspace::open(std::slice::from_ref(&root)).unwrap();
-    let settings = wolfgang_core::RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Webp }), fonts: None };
+    let settings = wolfgang_core::RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Webp }), ..Default::default() };
     execute(&ws.plan(&settings, RerunPolicy::OnlyNew).unwrap(), &|_| {}, &AtomicBool::new(false)).unwrap();
 
     let (_, mut c) = talk(&[root], &UserStore::default());
@@ -246,7 +262,17 @@ fn random_conversations_always_end_cleanly() {
     std::fs::write(with_keywords.join("Schuhe/kw.txt"), "rote Schuhe").unwrap();
     let empty = t.path().join("Leer");
     std::fs::create_dir_all(&empty).unwrap();
-    let drops = [hotel_dir, std::mem::take(&mut with_keywords), empty];
+    let mut drops = vec![hotel_dir, std::mem::take(&mut with_keywords), empty];
+    if media_tools() {
+        let mixed = t.path().join("Alles");
+        jpg(&mixed.join("a.jpg"));
+        fake_media(&mixed.join("Film/clip.mov"));
+        fake_media(&mixed.join("Ton/interview.wav"));
+        let films = t.path().join("Filme");
+        fake_media(&films.join("a.mp4"));
+        fake_media(&films.join("b.mkv"));
+        drops.extend([mixed, films]);
+    }
 
     let mut store = UserStore::default();
     let mut rng = fastrand::Rng::with_seed(1);
@@ -259,7 +285,7 @@ fn random_conversations_always_end_cleanly() {
         let drop = &drops[round % drops.len()];
         let ws = Workspace::open(std::slice::from_ref(drop)).unwrap();
         let mut c = Conversation::new(builtin(), Context::new(&ws, &store), round as u64);
-        for _hop in 0..60 {
+        for _hop in 0..150 {
             match c.step().clone() {
                 Step::Ask { node, lines, answers, input, can_go_back, .. } => {
                     for l in lines.iter().chain(answers.iter().map(|a| &a.label)) {
@@ -307,6 +333,137 @@ fn random_conversations_always_end_cleanly() {
     assert!(!store.presets.is_empty() && store.last_run.is_some(), "the walk covered presets and last runs");
 }
 
+#[test]
+fn a_video_pile() {
+    if !media_tools() {
+        return;
+    }
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("Filme");
+    fake_media(&root.join("Drohne Strand.MOV"));
+    fake_media(&root.join("Team.mp4"));
+    let (ws, mut c) = talk(&[root], &UserStore::default());
+    assert!(said(&c).contains("Ich seh 2 Videos."), "{}", said(&c));
+    assert_eq!(node(&c), "video_format", "no mode question for videos");
+    let (_, _, labels) = ask(c.step());
+    assert!(labels[0].starts_with("MP4"), "{labels:?}");
+    pick(&mut c, "WebM");
+    let Step::Ask { answers, .. } = c.step() else { panic!() };
+    assert!(answers[1].current && answers[1].label.contains("1080p"), "Normal is the default: {answers:?}");
+    c.type_answer("99");
+    assert!(said(&c).contains("zwischen 144 und 4320"), "{}", said(&c));
+    pick(&mut c, "Originalgröße");
+    pick(&mut c, "Schöner");
+    pick(&mut c, "Ohne Ton");
+    assert!(said(&c).contains("2 Vorschaubilder"), "{}", said(&c));
+    pick(&mut c, "Nee");
+    assert_eq!(node(&c), "confirm");
+    assert!(said(&c).contains("Also: 2 Videos als WebM, Originalgröße, schöner, ohne Ton."), "{}", said(&c));
+    pick(&mut c, "Los");
+    let Step::Start { settings, .. } = c.step().clone() else { panic!("{:?}", c.step()) };
+    let v = settings.videos.clone().unwrap();
+    assert_eq!((v.format, v.size, v.sound, v.poster), (wolfgang_core::VideoFormat::Webm, None, false, false));
+    assert!(settings.images.is_none() && settings.audio.is_none());
+
+    let plan = ws.plan(&settings, RerunPolicy::OnlyNew).unwrap();
+    let targets: Vec<_> = plan.jobs.iter().map(|j| j.target.to_string_lossy().into_owned()).collect();
+    assert_eq!(targets, ["drohne-strand.webm", "team.webm"], "web-safe original names, no numbers");
+}
+
+#[test]
+fn an_audio_pile() {
+    if !media_tools() {
+        return;
+    }
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("Podcast");
+    fake_media(&root.join("Folge 1.wav"));
+    let (_, mut c) = talk(&[root], &UserStore::default());
+    assert!(said(&c).contains("Ich seh eine Audiodatei."), "{}", said(&c));
+    pick(&mut c, "AAC");
+    assert_eq!(node(&c), "audio_content");
+    pick(&mut c, "Sprache");
+    assert!(said(&c).contains("Also: eine Audiodatei als AAC (Sprache)."), "{}", said(&c));
+}
+
+#[test]
+fn a_mixed_pile_goes_photos_videos_audio_and_is_remembered_per_pile() {
+    if !media_tools() {
+        return;
+    }
+    let t = tempfile::tempdir().unwrap();
+    let root = hotel(t.path());
+    fake_media(&root.join("Film/rundgang.mov"));
+    fake_media(&root.join("Ton/begruessung.m4a"));
+    let mut store = UserStore::default();
+    let (ws, mut c) = talk(std::slice::from_ref(&root), &store);
+    assert!(said(&c).contains("3 Fotos, ein Video, eine Audiodatei und eine Schrift"), "{}", said(&c));
+    pick(&mut c, "Hochwertig");
+    pick(&mut c, "PNG");
+    assert_eq!(node(&c), "video_format");
+    assert!(said(&c).contains("ein Video"), "photos first, then: {}", said(&c));
+    pick(&mut c, "MP4");
+    pick(&mut c, "Klein");
+    pick(&mut c, "Ausgewogen");
+    pick(&mut c, "Mit Ton");
+    pick(&mut c, "Ja");
+    assert_eq!(node(&c), "audio_format");
+    pick(&mut c, "MP3");
+    pick(&mut c, "Musik, beste");
+    assert_eq!(node(&c), "confirm");
+    let text = said(&c);
+    assert!(text.contains("3 Fotos hochwertig als PNG; ein Video als MP4, 720p, mit Ton und Vorschaubild; eine Audiodatei als MP3 (Musik in bester Qualität), dazu eine Schrift als WOFF2"), "{text}");
+
+    // „Nochmal ändern“ walks through every pile again, with the answers marked.
+    pick(&mut c, "Nochmal");
+    assert_eq!(node(&c), "mode");
+    pick(&mut c, "Hochwertig");
+    let Step::Ask { answers, .. } = c.step() else { panic!() };
+    assert!(answers.iter().any(|a| a.current && a.label.starts_with("PNG")), "{answers:?}");
+    pick(&mut c, "PNG");
+    pick(&mut c, "MP4");
+    let Step::Ask { answers, .. } = c.step() else { panic!() };
+    assert!(answers[0].current, "720p still marked: {answers:?}");
+    for a in ["Klein", "Ausgewogen", "Mit Ton", "Ja", "MP3", "Sprache"] {
+        pick(&mut c, a);
+    }
+    pick(&mut c, "Los");
+    let Step::Start { settings, rerun, .. } = c.step().clone() else { panic!() };
+    let plan = ws.plan(&settings, rerun).unwrap();
+    let targets: Vec<_> = plan.jobs.iter().flat_map(|j| j.outputs().into_iter().map(|p| p.to_string_lossy().into_owned())).collect();
+    assert!(targets.contains(&"Film/rundgang.mp4".to_owned()) && targets.contains(&"Film/rundgang.webp".to_owned()), "{targets:?}");
+    assert!(targets.contains(&"Ton/begruessung.mp3".to_owned()), "{targets:?}");
+    c.finished(&wolfgang_core::Report { output_root: plan.output_root.clone(), converted: 2, ..Default::default() });
+    pick(&mut c, "Danke");
+    c.remember(&mut store);
+
+    // Next time, a drop with only a video: „letztes Mal“ talks about videos only.
+    let films = t.path().join("Filme");
+    fake_media(&films.join("neu.mp4"));
+    let (_, mut c) = talk(&[films], &store);
+    let (_, _, labels) = ask(c.step());
+    assert!(labels[0].contains("So wie letztes Mal (als MP4, 720p, mit Ton und Vorschaubild)"), "{labels:?}");
+    pick(&mut c, "letztes Mal");
+    assert_eq!(node(&c), "confirm", "nothing left to ask");
+
+    // And a drop with photos + audio picks up both remembered piles.
+    let (_, c) = talk(&[root], &store);
+    let (_, _, labels) = ask(c.step());
+    assert!(labels[0].contains("Fotos hochwertig als PNG") && labels[0].contains("Audio als MP3 (Sprache)"), "{labels:?}");
+}
+
+#[test]
+fn missing_media_tools_are_mentioned() {
+    // Simulated by a summary; the real lookup finds the tools in the source tree.
+    let mut s = wolfgang_core::Summary::default();
+    s.videos.total = 2;
+    s.media_tools_missing = true;
+    let ctx = Context { summary: s, output_root: "/x/y-wolfgang".into(), store: UserStore::default(), keyword_words: Default::default(), sample_image: None };
+    let c = Conversation::new(builtin(), ctx, 1);
+    assert_eq!(node(&c), "nothing");
+    assert!(said(&c).contains("fehlt mein Werkzeug"), "{}", said(&c));
+}
+
 fn val(yaml: &str) -> wolfgang_dialogue::script::Value {
     serde_norway::from_str(yaml).unwrap()
 }
@@ -316,7 +473,7 @@ fn flags_skip_answered_questions_but_keep_the_greeting() {
     let t = tempfile::tempdir().unwrap();
     let root = hotel(t.path());
     let store = UserStore {
-        last_run: Some(wolfgang_core::RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Png }), fonts: None }),
+        last_run: Some(wolfgang_core::RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Png }), ..Default::default() }),
         ..Default::default()
     };
     let ws = Workspace::open(std::slice::from_ref(&root)).unwrap();
@@ -345,7 +502,7 @@ fn flags_override_a_preset() {
     jpg(&root.join("a.jpg"));
     let mut store = UserStore::default();
     let web = wolfgang_core::WebSettings { max_side: 800, ..Default::default() };
-    store.save_preset("Klein", wolfgang_core::RunSettings { images: Some(ImageSettings::Web(web)), fonts: None }).unwrap();
+    store.save_preset("Klein", wolfgang_core::RunSettings { images: Some(ImageSettings::Web(web)), ..Default::default() }).unwrap();
     let ws = Workspace::open(std::slice::from_ref(&root)).unwrap();
     let fixed = vec![("preset".to_owned(), val("Klein")), ("web.quality".to_owned(), val("55"))];
     let mut c = Conversation::with_fixed(builtin(), Context::new(&ws, &store), 3, fixed);

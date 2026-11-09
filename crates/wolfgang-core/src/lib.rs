@@ -1,4 +1,5 @@
-//! Wolfgang's conversion engine, shared by the CLI and the desktop app.
+//! Wolfgang's conversion engine, shared by the CLI and the desktop app:
+//! images, fonts, and (via the bundled ffmpeg) videos and audio.
 //!
 //! Typical flow:
 //! 1. [`Workspace::open`] with whatever was dropped on the desk
@@ -10,6 +11,7 @@ pub mod error;
 pub mod font;
 pub mod image;
 pub mod kind;
+pub mod media;
 pub mod naming;
 pub mod run;
 pub mod runlog;
@@ -21,6 +23,9 @@ pub mod workspace;
 pub use error::{Error, Result};
 pub use kind::FileKind;
 pub use run::{execute, Event, Report};
-pub use settings::{FontSettings, ImageFormat, ImageSettings, Naming, RunSettings, WebFormat, WebSettings};
+pub use settings::{
+    AudioContent, AudioFormat, AudioSettings, FontSettings, ImageFormat, ImageSettings, Naming, RunSettings, VideoFormat, VideoQuality, VideoSettings,
+    WebFormat, WebSettings,
+};
 pub use store::UserStore;
 pub use workspace::{Plan, RerunPolicy, Summary, Workspace};

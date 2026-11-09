@@ -104,6 +104,132 @@ pub struct Naming {
     pub append_original: bool,
 }
 
+/// Shorter side of „Klein“ / „Normal“ videos (720p / 1080p).
+pub const VIDEO_SMALL: u32 = 720;
+pub const VIDEO_NORMAL: u32 = 1080;
+pub const VIDEO_SIZE_RANGE: std::ops::RangeInclusive<u32> = 144..=4320;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoFormat {
+    /// H.264 + AAC: plays everywhere.
+    #[default]
+    Mp4,
+    /// VP9 + Opus: smaller, slower to make.
+    Webm,
+}
+
+impl VideoFormat {
+    pub fn ext(self) -> &'static str {
+        match self {
+            Self::Mp4 => "mp4",
+            Self::Webm => "webm",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Mp4 => "MP4",
+            Self::Webm => "WebM",
+        }
+    }
+}
+
+/// „Kleiner / Ausgewogen / Schöner“, mapped per codec (no free number for videos).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoQuality {
+    Smaller,
+    #[default]
+    Balanced,
+    Nicer,
+}
+
+impl VideoQuality {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Smaller => "kleiner",
+            Self::Balanced => "ausgewogen",
+            Self::Nicer => "schöner",
+        }
+    }
+}
+
+/// Videos are always prepared for the web.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VideoSettings {
+    pub format: VideoFormat,
+    /// Shorter side in pixels (720 = „720p“, also for vertical videos);
+    /// `None` keeps the original size. Never upscales.
+    pub size: Option<u32>,
+    pub quality: VideoQuality,
+    /// Keep the sound track.
+    pub sound: bool,
+    /// Also write a still image (WebP) named like the video.
+    pub poster: bool,
+}
+
+impl Default for VideoSettings {
+    fn default() -> Self {
+        Self { format: VideoFormat::Mp4, size: Some(VIDEO_NORMAL), quality: VideoQuality::Balanced, sound: true, poster: true }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioFormat {
+    #[default]
+    Mp3,
+    /// AAC in an `.m4a`.
+    Aac,
+}
+
+impl AudioFormat {
+    pub fn ext(self) -> &'static str {
+        match self {
+            Self::Mp3 => "mp3",
+            Self::Aac => "m4a",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Mp3 => "MP3",
+            Self::Aac => "AAC",
+        }
+    }
+}
+
+/// „Was ist drauf?“ – Wolfgang picks channels and bitrate from it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioContent {
+    /// Podcast, interview: mono, small.
+    Speech,
+    #[default]
+    Music,
+    /// Music, best quality.
+    Best,
+}
+
+impl AudioContent {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Speech => "Sprache",
+            Self::Music => "Musik",
+            Self::Best => "Musik in bester Qualität",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AudioSettings {
+    pub format: AudioFormat,
+    pub content: AudioContent,
+}
+
 /// Fonts are converted 1:1 to WOFF2; nothing to configure yet.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct FontSettings {}
@@ -113,6 +239,8 @@ pub struct FontSettings {}
 #[serde(default)]
 pub struct RunSettings {
     pub images: Option<ImageSettings>,
+    pub videos: Option<VideoSettings>,
+    pub audio: Option<AudioSettings>,
     pub fonts: Option<FontSettings>,
 }
 
@@ -129,6 +257,15 @@ impl RunSettings {
             }
             if !QUALITY_RANGE.contains(&w.quality) {
                 return Err(Error::Settings(format!("Qualität {} liegt nicht zwischen 1 und 100", w.quality)));
+            }
+        }
+        if let Some(size) = self.videos.as_ref().and_then(|v| v.size) {
+            if !VIDEO_SIZE_RANGE.contains(&size) {
+                return Err(Error::Settings(format!(
+                    "Videogröße {size}p liegt nicht zwischen {}p und {}p",
+                    VIDEO_SIZE_RANGE.start(),
+                    VIDEO_SIZE_RANGE.end()
+                )));
             }
         }
         Ok(())
@@ -166,6 +303,8 @@ mod tests {
                 naming: Naming { prefix: "urlaub".into(), separator: Separator::Caps, ..Default::default() },
                 ..Default::default()
             })),
+            videos: Some(VideoSettings { format: VideoFormat::Webm, size: None, ..Default::default() }),
+            audio: Some(AudioSettings { format: AudioFormat::Aac, content: AudioContent::Speech }),
             fonts: Some(FontSettings {}),
         };
         let json = serde_json::to_string(&s).unwrap();
@@ -174,17 +313,21 @@ mod tests {
 
         let hq: RunSettings = serde_json::from_str(r#"{"images":{"mode":"high_quality","format":"png"}}"#).unwrap();
         assert_eq!(hq.images, Some(ImageSettings::HighQuality { format: ImageFormat::Png }));
+        assert_eq!((hq.videos, hq.audio), (None, None), "settings from 2.1 still load");
     }
 
     #[test]
     fn validates_ranges() {
         let mut w = WebSettings::default();
-        let ok = RunSettings { images: Some(ImageSettings::Web(w.clone())), fonts: None };
+        let ok = RunSettings { images: Some(ImageSettings::Web(w.clone())), ..Default::default() };
         assert!(ok.validate().is_ok());
         w.max_side = 2_000_000;
-        assert!(RunSettings { images: Some(ImageSettings::Web(w.clone())), fonts: None }.validate().is_err());
+        assert!(RunSettings { images: Some(ImageSettings::Web(w.clone())), ..Default::default() }.validate().is_err());
         w.max_side = 1400;
         w.quality = 0;
-        assert!(RunSettings { images: Some(ImageSettings::Web(w)), fonts: None }.validate().is_err());
+        assert!(RunSettings { images: Some(ImageSettings::Web(w)), ..Default::default() }.validate().is_err());
+        let video = |size| RunSettings { videos: Some(VideoSettings { size, ..Default::default() }), ..Default::default() };
+        assert!(video(None).validate().is_ok());
+        assert!(video(Some(100)).validate().is_err());
     }
 }

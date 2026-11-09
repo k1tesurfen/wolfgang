@@ -2,7 +2,8 @@
 
 use clap::{Args, Parser, Subcommand, ValueEnum};
 use std::path::PathBuf;
-use wolfgang_core::{ImageSettings, RerunPolicy, RunSettings, UserStore};
+use wolfgang_core::workspace::Piles;
+use wolfgang_core::{RerunPolicy, RunSettings, UserStore};
 use wolfgang_dialogue::draft::{Draft, Mode};
 use wolfgang_dialogue::script::Value;
 
@@ -10,8 +11,8 @@ use wolfgang_dialogue::script::Value;
 #[command(
     name = "wolfgang",
     version,
-    about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Schriften zu WOFF2.",
-    long_about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Schriften zu WOFF2.\n\n\
+    about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Schriften zu WOFF2.",
+    long_about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Schriften zu WOFF2.\n\n\
         Im Terminal fragt er dich, was du willst. Optionen beantworten seine Fragen vorab; \
         mit --yes (oder ohne Terminal) fragt er gar nicht und nimmt deine Standards.",
     args_conflicts_with_subcommands = true
@@ -55,6 +56,27 @@ pub struct RunArgs {
     /// Alten Dateinamen anhängen (Web)
     #[arg(short, long)]
     pub append: bool,
+    /// Videoformat
+    #[arg(long, value_enum)]
+    pub video_format: Option<VideoFormatArg>,
+    /// Videogröße: 720, 1080, original oder die kürzere Seite in Pixeln
+    #[arg(long, value_parser = parse_video_size)]
+    pub video_size: Option<VideoSizeArg>,
+    /// Videoqualität
+    #[arg(long, value_enum)]
+    pub video_quality: Option<VideoQualityArg>,
+    /// Videos ohne Ton
+    #[arg(long)]
+    pub no_sound: bool,
+    /// Kein Vorschaubild zu Videos
+    #[arg(long)]
+    pub no_poster: bool,
+    /// Audioformat
+    #[arg(long, value_enum)]
+    pub audio_format: Option<AudioFormatArg>,
+    /// Was ist auf den Audiodateien?
+    #[arg(long = "audio", value_enum)]
+    pub audio_content: Option<AudioContentArg>,
     /// Gespeicherte Vorlage benutzen
     #[arg(short, long)]
     pub preset: Option<String>,
@@ -142,7 +164,57 @@ pub enum SeparatorArg {
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum OnlyArg {
     Images,
+    Videos,
+    Audio,
     Fonts,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VideoFormatArg {
+    Mp4,
+    Webm,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VideoSizeArg {
+    Original,
+    ShorterSide(u32),
+}
+
+fn parse_video_size(s: &str) -> Result<VideoSizeArg, String> {
+    if s.eq_ignore_ascii_case("original") {
+        return Ok(VideoSizeArg::Original);
+    }
+    let range = wolfgang_core::settings::VIDEO_SIZE_RANGE;
+    match s.trim_end_matches(['p', 'P']).parse::<u32>() {
+        Ok(n) if range.contains(&n) => Ok(VideoSizeArg::ShorterSide(n)),
+        _ => Err(format!("720, 1080, original oder eine Zahl von {} bis {}", range.start(), range.end())),
+    }
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum VideoQualityArg {
+    Smaller,
+    Balanced,
+    Nicer,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AudioFormatArg {
+    Mp3,
+    Aac,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AudioContentArg {
+    Speech,
+    Music,
+    Best,
+}
+
+/// A value-enum's name as written on the command line (`smaller`, `mp3`, …).
+fn arg_name(v: impl ValueEnum) -> String {
+    v.to_possible_value().expect("no skipped variants").get_name().to_owned()
 }
 
 fn yaml(s: &str) -> Value {
@@ -258,6 +330,29 @@ impl RunArgs {
         if self.append {
             put("naming.append_original", yaml("true"));
         }
+        if let Some(v) = self.video_format {
+            put("video.format", text(&arg_name(v)));
+        }
+        match self.video_size {
+            Some(VideoSizeArg::Original) => put("video.size", text("original")),
+            Some(VideoSizeArg::ShorterSide(n)) => put("video.size", num(n)),
+            None => {}
+        }
+        if let Some(q) = self.video_quality {
+            put("video.quality", text(&arg_name(q)));
+        }
+        if self.no_sound {
+            put("video.sound", yaml("false"));
+        }
+        if self.no_poster {
+            put("video.poster", yaml("false"));
+        }
+        if let Some(a) = self.audio_format {
+            put("audio.format", text(&arg_name(a)));
+        }
+        if let Some(c) = self.audio_content {
+            put("audio.content", text(&arg_name(c)));
+        }
         if self.all {
             put("rerun", text("all"));
         }
@@ -265,8 +360,9 @@ impl RunArgs {
     }
 
     /// Settings without a conversation: defaults, then preset, then flags.
-    /// Without any mode choice, images are prepared for the web.
-    pub fn settings(&self, store: &UserStore, has_images: bool, has_fonts: bool) -> Result<(RunSettings, RerunPolicy), String> {
+    /// Without any mode choice, images are prepared for the web; videos and
+    /// audio get Wolfgang's defaults.
+    pub fn settings(&self, store: &UserStore, piles: Piles) -> Result<(RunSettings, RerunPolicy), String> {
         let mut draft = Draft::new(&store.defaults);
         let fixed = self.fixed(store)?;
         // Actions first (preset), then plain values so flags win.
@@ -276,10 +372,10 @@ impl RunArgs {
         if draft.mode.is_none() {
             draft.mode = Some(Mode::Web);
         }
-        let settings = draft.settings(has_images, has_fonts);
-        if let Some(ImageSettings::Web(_)) = &settings.images {
-            settings.validate().map_err(|e| e.to_string())?;
-        }
+        draft.videos_asked = true;
+        draft.audio_asked = true;
+        let settings = draft.settings(piles);
+        settings.validate().map_err(|e| e.to_string())?;
         Ok((settings, draft.rerun))
     }
 }
@@ -287,7 +383,9 @@ impl RunArgs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use wolfgang_core::{ImageFormat, WebFormat};
+    use wolfgang_core::{ImageFormat, ImageSettings, WebFormat};
+
+    const IMAGES: Piles = Piles { images: true, videos: false, audio: false, fonts: false };
 
     fn args(v: &[&str]) -> RunArgs {
         Cli::try_parse_from(std::iter::once("wolfgang").chain(v.iter().copied())).unwrap().run
@@ -296,7 +394,7 @@ mod tests {
     #[test]
     fn web_flags_imply_web_mode() {
         let store = UserStore::default();
-        let (s, _) = args(&["--size", "2000", "-n", "kunde", "x"]).settings(&store, true, false).unwrap();
+        let (s, _) = args(&["--size", "2000", "-n", "kunde", "x"]).settings(&store, IMAGES).unwrap();
         let Some(ImageSettings::Web(w)) = s.images else { panic!() };
         assert_eq!((w.max_side, w.naming.prefix.as_str(), w.format), (2000, "kunde", WebFormat::Webp));
     }
@@ -304,7 +402,7 @@ mod tests {
     #[test]
     fn jpg_implies_high_quality_and_conflicts_with_web_flags() {
         let store = UserStore::default();
-        let (s, _) = args(&["-f", "png", "x"]).settings(&store, true, false).unwrap();
+        let (s, _) = args(&["-f", "png", "x"]).settings(&store, IMAGES).unwrap();
         assert_eq!(s.images, Some(ImageSettings::HighQuality { format: ImageFormat::Png }));
         assert!(args(&["-f", "jpg", "--size", "800"]).fixed(&store).is_err());
         assert!(args(&["--hq", "-q", "50"]).fixed(&store).is_err());
@@ -321,12 +419,31 @@ mod tests {
     #[test]
     fn preset_then_flags() {
         let mut store = UserStore::default();
-        store.save_preset("Druck", RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Png }), fonts: None }).unwrap();
-        let (s, _) = args(&["-p", "druck", "x"]).settings(&store, true, true).unwrap();
+        store.save_preset("Druck", RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Png }), ..Default::default() }).unwrap();
+        let (s, _) = args(&["-p", "druck", "x"]).settings(&store, Piles { images: true, fonts: true, ..Default::default() }).unwrap();
         assert_eq!(s.images, Some(ImageSettings::HighQuality { format: ImageFormat::Png }));
         assert!(s.fonts.is_some());
         let err = args(&["-p", "nope"]).fixed(&store).unwrap_err();
         assert!(err.contains("Vorhanden: Druck"), "{err}");
+    }
+
+    #[test]
+    fn video_and_audio_flags() {
+        let store = UserStore::default();
+        let all = Piles { images: true, videos: true, audio: true, fonts: true };
+        let (s, _) = args(&["x"]).settings(&store, all).unwrap();
+        assert_eq!(s.videos, Some(wolfgang_core::VideoSettings::default()), "Wolfgang's defaults without a conversation");
+        assert_eq!(s.audio, Some(wolfgang_core::AudioSettings::default()));
+
+        let a = args(&["--video-format", "webm", "--video-size", "720p", "--video-quality", "nicer", "--no-sound", "--no-poster", "--audio-format", "aac", "--audio", "speech", "x"]);
+        let (s, _) = a.settings(&store, all).unwrap();
+        let v = s.videos.unwrap();
+        assert_eq!((v.format, v.size, v.quality, v.sound, v.poster), (wolfgang_core::VideoFormat::Webm, Some(720), wolfgang_core::VideoQuality::Nicer, false, false));
+        assert_eq!(s.audio.unwrap(), wolfgang_core::AudioSettings { format: wolfgang_core::AudioFormat::Aac, content: wolfgang_core::AudioContent::Speech });
+        let (s, _) = args(&["--video-size", "original", "x"]).settings(&store, all).unwrap();
+        assert_eq!(s.videos.unwrap().size, None);
+        assert!(Cli::try_parse_from(["wolfgang", "--video-size", "5"]).is_err());
+        assert!(args(&["--video-format", "webm", "x"]).settings(&store, IMAGES).unwrap().0.videos.is_none(), "no videos on the desk");
     }
 
     #[test]

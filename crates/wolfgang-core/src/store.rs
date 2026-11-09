@@ -97,6 +97,25 @@ impl UserStore {
         std::fs::rename(&tmp, path).map_err(io_err(path))
     }
 
+    /// Remembers a run as „letztes Mal“ **per pile**: a run with only videos
+    /// doesn't forget how the photos were done last time.
+    pub fn remember_run(&mut self, s: &RunSettings) {
+        if s.images.is_none() && s.videos.is_none() && s.audio.is_none() {
+            return;
+        }
+        let last = self.last_run.get_or_insert_with(RunSettings::default);
+        if s.images.is_some() {
+            last.images = s.images.clone();
+        }
+        if s.videos.is_some() {
+            last.videos = s.videos.clone();
+        }
+        if s.audio.is_some() {
+            last.audio = s.audio;
+        }
+        last.fonts = None;
+    }
+
     pub fn preset(&self, name: &str) -> Option<&Preset> {
         self.presets.iter().find(|p| p.name.eq_ignore_ascii_case(name.trim()))
     }
@@ -132,7 +151,7 @@ mod tests {
         assert_eq!(store, UserStore::default());
 
         store.defaults.web_format = WebFormat::Avif;
-        store.last_run = Some(RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Png }), fonts: None });
+        store.last_run = Some(RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Png }), ..Default::default() });
         store.save_preset("Blog-Bilder", RunSettings::default()).unwrap();
         store.save(&path).unwrap();
 
@@ -143,12 +162,27 @@ mod tests {
     fn presets_are_replaced_by_name_case_insensitively() {
         let mut s = UserStore::default();
         s.save_preset("Blog", RunSettings::default()).unwrap();
-        s.save_preset("  blog ", RunSettings { fonts: Some(Default::default()), images: None }).unwrap();
+        s.save_preset("  blog ", RunSettings { fonts: Some(Default::default()), ..Default::default() }).unwrap();
         assert_eq!(s.presets.len(), 1);
         assert!(s.preset("BLOG").unwrap().settings.fonts.is_some());
         assert!(s.save_preset("   ", RunSettings::default()).is_err());
         assert!(s.remove_preset("blog"));
         assert!(s.presets.is_empty());
+    }
+
+    #[test]
+    fn last_run_is_remembered_per_pile() {
+        use crate::settings::{AudioSettings, VideoSettings};
+        let mut s = UserStore::default();
+        s.remember_run(&RunSettings { fonts: Some(Default::default()), ..Default::default() });
+        assert_eq!(s.last_run, None, "fonts alone have nothing to remember");
+        let photos = Some(ImageSettings::HighQuality { format: ImageFormat::Png });
+        s.remember_run(&RunSettings { images: photos.clone(), fonts: Some(Default::default()), ..Default::default() });
+        s.remember_run(&RunSettings { videos: Some(VideoSettings::default()), ..Default::default() });
+        s.remember_run(&RunSettings { audio: Some(AudioSettings::default()), ..Default::default() });
+        let last = s.last_run.unwrap();
+        assert_eq!(last.images, photos, "videos and audio didn't erase the photos");
+        assert!(last.videos.is_some() && last.audio.is_some() && last.fonts.is_none());
     }
 
     #[test]

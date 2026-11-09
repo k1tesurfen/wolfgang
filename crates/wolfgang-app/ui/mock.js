@@ -38,7 +38,7 @@ if (!window.__TAURI__) {
       let done = 0;
       const t = setInterval(() => {
         done++;
-        emit('progress', { done, total, current: `Fotos/IMG_${4700 + done}.heic`, ok: true });
+        emit('progress', { done, total, current: `Fotos/IMG_${4700 + done}.heic`, fraction: done / total, ok: true });
         if (done === total) { clearInterval(t); node = 'done'; emit('finished', views.done); }
       }, 90);
     };

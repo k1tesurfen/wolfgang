@@ -142,3 +142,35 @@ fn legacy_reset_renames_only_logged_files() {
     assert!(d.join("DSC_1.jpg").exists() && d.join("Sommer-2023.jpg").exists());
     assert!(!d.join(".wolfgang_run_log.jsonl").exists() && d.join(".wolfgang_run_log.jsonl.done").exists());
 }
+
+#[test]
+fn videos_and_audio_without_questions() {
+    let Some(tools) = wolfgang_core::media::tools() else {
+        eprintln!("skipped: no ffmpeg in target/ffmpeg (scripts/build-ffmpeg.sh)");
+        return;
+    };
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("Messe");
+    jpg(&root.join("stand.jpg"), 40);
+    std::fs::create_dir_all(&root).unwrap();
+    let make = |args: &[&str], out: &str| {
+        let ok = Command::new(&tools.ffmpeg).args(["-v", "error", "-y"]).args(args).arg(root.join(out)).status().unwrap();
+        assert!(ok.success(), "{out}");
+    };
+    make(&["-f", "lavfi", "-i", "testsrc2=s=1280x720:d=1", "-f", "lavfi", "-i", "sine=d=1", "-c:v", "ffv1", "-c:a", "pcm_s16le", "-f", "matroska"], "Rundgang Halle 3.mkv");
+    make(&["-f", "lavfi", "-i", "sine=d=1", "-c:a", "pcm_s16le", "-f", "wav"], "Begrüßung.wav");
+    let home = t.path().join("home");
+
+    let o = wolfgang(&home, &["--yes", "--only", "videos", "--video-size", "original", "--no-poster", root.to_str().unwrap()]);
+    assert!(o.status.success(), "{}", text(&o));
+    let out = t.path().join("Messe-wolfgang");
+    assert!(out.join("rundgang-halle-3.mp4").exists(), "{}", text(&o));
+    assert!(!out.join("rundgang-halle-3.webp").exists() && !out.join("stand.webp").exists() && !out.join("begruessung.mp3").exists());
+
+    let o = wolfgang(&home, &["--yes", "--audio", "speech", root.to_str().unwrap()]);
+    assert!(o.status.success(), "{}", text(&o));
+    assert!(out.join("begruessung.mp3").exists() && out.join("stand-0001.webp").exists(), "{}", text(&o));
+
+    let settings = std::fs::read_to_string(home.join("settings.json")).unwrap();
+    assert!(settings.contains("\"videos\"") && settings.contains("\"speech\""), "remembered per pile: {settings}");
+}

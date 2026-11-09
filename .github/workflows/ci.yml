@@ -15,8 +15,15 @@ jobs:
         with:
           components: clippy
       - name: Build tools (only needed to compile the codecs)
-        run: brew install cmake nasm
+        run: brew install cmake nasm pkg-config autoconf automake libtool
       - uses: Swatinem/rust-cache@v2
+      # Wolfgang's own ffmpeg takes ~10 minutes to build; it's rebuilt only when the script changes.
+      - uses: actions/cache@v4
+        with:
+          path: target/ffmpeg
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg.sh') }}
+      - name: ffmpeg (videos + audio)
+        run: scripts/build-ffmpeg.sh
       - name: Lint
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Test

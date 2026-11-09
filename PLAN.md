@@ -3,7 +3,7 @@
 > Wolfgang is the personification of conversion: a cozy, bearded guy in a cardigan who sits behind his desk with a coffee and converts whatever you put in front of him.
 > Usability for non-technical colleagues is the top priority.
 
-Status: **approved**. Milestones 1–7 are done; v2 is ready for its first release.
+Status: **approved**. Milestones 1–9 are done; v2.2.0 brings video and audio.
 
 ---
 
@@ -17,8 +17,8 @@ Status: **approved**. Milestones 1–7 are done; v2 is ready for its first relea
 
 ### Out of scope for v2.0 (roadmap, but the architecture must allow it)
 
-- Audio (WAV/AIFF → MP3/AAC/Opus)
-- Video (MP4/WebM, poster frames), which will mean bundling ffmpeg
+- ~~Audio (WAV/AIFF → MP3/AAC/Opus)~~ — done in v2.2 (MP3/AAC)
+- ~~Video (MP4/WebM, poster frames), which will mean bundling ffmpeg~~ — done in v2.2
 - PDF image extraction
 - V3/V4: speech-to-text transcription of audio/video via Python + a local model (spoken word only)
 - English UI, Intel/Linux builds, code signing, auto-update
@@ -33,7 +33,7 @@ Status: **approved**. Milestones 1–7 are done; v2 is ready for its first relea
 | Codecs | Everything self-contained: Apple ImageIO (system) for decoding + statically linked encoders. No runtime dependencies. |
 | Platform | macOS Apple Silicon (arm64) only |
 | Distribution | Unsigned `.dmg` via GitHub Releases; the app offers to install the `wolfgang` CLI. Docs explain right-click → Öffnen on first launch. |
-| External tools | Allowed: colleagues' Macs can get Homebrew tools (e.g. `ffmpeg`) installed. Images/fonts stay dependency-free because that already works; **video/audio will use an installed `ffmpeg`** rather than bundling it. Wolfgang checks for missing tools and explains how to install them. |
+| External tools | None for users. ~~Video/audio would use a Homebrew `ffmpeg`~~ — **changed for v2.2: ffmpeg is bundled inside Wolfgang.app** (colleagues never update Homebrew; the self-update keeps the bundled copy fresh). See *Milestone 9*. |
 | Fonts | Converted 1:1 to WOFF2, **no subsetting** (decided after the spike, to avoid broken fonts) |
 | Language | German only. Strings still live in a separate dialogue/strings file so other languages can be added later. |
 | Voice | Gemütlich, uses *du*, light slang, warm, a few running gags, never annoying |
@@ -204,6 +204,7 @@ wolfgang/
 │   │   ├── src/run.rs        # parallel execution, progress events, cancel, atomic writes
 │   │   ├── src/image/        # ImageIO decode (+ colour), Lanczos resize, jpg/webp/avif/png encode
 │   │   ├── src/font.rs       # ttf/otf/woff → woff2 with round-trip check, web names
+│   │   ├── src/media.rs      # videos + audio via the bundled ffmpeg: probe, filters, progress, cancel
 │   │   ├── src/naming.rs     # SEO names, transliteration, separators
 │   │   ├── src/runlog.rs     # .wolfgang/run.jsonl
 │   │   ├── src/settings.rs   # RunSettings (what the conversation produces)
@@ -216,6 +217,7 @@ wolfgang/
 ├── assets/reference/         # the user's reference images (office + 8 portraits)
 ├── assets/pixel/             # generated pixel art + scene.json; src/*.sprite = hand-editable sources
 │   (crates/wolfgang-art)     # the build tool
+├── scripts/                  # build-app.sh (app + dmg), build-ffmpeg.sh (Wolfgang's own ffmpeg)
 ├── legacy/                   # old Bash wolfgang
 ├── spike/                    # M1 throwaway spike
 └── PLAN.md
@@ -317,6 +319,52 @@ Findings:
 - **Tested:** a 2.0.9 build pointed at a local server updated itself to 2.1.0 and restarted (`WOLFGANG_SELFTEST=update` checks and installs without asking). The swapped app passes `codesign --verify`, and the CLI inside it reports 2.1.0. UI screenshots via the mock (`?update`, `?update=install`).
 - **Limit:** 2.0.0 has no updater, so anyone on 2.0.0 installs 2.1 once by hand.
 
+### Milestone 9: video + audio (v2.2) — decisions (2026-11-09)
+
+Product questions were answered by the user one by one; this is the result. Video and audio ship together as **2.2.0**.
+
+**Bundled ffmpeg**
+- ffmpeg + ffprobe are bundled in `Wolfgang.app/Contents/MacOS/` next to the CLI, never taken from Homebrew. The self-update keeps them fresh.
+- **LGPL build, no GPL parts** (no x264/x265): Apple **VideoToolbox** for H.264, **libvpx** for VP9, Apple **AudioToolbox** (`aac_at`) for AAC, **LAME** for MP3, **Opus** for the sound in WebM, **zimg** for HDR → SDR tone mapping (iPhone videos are HDR/HLG by default and would look grey and flat as plain H.264). SVT-AV1 is left out because AV1 isn't offered (see below); adding it later is one block in the build script.
+- Built by `scripts/build-ffmpeg.sh` (pinned versions + checksums) into `target/ffmpeg/`, cached in CI, used by `scripts/build-app.sh` and `install.sh`.
+- Wolfgang finds the tools in: `$WOLFGANG_FFMPEG_DIR` → next to the running binary (symlinks resolved, so `/usr/local/bin/wolfgang` → the app works) → `../libexec/wolfgang/` (`install.sh`) → `target/ffmpeg/bin` of the source tree (development). If they're missing, Wolfgang says so and leaves videos/audio alone.
+
+**Video inputs:** `mp4, mov, m4v, mkv, webm, avi, mts, m2ts, mpg, mpeg, wmv, 3gp`. Animated GIFs stay photos (first frame), as before.
+
+**Video, always „fürs Web“** (no mode question, no HQ mode). Questions, each skipped when it doesn't apply:
+1. **Format:** „MP4 – läuft überall“ (H.264 + AAC, default) / „WebM – kleiner, dauert aber länger“ (VP9 + Opus). One file per video. VP9 rather than AV1 because Safari only plays AV1 on devices with AV1 hardware (iPhone 15 Pro+, M3+).
+2. **Size** (shorter side, never upscaled; a vertical 1080p video becomes 1080×1920): Klein (720p) – für Hintergrund- und Loop-Videos / **Normal (1080p)** / Originalgröße, plus a typed custom value.
+3. **Quality:** Kleiner / **Ausgewogen** / Schöner, mapped per codec. No typed custom value.
+4. **Sound:** „Mit Ton“ (default) / „Ohne Ton – für Hintergrund- und Loop-Videos“. Skipped when none of the videos has sound.
+5. **Poster frame:** „Soll ich dir ein Vorschaubild mitmachen?“ **Ja** / Nein. Taken from about 10 % into the video (not the often black first frame), same size as the video, as WebP, named like the video (`clip.mp4` + `clip.webp`).
+- In a mixed pile the photo questions come first, then „Jetzt die 3 Videos …“.
+- **Names:** web-safe original names, no numbering, no questions: „Drohne Strand FINAL.MOV“ → `drohne-strand-final.mp4`.
+- Always: rotation applied, HDR tone-mapped to SDR, frame rate capped at 60, metadata (incl. GPS) stripped, `faststart` MP4s so they start playing before they're fully loaded.
+
+**Audio inputs:** `wav, aif, aiff, flac, m4a, mp3, aac, ogg, opus, caf, wma`.
+
+**Audio questions:**
+1. **Format:** „MP3 – läuft überall“ (default) / „AAC (.m4a) – klingt bei gleicher Größe besser“. No Opus (Apple Music and older devices).
+2. **„Was ist drauf?“** Sprache (Podcast, Interview → mono, small) / **Musik** (stereo, good) / Musik, beste Qualität. Wolfgang picks the bitrates himself.
+- **Names:** web-safe original names, like videos. Text tags (title, artist …) are kept, embedded cover pictures are dropped.
+
+**Shared**
+- „So wie letztes Mal“ and presets cover photos, videos and audio. The last run is remembered **per pile**: a run with only videos doesn't forget how the photos were done last time. Piles the template doesn't cover are asked as usual.
+- Long videos report progress *within* the file (from ffmpeg's progress output), so the bar keeps moving. Cancelling stops a running ffmpeg right away; the half-written file is thrown away.
+- Originals are never touched; output goes into `<input>-wolfgang/` mirroring the folders, side by side with the photos. Same behaviour in the app and the CLI. CLI flags: `--video-format mp4|webm`, `--video-size 720|1080|original|N`, `--video-quality smaller|balanced|nicer`, `--no-sound`, `--no-poster`, `--audio-format mp3|aac`, `--audio speech|music|best`, and `--only images|videos|audio|fonts`.
+
+### Milestone 9 result (2026-11-09) ✅
+
+- **Piles:** `FileKind::Video` / `Audio`, `RunSettings.videos` / `.audio`, `Task::Video` / `Audio`, all in `src/media.rs` — the „Extending with new converters“ recipe held up. Old settings files and run logs load unchanged (new fields default to `None`).
+- **ffmpeg build:** ffmpeg 9.0.2 with libvpx 1.17.0, Opus 1.6.1, LAME 3.100, zimg 3.0.6: ffmpeg 21 MB + ffprobe 20 MB, linked only against macOS. Encoders/muxers are limited to what Wolfgang writes; all decoders, demuxers and filters are in, so anything can be read. The script refuses to finish if the result isn't LGPL or links anything outside macOS. App 72 MB, **dmg 31 MB** (was 9.9 MB).
+- **Calibration** (1080p excerpt of macOS's „Tahoe Day“ wallpaper video, SSIM against the lossless source): H.264 VideoToolbox q 50/58/65 ≈ 2.8/4.4/6.7 Mbit/s (SSIM 0.946/0.962/0.973); VP9 CRF 40/36/31 is about 40 % smaller at better SSIM, but about 3× slower than hardware H.264. 60 fps footage uses q−4 (≈ 20 % bigger than 30 fps instead of 55 %). A bitrate cap was tried and dropped: with `maxrate` set, VideoToolbox *raises* the bitrate of simple clips towards the cap.
+- **Software fallback:** Apple's software H.264 encoder (no free hardware encoder, e.g. VMs/CI) refuses constant quality; Wolfgang then retries once with a bitrate derived from size and quality step.
+- **HDR:** HLG/PQ is tone-mapped with zimg + `tonemap=mobius` at 203 nits reference white (BT.2408). On a synthetic HLG clip it gets back to the SDR original's brightness and saturation (saturation 30 vs 31; without tone mapping 15, i.e. grey and flat). Everything is tagged BT.709.
+- **Real-world:** the 2-minute 4K 240 fps HEVC wallpaper → 1080p60 MP4 + poster in 90 s (175 MB → 85 MB, M2 Pro).
+- **Conversation:** a `piles` node routes photos → videos → audio → re-run check; each pile has a `*_done` marker, so templates and CLI flags can answer whole piles. „Nochmal ändern“ (`restart`) asks every pile again with the previous answers marked. The greeting lists all piles („3 Fotos, ein Video, eine Audiodatei und eine Schrift“). If ffmpeg is missing, Wolfgang says so and leaves videos/audio alone.
+- **Tests:** 7 end-to-end media tests on clips generated with lavfi (MP4 + poster, vertical WebM without sound, HDR + 120 fps → SDR 60 fps without upscaling, MP3/AAC, name collisions with photos, progress, cancelling within a second, broken file), 3 new conversation tests plus video/audio drops in the 300 random conversations, CLI flags and an end-to-end CLI run. They're skipped with a note when ffmpeg isn't built; CI builds and caches it.
+- **Still open:** real iPhone footage (HDR, Dolby Vision, rotation) from colleagues to confirm the tone mapping beyond the synthetic test; whether CI's virtual Macs take the software-fallback path (the tests would show it).
+
 ---
 
 ## 8. Milestones
@@ -329,7 +377,7 @@ Findings:
 6. ✅ **Tauri app**: scene, drag & drop on the desk, bubbles, progress, result, settings/preset panels, SFX, CLI install. See *Milestone 6 result*.
 7. ✅ **Release**: `.dmg` build via GitHub Actions (macOS arm64 runner), README rewrite (German), first-launch instructions for the unsigned app. Released as v2.0.0. See *Milestone 7 result*.
 8. ✅ **Self-update** (v2.1). See *v2.1: self-update*.
-9. **Video** (next): MP4/WebM for the web, poster frames, with a bundled LGPL ffmpeg (Apple's hardware H.264/HEVC encoders, SVT-AV1, libvpx). Then **audio** (MP3/AAC/Opus) on the same ffmpeg.
+9. ✅ **Video + audio** (v2.2): MP4/WebM for the web, poster frames, MP3/AAC, on a bundled LGPL ffmpeg. See *Milestone 9* and *Milestone 9 result*.
 
 ---
 

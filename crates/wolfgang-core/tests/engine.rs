@@ -65,6 +65,7 @@ fn web(prefix: &str, format: WebFormat, max_side: u32) -> RunSettings {
             naming: Naming { prefix: prefix.into(), use_keyword_files: true, keywords_all: "Sommer".into(), ..Default::default() },
         })),
         fonts: Some(FontSettings {}),
+        ..Default::default()
     }
 }
 
@@ -169,7 +170,7 @@ fn high_quality_keeps_names_size_and_resolves_collisions() {
     write_image(&root.join("Foto.png"), &pixels(300, 200, true), ImageFormat::Png);
 
     let ws = Workspace::open(&[root]).unwrap();
-    let settings = RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Webp }), fonts: None };
+    let settings = RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Webp }), ..Default::default() };
     let report = run(&ws.plan(&settings, RerunPolicy::OnlyNew).unwrap());
     assert_eq!(report.converted, 2);
     assert_eq!(files_in(&ws.output_root), vec!["Foto-png.webp", "Foto.webp"]);
@@ -273,7 +274,7 @@ fn caps_separator_and_typed_folder_keywords() {
     write_image(&root.join("Schuhe/1.jpg"), &pixels(64, 64, false), ImageFormat::Jpg);
     let mut naming = Naming { prefix: "Müller".into(), separator: Separator::Caps, append_original: true, ..Default::default() };
     naming.folder_keywords.insert("Schuhe".into(), "rote Schuhe\nLeder".into());
-    let settings = RunSettings { images: Some(ImageSettings::Web(WebSettings { naming, ..Default::default() })), fonts: None };
+    let settings = RunSettings { images: Some(ImageSettings::Web(WebSettings { naming, ..Default::default() })), ..Default::default() };
 
     let ws = Workspace::open(&[root]).unwrap();
     let plan = ws.plan(&settings, RerunPolicy::OnlyNew).unwrap();

@@ -15,7 +15,7 @@ after_run: done
 after_cancel: stopped
 
 idle:
-  - "Leg mir einfach was auf den Tisch. Bilder, Schriften … ich guck's mir an."
+  - "Leg mir einfach was auf den Tisch. Bilder, Videos, Musik, Schriften … ich guck's mir an."
   - "Na? Was gibt's heute zu tun?"
   - "Kaffee ist da, Zeit hab ich auch. Her damit."
   - "Einfach rüberziehen und fallen lassen. Ich kümmer mich drum."
@@ -29,6 +29,7 @@ working:
   - "Schön eins nach dem anderen."
   - "Jubdidubdidub. Was? Ja gleich fertig."
   - "Das hier hin und den da dran. So haben wir's bald."
+  - "Läuft und läuft. Wie ein guter Film."
 
 nodes:
   # ── Ankommen ───────────────────────────────────────────────────────────────
@@ -41,16 +42,16 @@ nodes:
           "Moin! Zeig mal her, was du da hast.",
           "Ah, Arbeit. Schön. Mal gucken …",
         ]
-      - when: [has_images, has_fonts]
-        text: "Ich seh {images:ein Foto:Fotos} und {fonts:eine Schrift:Schriften}."
-      - when: [has_images, "!has_fonts"]
+      - when: [only_images]
         text:
           [
             "Ich seh {images:ein Foto:Fotos}.",
             "{images:Ein Foto:Fotos}, sehr schön.",
           ]
-      - when: [only_fonts]
-        text: "Ich seh {fonts:eine Schrift:Schriften}."
+      - when: ["!only_images", "!nothing_to_do"]
+        text: "Ich seh {pile_list}."
+      - when: [media_tools_missing, "!nothing_to_do"]
+        text: "Für Videos und Audio fehlt mir gerade mein Werkzeug, die lass ich liegen. Installier mich am besten nochmal neu."
       - when: [has_unknown, "!nothing_to_do"]
         text:
           [
@@ -69,14 +70,16 @@ nodes:
       - { when: [only_fonts], to: fonts_only }
       - { when: [has_last_run], to: how }
       - { when: [has_presets], to: how }
-      - { to: mode }
+      - { to: piles }
 
   nothing:
     mood: sorry
     say:
-      - when: [has_unknown]
-        text: "Hm. Da ist nix bei, was ich umwandeln kann. Bilder und Schriften, das ist mein Ding – der Rest kommt vielleicht später."
-      - when: ["!has_unknown"]
+      - when: [media_tools_missing]
+        text: "Videos und Audio würd ich ja machen, aber mir fehlt mein Werkzeug dafür. Installier mich am besten nochmal neu."
+      - when: [has_unknown, "!media_tools_missing"]
+        text: "Hm. Da ist nix bei, was ich umwandeln kann. Fotos, Videos, Musik und Schriften, das ist mein Ding."
+      - when: ["!has_unknown", "!media_tools_missing"]
         text: "Hm, da ist ja gar nix drin. Leer gefegt."
     answers:
       - { label: "Okay, schade", to: "@end" }
@@ -116,8 +119,19 @@ nodes:
       - {
           label: "Lass uns das neu einstellen",
           set: { use_last: false },
-          to: mode,
+          to: piles,
         }
+
+  # ── Welcher Stapel ist dran? ───────────────────────────────────────────────
+  # Erst die Fotos, dann Videos, dann Audio. Was eine Vorlage schon beantwortet
+  # hat, wird übersprungen.
+
+  piles:
+    go:
+      - { when: [has_images, "!images_asked"], to: mode }
+      - { when: [has_videos, "!videos_asked"], to: videos }
+      - { when: [has_audio, "!audio_asked"], to: audio }
+      - { to: rerun_check }
 
   # ── Bilder: Modus ──────────────────────────────────────────────────────────
 
@@ -144,18 +158,18 @@ nodes:
       - {
           label: "JPG – passt überall",
           set: { hq.format: jpg },
-          to: rerun_check,
+          to: images_done,
         }
-      - { label: "WebP", set: { hq.format: webp }, to: rerun_check }
+      - { label: "WebP", set: { hq.format: webp }, to: images_done }
       - {
           label: "AVIF – am kleinsten",
           set: { hq.format: avif },
-          to: rerun_check,
+          to: images_done,
         }
       - {
           label: "PNG – verlustfrei, auch mit Transparenz",
           set: { hq.format: png },
-          to: rerun_check,
+          to: images_done,
         }
 
   # ── Bilder: fürs Web ───────────────────────────────────────────────────────
@@ -251,7 +265,10 @@ nodes:
 
   keywords:
     go:
-      - { when: [mode_hq], to: rerun_check }
+      - { when: ["!has_images"], to: piles }
+      - { when: [mode_hq], to: images_done }
+      # A template without photos: ask the photo questions after all.
+      - { when: ["!mode_web"], to: piles }
       - { when: [keyword_files_found], to: keywords_found }
       - { when: [folders_without_keywords], to: keywords_ask }
       - { to: naming_style }
@@ -310,7 +327,7 @@ nodes:
 
   naming_style:
     go:
-      - { when: [from_template], to: rerun_check }
+      - { when: [from_template], to: images_done }
       - { to: separator }
 
   separator:
@@ -340,13 +357,181 @@ nodes:
       - {
           label: "Nee, lass mal",
           set: { naming.append_original: false },
-          to: rerun_check,
+          to: images_done,
         }
       - {
           label: "Ja, mit rein",
           set: { naming.append_original: true },
-          to: rerun_check,
+          to: images_done,
         }
+
+  images_done:
+    set: { images.asked: true }
+    go:
+      - { to: piles }
+
+  # ── Videos ─────────────────────────────────────────────────────────────────
+  # Videos gibt's immer nur fürs Web. Namen: der Originalname, websicher.
+
+  videos:
+    say:
+      - when: [several_piles, images_asked]
+        text: ["Jetzt noch {videos:ein Video:Videos}.", "So, und dann {videos:ein Video:Videos}."]
+    go:
+      - { to: video_format }
+
+  video_format:
+    mood: thinking
+    say:
+      - "MP4 oder WebM? MP4 läuft wirklich überall. WebM wird kleiner, aber ich brauch länger dafür."
+    answers:
+      - {
+          label: "MP4 – läuft überall",
+          set: { video.format: mp4 },
+          to: video_size,
+        }
+      - {
+          label: "WebM – kleiner, dauert aber länger",
+          set: { video.format: webm },
+          to: video_size,
+        }
+
+  video_size:
+    say:
+      - [
+          "Wie groß soll's werden?",
+          "Welche Größe? 1080p ist das, was man als Full HD kennt.",
+        ]
+    answers:
+      - {
+          label: "Klein (720p) – für Hintergrund- und Loop-Videos",
+          set: { video.size: 720 },
+          to: video_quality,
+        }
+      - {
+          label: "Normal (1080p) – passt fast immer",
+          set: { video.size: 1080 },
+          to: video_quality,
+        }
+      - {
+          label: "Originalgröße – so groß, wie's ist",
+          set: { video.size: original },
+          to: video_quality,
+        }
+    input:
+      kind: number
+      min: 144
+      max: 4320
+      unit: p
+      placeholder: "z. B. 540"
+      set: video.size
+      to: video_quality
+      invalid:
+        - [
+            "„{input}“? Gib mir 'ne Zahl zwischen {min} und {max}, zum Beispiel 540.",
+            "Da komm ich nicht mit. Irgendwas zwischen {min} und {max}, bitte.",
+          ]
+
+  video_quality:
+    say:
+      - "Und die Qualität? Weniger heißt kleinere Dateien."
+    answers:
+      - {
+          label: "Kleiner – reicht oft",
+          set: { video.quality: smaller },
+          to: video_sound_check,
+        }
+      - {
+          label: "Ausgewogen – mein Tipp",
+          set: { video.quality: balanced },
+          to: video_sound_check,
+        }
+      - {
+          label: "Schöner – wenn's glänzen soll",
+          set: { video.quality: nicer },
+          to: video_sound_check,
+        }
+
+  video_sound_check:
+    go:
+      - { when: [videos_have_sound], to: video_sound }
+      - { to: video_poster }
+
+  video_sound:
+    say:
+      - ["Ton behalten?", "Und der Ton? Bleibt der drin?"]
+    answers:
+      - { label: "Mit Ton", set: { video.sound: true }, to: video_poster }
+      - {
+          label: "Ohne Ton – für Hintergrund- und Loop-Videos",
+          set: { video.sound: false },
+          to: video_poster,
+        }
+
+  video_poster:
+    say:
+      - "Soll ich dir {videos:ein Vorschaubild:Vorschaubilder} mitmachen? Das zeigt die Webseite, bis das Video läuft."
+    answers:
+      - { label: "Ja, gern", set: { video.poster: true }, to: videos_done }
+      - {
+          label: "Nee, brauch ich nicht",
+          set: { video.poster: false },
+          to: videos_done,
+        }
+
+  videos_done:
+    set: { video.asked: true }
+    go:
+      - { to: piles }
+
+  # ── Audio ──────────────────────────────────────────────────────────────────
+
+  audio:
+    say:
+      - when: [several_piles, images_asked]
+        text: "Jetzt noch {audio_files:eine Audiodatei:Audiodateien}."
+      - when: [several_piles, "!images_asked", videos_asked]
+        text: "Jetzt noch {audio_files:eine Audiodatei:Audiodateien}."
+    go:
+      - { to: audio_format }
+
+  audio_format:
+    mood: thinking
+    say:
+      - "MP3 oder AAC? MP3 läuft überall. AAC klingt bei gleicher Größe ein bisschen besser."
+    answers:
+      - {
+          label: "MP3 – läuft überall",
+          set: { audio.format: mp3 },
+          to: audio_content,
+        }
+      - {
+          label: "AAC (.m4a) – klingt bei gleicher Größe besser",
+          set: { audio.format: aac },
+          to: audio_content,
+        }
+
+  audio_content:
+    mood: thinking
+    say:
+      - ["Was ist drauf?", "Und was hört man da?"]
+    answers:
+      - {
+          label: "Sprache – Podcast, Interview",
+          set: { audio.content: speech },
+          to: audio_done,
+        }
+      - { label: "Musik", set: { audio.content: music }, to: audio_done }
+      - {
+          label: "Musik, beste Qualität",
+          set: { audio.content: best },
+          to: audio_done,
+        }
+
+  audio_done:
+    set: { audio.asked: true }
+    go:
+      - { to: piles }
 
   # ── Schon mal gemacht? ─────────────────────────────────────────────────────
 
@@ -381,7 +566,12 @@ nodes:
       - ["Passt das so?", "Soll ich?", "Einverstanden?"]
     answers:
       - { label: "Los geht's!", to: "@start" }
-      - { label: "Nochmal ändern", when: [has_images], to: mode }
+      - {
+          label: "Nochmal ändern",
+          when: [has_media],
+          set: { restart: true },
+          to: piles,
+        }
       - { label: "Lass mal, doch nicht", to: cancelled }
 
   cancelled:
@@ -416,7 +606,7 @@ nodes:
     answers:
       - {
           label: "Als Vorlage merken",
-          when: [has_images, "!from_template", converted_any],
+          when: [has_media, "!from_template", converted_any],
           to: preset_name,
         }
       - { label: "Danke, Wolfgang!", to: "@end" }

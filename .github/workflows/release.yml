@@ -21,9 +21,16 @@ jobs:
             echo "Tag $GITHUB_REF_NAME, but tauri.conf.json says $app"; exit 1
           fi
       - uses: dtolnay/rust-toolchain@stable
-      - name: Build tools
-        run: brew install cmake nasm
+      - name: Build tools (only needed to compile the codecs)
+        run: brew install cmake nasm pkg-config autoconf automake libtool
       - uses: Swatinem/rust-cache@v2
+      # Wolfgang's own ffmpeg takes ~10 minutes to build; it's rebuilt only when the script changes.
+      - uses: actions/cache@v4
+        with:
+          path: target/ffmpeg
+          key: ffmpeg-${{ runner.os }}-${{ hashFiles('scripts/build-ffmpeg.sh') }}
+      - name: ffmpeg (videos + audio)
+        run: scripts/build-ffmpeg.sh
       - name: Tauri CLI
         run: cargo install tauri-cli --version "^2" --locked
       - name: Test

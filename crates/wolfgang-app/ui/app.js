@@ -387,7 +387,7 @@ async function startWork() {
   $('fill').style.width = '0%';
   $('progress-label').textContent = 'Geht los …';
   placeTail();
-  setChoices([{ label: 'Abbrechen', small: true, back: true, run: () => { api.invoke('cancel'); $('progress-label').textContent = 'Ich hör nach dieser Datei auf …'; } }]);
+  setChoices([{ label: 'Abbrechen', small: true, back: true, run: () => { api.invoke('cancel'); $('progress-label').textContent = 'Okay, ich hör auf …'; } }]);
   clearInterval(workLineTimer);
   workLineTimer = setInterval(async () => {
     if (mode !== 'work') return clearInterval(workLineTimer);
@@ -400,10 +400,10 @@ async function startWork() {
 
 function onProgress(p) {
   if (mode !== 'work') return;
-  $('fill').style.width = `${Math.round((p.done / Math.max(1, p.total)) * 100)}%`;
+  $('fill').style.width = `${Math.round((p.fraction ?? p.done / Math.max(1, p.total)) * 100)}%`;
   $('progress-label').textContent = `${p.done} von ${p.total} · ${p.current}`;
   placeTail();
-  Sound.stamp();
+  if (p.ok !== null && p.ok !== undefined) Sound.stamp();
 }
 
 function onFinished(view) {
@@ -601,11 +601,11 @@ async function aboutPanel() {
   const body = $('panel-body');
   const draw = (a, note = '') => {
     body.innerHTML = `
-      <p>Wolfgang ${escapeHtml(a.version)}<br><span class="muted">Wandelt Bilder und Schriften um, damit du's nicht musst.</span></p>
+      <p>Wolfgang ${escapeHtml(a.version)}<br><span class="muted">Wandelt Bilder, Videos, Audio und Schriften um, damit du's nicht musst.</span></p>
       ${update ? `<div class="row update"><div class="label">Neu: Version ${escapeHtml(update.version)}</div></div>` : ''}
       <div class="row cli"><div class="label">Wolfgang im Terminal (<code>wolfgang</code>)</div></div>
       <p class="muted">${escapeHtml(note)}</p>
-      <p class="muted">Schrift: Pixelify Sans (SIL Open Font License)</p>`;
+      <p class="muted">Schrift: Pixelify Sans (SIL Open Font License)<br>Videos und Audio: FFmpeg (LGPL 2.1, ffmpeg.org)</p>`;
     body.querySelector('.update')?.appendChild(button('Auffrischen', false, installUpdate));
     const r = body.querySelector('.cli');
     r.appendChild(a.cli_installed ? button('Installiert ✓', true, () => {}) : button('Installieren', false, async () => {

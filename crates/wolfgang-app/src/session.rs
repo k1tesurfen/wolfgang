@@ -8,7 +8,8 @@ use std::sync::Arc;
 use wolfgang_core::run::Report;
 use wolfgang_core::store::Defaults;
 use wolfgang_core::{Plan, UserStore, Workspace};
-use wolfgang_dialogue::context::describe_images;
+use wolfgang_core::workspace::Piles;
+use wolfgang_dialogue::context::describe_settings;
 use wolfgang_dialogue::{Context, Conversation, Script, Step};
 
 /// A step plus what the UI needs around it.
@@ -137,7 +138,9 @@ impl Office {
             .iter()
             .map(|p| PresetView {
                 name: p.name.clone(),
-                description: p.settings.images.as_ref().map(describe_images).unwrap_or_else(|| "nur Schriften".into()),
+                description: Some(describe_settings(&p.settings, Piles { images: true, videos: true, audio: true, fonts: true }))
+                    .filter(|d| !d.is_empty())
+                    .unwrap_or_else(|| "nur Schriften".into()),
             })
             .collect()
     }

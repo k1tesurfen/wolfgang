@@ -5,16 +5,19 @@ use crate::error::{io_err, Result};
 use crate::font;
 use crate::image::{ColorTarget, ImageTask};
 use crate::kind::FileKind;
+use crate::media::{self, VideoTask};
 use crate::naming;
 use crate::runlog::{self, RunLog};
 use crate::scan::{self, Scan, ScannedFile, OUTPUT_SUFFIX};
-use crate::settings::{self, ImageSettings, Naming, RunSettings};
+use crate::settings::{self, AudioSettings, ImageSettings, Naming, RunSettings};
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// Output folder for font results, inside the output root.
 pub const FONTS_DIR: &str = "fonts";
+/// Poster frames of videos are WebP, named like the video.
+pub const POSTER_EXT: &str = "webp";
 
 pub struct Workspace {
     pub scan: Scan,
@@ -25,6 +28,9 @@ pub struct Workspace {
     pub log: RunLog,
     /// Content hash per entry of `scan.files` (unknown files get an empty hash).
     hashes: Vec<String>,
+    /// Per entry of `scan.files`: does the video have sound? (`None` for
+    /// anything else, or if it couldn't be looked at.)
+    has_sound: Vec<Option<bool>>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -41,10 +47,46 @@ impl PileSummary {
     }
 }
 
+/// Which piles can be worked on.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct Piles {
+    pub images: bool,
+    pub videos: bool,
+    pub audio: bool,
+    pub fonts: bool,
+}
+
+impl Piles {
+    /// Images, videos or audio: everything that has questions.
+    pub fn media(self) -> bool {
+        self.images || self.videos || self.audio
+    }
+}
+
+impl Summary {
+    /// Videos and audio only count if the tools to convert them are there.
+    pub fn piles(&self) -> Piles {
+        let tools = !self.media_tools_missing;
+        Piles { images: self.images.total > 0, videos: tools && self.videos.total > 0, audio: tools && self.audio.total > 0, fonts: self.fonts.total > 0 }
+    }
+
+    /// All piles that get converted, for totals.
+    pub fn convertible(&self) -> Vec<&PileSummary> {
+        let p = self.piles();
+        [(p.images, &self.images), (p.videos, &self.videos), (p.audio, &self.audio), (p.fonts, &self.fonts)].into_iter().filter(|(on, _)| *on).map(|(_, s)| s).collect()
+    }
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct Summary {
     pub images: PileSummary,
+    pub videos: PileSummary,
+    pub audio: PileSummary,
     pub fonts: PileSummary,
+    /// Videos with a sound track (or that couldn't be checked).
+    pub videos_with_sound: usize,
+    /// There are videos or audio, but the bundled ffmpeg can't be found.
+    pub media_tools_missing: bool,
     pub unknown: Vec<PathBuf>,
     /// Files with identical content to an earlier file in this drop.
     pub duplicates: usize,
@@ -70,6 +112,8 @@ pub enum RerunPolicy {
 pub enum Task {
     Image(ImageTask),
     Font,
+    Video(VideoTask),
+    Audio(AudioSettings),
 }
 
 #[derive(Debug, Clone)]
@@ -84,6 +128,17 @@ pub struct Job {
     /// Relative source folder (index counter scope).
     pub dir: String,
     pub task: Task,
+}
+
+impl Job {
+    /// Every file this job writes, relative to the output root.
+    pub fn outputs(&self) -> Vec<&Path> {
+        let mut v = vec![self.target.as_path()];
+        if let Task::Video(VideoTask { poster: Some(p), .. }) = &self.task {
+            v.push(p);
+        }
+        v
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -108,35 +163,61 @@ impl Workspace {
             .par_iter()
             .map(|f| if f.kind == FileKind::Unknown { Ok(String::new()) } else { hash_file(&f.path) })
             .collect::<Result<Vec<_>>>()?;
-        Ok(Self { scan, output_root, source_key, log, hashes })
+        // Only to know whether to ask about sound; a broken file is dealt with later.
+        let has_sound = scan
+            .files
+            .par_iter()
+            .map(|f| (f.kind == FileKind::Video && media::tools().is_some()).then(|| media::probe(&f.path).map(|i| i.audio.is_some()).unwrap_or(true)))
+            .collect();
+        Ok(Self { scan, output_root, source_key, log, hashes, has_sound })
     }
 
     /// Leaves a whole pile alone (e.g. `--only fonts`): its files are neither
     /// counted nor converted.
     pub fn exclude(&mut self, kind: FileKind) {
-        let keep: Vec<bool> = self.scan.files.iter().map(|f| f.kind != kind).collect();
+        self.retain(|k| k != kind);
+    }
+
+    /// Leaves every pile but this one alone (`--only videos`). Unknown files are still listed.
+    pub fn keep_only(&mut self, kind: FileKind) {
+        self.retain(|k| k == kind || k == FileKind::Unknown);
+    }
+
+    fn retain(&mut self, keep: impl Fn(FileKind) -> bool) {
+        let keep: Vec<bool> = self.scan.files.iter().map(|f| keep(f.kind)).collect();
         let mut k = keep.iter();
         self.scan.files.retain(|_| *k.next().unwrap());
         let mut k = keep.iter();
         self.hashes.retain(|_| *k.next().unwrap());
-        if kind == FileKind::Image {
+        let mut k = keep.iter();
+        self.has_sound.retain(|_| *k.next().unwrap());
+        if self.scan.count(FileKind::Image) == 0 {
             self.scan.keyword_files.clear();
         }
     }
 
-    fn convertible(&self) -> impl Iterator<Item = (&ScannedFile, &String)> {
-        self.scan.files.iter().zip(&self.hashes).filter(|(f, _)| f.kind != FileKind::Unknown)
+    /// Known kinds with their hash and (videos only) whether they have sound.
+    fn convertible(&self) -> impl Iterator<Item = (&ScannedFile, &String, Option<bool>)> {
+        self.scan.files.iter().zip(&self.hashes).zip(&self.has_sound).filter(|((f, _), _)| f.kind != FileKind::Unknown).map(|((f, h), s)| (f, h, *s))
     }
 
     pub fn summary(&self) -> Summary {
         let mut s = Summary { previous_runs: self.log.runs, ..Default::default() };
         let mut seen = HashSet::new();
-        for (f, hash) in self.convertible() {
+        for (f, hash, sound) in self.convertible() {
             if !seen.insert(hash) {
                 s.duplicates += 1;
                 continue;
             }
-            let pile = if f.kind == FileKind::Image { &mut s.images } else { &mut s.fonts };
+            let pile = match f.kind {
+                FileKind::Image => &mut s.images,
+                FileKind::Video => {
+                    s.videos_with_sound += usize::from(sound.unwrap_or(true));
+                    &mut s.videos
+                }
+                FileKind::Audio => &mut s.audio,
+                _ => &mut s.fonts,
+            };
             pile.total += 1;
             pile.bytes += f.size;
             if self.log.files.contains_key(hash) {
@@ -144,6 +225,7 @@ impl Workspace {
             }
         }
         s.unknown = self.scan.of_kind(FileKind::Unknown).map(|f| f.rel.clone()).collect();
+        s.media_tools_missing = s.videos.total + s.audio.total > 0 && media::tools().is_none();
         for dir in self.scan.image_dirs() {
             match self.scan.keyword_files.get(&dir) {
                 Some(k) => s.keyword_files.push((dir, k.path.clone())),
@@ -169,10 +251,12 @@ impl Workspace {
         let mut taken: HashSet<String> = HashSet::new(); // lowercase: macOS file systems ignore case
         let mut seen = HashSet::new();
 
-        for (f, hash) in self.convertible() {
+        for (f, hash, _) in self.convertible() {
             let wanted = match f.kind {
                 FileKind::Image => settings.images.is_some(),
                 FileKind::Font => settings.fonts.is_some(),
+                FileKind::Video => settings.videos.is_some(),
+                FileKind::Audio => settings.audio.is_some(),
                 _ => false,
             };
             if !wanted {
@@ -185,6 +269,10 @@ impl Workspace {
             let known = self.log.files.get(hash);
             if known.is_some() && policy == RerunPolicy::OnlyNew {
                 plan.skipped_known.push(f.rel.clone());
+                continue;
+            }
+            if matches!(f.kind, FileKind::Video | FileKind::Audio) && media::tools().is_none() {
+                plan.problems.push((f.rel.clone(), "Mein Werkzeug für Videos und Audio (ffmpeg) fehlt".into()));
                 continue;
             }
             let previous_outputs: HashSet<&str> = known.map(|k| k.outputs.iter().map(String::as_str).collect()).unwrap_or_default();
@@ -209,6 +297,15 @@ impl Workspace {
                     let original = w.naming.append_original.then(|| file_stem(&f.rel));
                     naming::seo_name(&w.naming.prefix, &keywords, original.as_deref(), &file_stem(&f.rel), index, w.naming.separator)
                 }
+                (FileKind::Video, _) => {
+                    let v = settings.videos.clone().expect("wanted");
+                    job.task = Task::Video(VideoTask { poster: None, settings: v });
+                    web_safe_stem(&f.rel, "video")
+                }
+                (FileKind::Audio, _) => {
+                    job.task = Task::Audio(settings.audio.expect("wanted"));
+                    web_safe_stem(&f.rel, "audio")
+                }
                 (FileKind::Font, _) => match std::fs::read(&f.path).map_err(io_err(&f.path)).and_then(|d| font::to_sfnt(&d)) {
                     Ok(sfnt) => font::web_name(&sfnt).unwrap_or_else(|| naming::join(&naming::words(&file_stem(&f.rel)), naming::Separator::Dash)),
                     Err(e) => {
@@ -222,9 +319,17 @@ impl Workspace {
             let (folder, ext) = match &job.task {
                 Task::Image(t) => (PathBuf::from(&job.dir), t.format.ext()),
                 Task::Font => (Path::new(FONTS_DIR).join(&job.dir), "woff2"),
+                Task::Video(t) => (PathBuf::from(&job.dir), t.settings.format.ext()),
+                Task::Audio(a) => (PathBuf::from(&job.dir), a.format.ext()),
             };
+            let poster = matches!(&job.task, Task::Video(t) if t.settings.poster);
+            let exts: &[&str] = if poster { &[ext, POSTER_EXT] } else { &[ext] };
             let original_ext = f.rel.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
-            job.target = self.free_target(&folder, &stem, &original_ext, ext, &mut taken, &previous_outputs);
+            let name = self.free_name(&folder, &stem, &original_ext, exts, &mut taken, &previous_outputs);
+            job.target = folder.join(format!("{name}.{ext}"));
+            if let Task::Video(t) = &mut job.task {
+                t.poster = poster.then(|| folder.join(format!("{name}.{POSTER_EXT}")));
+            }
             plan.jobs.push(job);
         }
         Ok(plan)
@@ -241,18 +346,21 @@ impl Workspace {
         naming::keyword_words(typed)
     }
 
-    /// `stem.ext`, or `stem-<origext>.ext` / `stem-2.ext` … if that's taken
-    /// in this run or by a file on disk that isn't this source's own earlier output.
-    fn free_target(&self, folder: &Path, stem: &str, original_ext: &str, ext: &str, taken: &mut HashSet<String>, own: &HashSet<&str>) -> PathBuf {
+    /// `stem`, or `stem-<origext>` / `stem-2` … if `stem.<ext>` is taken (for any
+    /// of `exts`) in this run or by a file on disk that isn't this source's own earlier output.
+    fn free_name(&self, folder: &Path, stem: &str, original_ext: &str, exts: &[&str], taken: &mut HashSet<String>, own: &HashSet<&str>) -> String {
         let candidates = std::iter::once(stem.to_owned())
             .chain((!original_ext.is_empty()).then(|| format!("{stem}-{original_ext}")))
             .chain((2..).map(|n| format!("{stem}-{n}")));
         for name in candidates {
-            let rel = folder.join(format!("{name}.{ext}"));
-            let rel_str = rel_string(&rel);
-            let on_disk = self.output_root.join(&rel).exists() && !own.contains(rel_str.as_str());
-            if !on_disk && taken.insert(rel_str.to_lowercase()) {
-                return rel;
+            let rels: Vec<String> = exts.iter().map(|ext| rel_string(&folder.join(format!("{name}.{ext}")))).collect();
+            let free = rels.iter().all(|rel| {
+                let on_disk = self.output_root.join(rel).exists() && !own.contains(rel.as_str());
+                !on_disk && !taken.contains(&rel.to_lowercase())
+            });
+            if free {
+                taken.extend(rels.iter().map(|r| r.to_lowercase()));
+                return name;
             }
         }
         unreachable!("infinite candidates")
@@ -261,6 +369,16 @@ impl Workspace {
 
 pub(crate) fn rel_string(p: &Path) -> String {
     p.components().map(|c| c.as_os_str().to_string_lossy()).collect::<Vec<_>>().join("/")
+}
+
+/// „Drohne Strand FINAL.MOV“ → `drohne-strand-final`
+fn web_safe_stem(p: &Path, fallback: &str) -> String {
+    let name = naming::join(&naming::words(&file_stem(p)), naming::Separator::Dash);
+    if name.is_empty() {
+        fallback.to_owned()
+    } else {
+        name
+    }
 }
 
 fn file_stem(p: &Path) -> String {

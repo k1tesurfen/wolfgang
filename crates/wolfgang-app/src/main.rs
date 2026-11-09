@@ -58,7 +58,10 @@ struct Progress {
     done: usize,
     total: usize,
     current: String,
-    ok: bool,
+    /// Overall progress 0–1, including how far running videos are.
+    fraction: f64,
+    /// `Some` when a file just finished (stamp!), `None` for progress within a file.
+    ok: Option<bool>,
 }
 
 /// Starts converting in the background. Progress arrives as `progress` events,
@@ -70,14 +73,26 @@ fn start(app: AppHandle, state: State<AppState>) -> Res<()> {
     cancel.store(false, Ordering::SeqCst);
     std::thread::spawn(move || {
         let total = plan.jobs.len();
-        let done = std::sync::atomic::AtomicUsize::new(0);
+        // Files done, and how far each running file is.
+        let state = std::sync::Mutex::new((0usize, std::collections::HashMap::<std::path::PathBuf, f64>::new()));
         let report = wolfgang_core::execute(
             &plan,
             &|e| {
-                if let Event::FileDone(f) = e {
-                    let done = done.fetch_add(1, Ordering::SeqCst) + 1;
-                    let _ = app.emit("progress", Progress { done, total, current: f.rel.display().to_string(), ok: f.outcome.is_ok() });
-                }
+                let mut st = state.lock().unwrap_or_else(|e| e.into_inner());
+                let (current, ok) = match &e {
+                    Event::FileProgress { rel, fraction, .. } => {
+                        st.1.insert(rel.clone(), *fraction);
+                        (rel, None)
+                    }
+                    Event::FileDone(f) => {
+                        st.0 += 1;
+                        st.1.remove(&f.rel);
+                        (&f.rel, Some(f.outcome.is_ok()))
+                    }
+                    _ => return,
+                };
+                let fraction = (st.0 as f64 + st.1.values().sum::<f64>()) / total.max(1) as f64;
+                let _ = app.emit("progress", Progress { done: st.0, total, current: current.display().to_string(), fraction, ok });
             },
             &cancel,
         );

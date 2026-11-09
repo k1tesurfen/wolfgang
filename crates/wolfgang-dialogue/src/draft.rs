@@ -4,7 +4,8 @@
 use crate::script::Value;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use wolfgang_core::settings::{FontSettings, ImageFormat, ImageSettings, RunSettings, WebSettings};
+use wolfgang_core::settings::{AudioSettings, FontSettings, ImageFormat, ImageSettings, RunSettings, VideoSettings, WebSettings};
+use wolfgang_core::workspace::Piles;
 use wolfgang_core::store::{Defaults, UserStore};
 use wolfgang_core::RerunPolicy;
 
@@ -21,6 +22,17 @@ pub const KEYS: &[&str] = &[
     "naming.folder_keywords",
     "naming.separator",
     "naming.append_original",
+    "images.asked",
+    "video.format",
+    "video.size",
+    "video.quality",
+    "video.sound",
+    "video.poster",
+    "video.asked",
+    "audio.format",
+    "audio.content",
+    "audio.asked",
+    "restart",
     "rerun",
     "use_last",
     "preset",
@@ -46,6 +58,13 @@ pub struct Draft {
     pub mode: Option<Mode>,
     pub web: WebSettings,
     pub hq_format: ImageFormat,
+    /// The photo questions are done (CLI flags may set `mode` long before that).
+    pub images_asked: bool,
+    pub video: VideoSettings,
+    /// The video questions are answered (or came from a template).
+    pub videos_asked: bool,
+    pub audio: AudioSettings,
+    pub audio_asked: bool,
     pub rerun: RerunPolicy,
     pub template: Option<Template>,
     pub save_preset: Option<String>,
@@ -57,7 +76,19 @@ impl Draft {
         let mut web = WebSettings { format: d.web_format, max_side: d.max_side, quality: d.quality, ..Default::default() };
         web.naming.separator = d.separator;
         web.naming.use_keyword_files = true;
-        Self { mode: None, web, hq_format: d.hq_format, rerun: RerunPolicy::OnlyNew, template: None, save_preset: None }
+        Self {
+            mode: None,
+            web,
+            hq_format: d.hq_format,
+            images_asked: false,
+            video: VideoSettings::default(),
+            videos_asked: false,
+            audio: AudioSettings::default(),
+            audio_asked: false,
+            rerun: RerunPolicy::OnlyNew,
+            template: None,
+            save_preset: None,
+        }
     }
 
     /// Applies one `key: value`. `folder` is the current item of a `foreach` node.
@@ -78,6 +109,27 @@ impl Draft {
             }
             "naming.separator" => n.separator = typed(value)?,
             "naming.append_original" => n.append_original = typed(value)?,
+            "images.asked" => self.images_asked = typed(value)?,
+            "video.format" => self.video.format = typed(value)?,
+            // `original` or the shorter side in pixels
+            "video.size" => self.video.size = if value.as_str() == Some("original") { None } else { Some(typed(value)?) },
+            "video.quality" => self.video.quality = typed(value)?,
+            "video.sound" => self.video.sound = typed(value)?,
+            "video.poster" => self.video.poster = typed(value)?,
+            "video.asked" => self.videos_asked = typed(value)?,
+            "audio.format" => self.audio.format = typed(value)?,
+            "audio.content" => self.audio.content = typed(value)?,
+            "audio.asked" => self.audio_asked = typed(value)?,
+            // „Nochmal ändern“: every pile is asked again, current answers stay marked.
+            "restart" => {
+                if typed::<bool>(value)? {
+                    self.mode = None;
+                    self.images_asked = false;
+                    self.videos_asked = false;
+                    self.audio_asked = false;
+                    self.template = None;
+                }
+            }
             "rerun" => self.rerun = typed(value)?,
             "use_last" => {
                 if typed::<bool>(value)? {
@@ -112,6 +164,16 @@ impl Draft {
             "naming.separator" => serde_norway::to_value(n.separator),
             "naming.append_original" => serde_norway::to_value(n.append_original),
             "naming.use_keyword_files" => serde_norway::to_value(n.use_keyword_files),
+            "video.format" => serde_norway::to_value(self.video.format),
+            "video.size" => match self.video.size {
+                Some(px) => serde_norway::to_value(px),
+                None => serde_norway::to_value("original"),
+            },
+            "video.quality" => serde_norway::to_value(self.video.quality),
+            "video.sound" => serde_norway::to_value(self.video.sound),
+            "video.poster" => serde_norway::to_value(self.video.poster),
+            "audio.format" => serde_norway::to_value(self.audio.format),
+            "audio.content" => serde_norway::to_value(self.audio.content),
             "rerun" => serde_norway::to_value(self.rerun),
             _ => return None,
         };
@@ -134,15 +196,29 @@ impl Draft {
             }
             None => {}
         }
+        if let Some(v) = &s.videos {
+            self.video = v.clone();
+            self.videos_asked = true;
+        }
+        if let Some(a) = s.audio {
+            self.audio = a;
+            self.audio_asked = true;
+        }
     }
 
-    pub fn settings(&self, has_images: bool, has_fonts: bool) -> RunSettings {
-        let images = match (has_images, self.mode) {
+    /// The settings for the piles on the desk; piles not asked about yet stay `None`.
+    pub fn settings(&self, piles: Piles) -> RunSettings {
+        let images = match (piles.images, self.mode) {
             (true, Some(Mode::Web)) => Some(ImageSettings::Web(self.web.clone())),
             (true, Some(Mode::Hq)) => Some(ImageSettings::HighQuality { format: self.hq_format }),
             _ => None,
         };
-        RunSettings { images, fonts: has_fonts.then(FontSettings::default) }
+        RunSettings {
+            images,
+            videos: (piles.videos && self.videos_asked).then(|| self.video.clone()),
+            audio: (piles.audio && self.audio_asked).then_some(self.audio),
+            fonts: piles.fonts.then(FontSettings::default),
+        }
     }
 }
 
@@ -182,14 +258,15 @@ mod tests {
         let mut w = WebSettings { max_side: 2400, ..Default::default() };
         w.naming.prefix = "kunde".into();
         w.naming.keywords_all = "alte Stichworte".into();
-        store.last_run = Some(RunSettings { images: Some(ImageSettings::Web(w)), fonts: None });
-        store.save_preset("Druck", RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Png }), fonts: None }).unwrap();
+        store.last_run = Some(RunSettings { images: Some(ImageSettings::Web(w)), videos: Some(VideoSettings { size: None, ..Default::default() }), ..Default::default() });
+        store.save_preset("Druck", RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Png }), ..Default::default() }).unwrap();
 
         let mut d = Draft::new(&store.defaults);
         d.apply("use_last", &v("true"), &store, None).unwrap();
         assert_eq!((d.mode, d.web.max_side, d.web.naming.prefix.as_str()), (Some(Mode::Web), 2400, "kunde"));
         assert!(d.web.naming.keywords_all.is_empty());
         assert_eq!(d.template, Some(Template::LastRun));
+        assert!(d.videos_asked && d.video.size.is_none() && !d.audio_asked, "videos came along, audio still to ask");
 
         d.apply("preset", &v("druck"), &store, None).unwrap();
         assert_eq!((d.mode, d.hq_format), (Some(Mode::Hq), ImageFormat::Png));
@@ -200,12 +277,23 @@ mod tests {
     #[test]
     fn builds_run_settings_per_pile() {
         let store = UserStore::default();
+        let all = Piles { images: true, videos: true, audio: true, fonts: true };
         let mut d = Draft::new(&store.defaults);
-        assert_eq!(d.settings(true, true).images, None, "no mode chosen yet");
+        assert_eq!(d.settings(all).images, None, "no mode chosen yet");
+        assert_eq!(d.settings(all).videos, None, "videos not asked yet");
         d.apply("mode", &v("hq"), &store, None).unwrap();
-        let s = d.settings(true, false);
+        d.apply("video.size", &v("original"), &store, None).unwrap();
+        assert_eq!(d.get("video.size"), Some(v("original")));
+        d.apply("video.size", &v("720"), &store, None).unwrap();
+        d.apply("video.asked", &v("true"), &store, None).unwrap();
+        let s = d.settings(Piles { images: true, videos: true, ..Default::default() });
         assert!(matches!(s.images, Some(ImageSettings::HighQuality { .. })));
-        assert!(s.fonts.is_none());
-        assert!(d.settings(false, true).images.is_none());
+        assert_eq!(s.videos.unwrap().size, Some(720));
+        assert!(s.fonts.is_none() && s.audio.is_none());
+        assert!(d.settings(Piles { fonts: true, ..Default::default() }).images.is_none());
+
+        d.apply("restart", &v("true"), &store, None).unwrap();
+        assert!(d.mode.is_none() && !d.images_asked && !d.videos_asked);
+        assert_eq!(d.video.size, Some(720), "old answers stay as the marked default");
     }
 }

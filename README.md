@@ -10,13 +10,18 @@ fertig.
   mit suchmaschinenfreundlichen Dateinamen wie `hotel-seeblick-terrasse-0001.webp`
 - **Bilder hochwertig behalten:** nur ein anderes Format (JPG, WebP, AVIF, PNG), Originalgröße,
   Farbprofil bleibt erhalten
+- **Videos fürs Web:** MP4 (läuft überall) oder WebM (kleiner), 720p, 1080p oder Originalgröße,
+  auf Wunsch ohne Ton und mit Vorschaubild. iPhone-Videos in HDR sehen danach nicht flau aus.
+- **Audio:** MP3 oder AAC (.m4a), passend für Sprache (Podcast, Interview) oder Musik
 - **Schriften:** TTF, OTF und WOFF werden zu WOFF2 – eins zu eins, nichts wird weggelassen
-- **Liest fast alles:** JPG, PNG, HEIC, AVIF, WebP, GIF, TIFF und Kamera-RAW (CR2, CR3, NEF, ARW, DNG)
+- **Liest fast alles:** JPG, PNG, HEIC, AVIF, WebP, GIF, TIFF und Kamera-RAW (CR2, CR3, NEF, ARW, DNG);
+  MP4, MOV, M4V, MKV, WebM, AVI, MTS, MPG, WMV, 3GP; WAV, AIFF, FLAC, M4A, MP3, AAC, OGG, Opus, CAF, WMA
 
 Wolfgang gibt es als **App** (ein kleines Pixel-Büro, in dem du mit ihm redest)
 und als **Kommandozeile** (`wolfgang`) für Skripte und Terminal-Fans.
 
-Läuft auf Macs mit Apple-Chip ab macOS 13. Es muss nichts zusätzlich installiert werden.
+Läuft auf Macs mit Apple-Chip ab macOS 13. Es muss nichts zusätzlich installiert werden –
+auch kein ffmpeg, Wolfgang bringt sein eigenes mit.
 
 ---
 
@@ -87,6 +92,8 @@ Optionen beantworten seine Fragen vorab. Mit `--yes` (oder in Skripten) fragt er
 wolfgang --web -f avif -d 1600 -n "Hotel Seeblick" ~/Bilder/Hotel
 wolfgang --hq -f png ~/Scans
 wolfgang --only fonts ~/Projekt
+wolfgang --only videos --video-format webm --video-size 720 --no-sound ~/Filme/Loop
+wolfgang --audio speech ~/Podcast
 wolfgang -p "Blog-Bilder" --yes ~/Bilder/Neu
 wolfgang --json --yes ~/Bilder | jq .        # eine JSON-Zeile pro Ereignis
 ```
@@ -101,8 +108,14 @@ wolfgang --json --yes ~/Bilder | jq .        # eine JSON-Zeile pro Ereignis
 | `-k, --keywords` | Stichworte für Ordner ohne Stichwortzettel |
 | `-s, --separator` | `dash` (bild-name), `underscore` (bild_name), `caps` (BildName) |
 | `-a, --append` | alten Dateinamen mit in den neuen Namen |
+| `--video-format` | `mp4` (Standard) oder `webm` |
+| `--video-size` | `720`, `1080` (Standard), `original` oder die kürzere Seite in Pixeln |
+| `--video-quality` | `smaller`, `balanced` (Standard), `nicer` |
+| `--no-sound` / `--no-poster` | Videos ohne Ton / ohne Vorschaubild |
+| `--audio-format` | `mp3` (Standard) oder `aac` |
+| `--audio` | was drauf ist: `speech`, `music` (Standard), `best` |
 | `-p, --preset` | gespeicherte Vorlage benutzen |
-| `--only images\|fonts` | nur einen Stapel bearbeiten |
+| `--only images\|videos\|audio\|fonts` | nur einen Stapel bearbeiten |
 | `--all` | auch schon Umgewandeltes nochmal machen |
 | `-y, --yes` | nicht fragen |
 | `--json` | maschinenlesbare Ausgabe |
@@ -123,6 +136,12 @@ nimmt Wolfgang die. Sonst fragt er nach.
 
 **Nochmal ablegen:** Gibst du Wolfgang denselben Ordner noch einmal, erkennt er, was schon fertig
 ist, und macht auf Wunsch nur die neuen Dateien – mit fortlaufender Nummer.
+
+**Videos und Audio** behalten ihren Namen, nur websicher: „Drohne Strand FINAL.MOV“ wird
+`drohne-strand-final.mp4`, das Vorschaubild daneben `drohne-strand-final.webp`. Bei Videos
+fliegen alle Metadaten raus (auch der Aufnahmeort), bei Audio bleiben Titel und Interpret drin.
+WebM-Videos brauchen deutlich länger als MP4 – der Fortschrittsbalken läuft auch innerhalb
+eines langen Videos weiter, und „Abbrechen“ hört sofort auf.
 
 **Schriften** werden nach ihren eigenen Angaben benannt (`inter-700-italic.woff2`) und nach dem
 Umwandeln Glyphe für Glyphe mit dem Original verglichen.
@@ -148,7 +167,8 @@ Es werden nur Dateien zurückbenannt, die im alten Logbuch stehen. Der alte Bash
 ## Für Entwickler
 
 ```bash
-brew install cmake nasm                          # nur zum Bauen der Codecs
+brew install cmake nasm pkg-config autoconf automake libtool   # nur zum Bauen der Codecs
+scripts/build-ffmpeg.sh                          # Wolfgangs eigenes ffmpeg (~10 Min., nur einmal)
 cargo test --workspace                           # alle Tests
 cargo run --release -p wolfgang-cli -- ~/Bilder  # Kommandozeile
 cargo run --release -p wolfgang-app              # App
@@ -159,7 +179,8 @@ scripts/build-app.sh                             # → target/release/bundle/dmg
 
 | Ordner | Was |
 |---|---|
-| `crates/wolfgang-core` | die Umwandlung: Ordner einlesen, Namen, Bilder (Apple ImageIO + mozjpeg/libwebp/rav1e), Schriften (Google woff2), Logbuch, Einstellungen |
+| `crates/wolfgang-core` | die Umwandlung: Ordner einlesen, Namen, Bilder (Apple ImageIO + mozjpeg/libwebp/rav1e), Schriften (Google woff2), Videos/Audio (ffmpeg), Logbuch, Einstellungen |
+| `scripts/build-ffmpeg.sh` | baut ffmpeg + ffprobe nach `target/ffmpeg/bin` (siehe unten) |
 | `crates/wolfgang-dialogue` | das Gespräch als Zustandsmaschine |
 | `dialogue/de.yaml` | **alles, was Wolfgang sagt** – zum Ausprobieren ohne neu zu bauen: `WOLFGANG_DIALOGUE=dialogue/de.yaml wolfgang …` |
 | `crates/wolfgang-cli` | der Befehl `wolfgang` |
@@ -170,6 +191,14 @@ scripts/build-app.sh                             # → target/release/bundle/dmg
 
 Die Oberfläche lässt sich auch im normalen Browser ansehen (mit Platzhalter-Daten):
 `cd crates/wolfgang-app/ui && python3 -m http.server`, dann z. B. `http://localhost:8000/?demo=confirm`.
+
+**ffmpeg:** Wolfgang nimmt nie das ffmpeg aus Homebrew, sondern sein eigenes, das in der App
+neben der Kommandozeile liegt (`./install.sh` legt es nach `/usr/local/libexec/wolfgang`).
+Gebaut wird es von `scripts/build-ffmpeg.sh` mit festen Versionen und Prüfsummen, nur aus
+LGPL-Teilen: Apples VideoToolbox (H.264) und AudioToolbox (AAC), libvpx (VP9), Opus, LAME (MP3)
+und zimg (HDR → SDR) – kein x264/x265. Neue Versionen: Nummern und Prüfsummen im Skript ändern,
+CI baut dann neu. Zum Testen mit einem anderen ffmpeg: `WOLFGANG_FFMPEG_DIR=/pfad/zum/ordner`.
+Ohne gebautes ffmpeg werden die Video-/Audio-Tests übersprungen.
 
 **Eine neue Version veröffentlichen:** Version in `Cargo.toml` (workspace) und
 `crates/wolfgang-app/tauri.conf.json` anheben, committen, Tag `vX.Y.Z` pushen. GitHub baut die
@@ -189,3 +218,7 @@ Updates mehr an und müssen einmal von Hand neu installiert werden. Der öffentl
 
 MIT © k1te – siehe [LICENSE](LICENSE).
 Schrift: [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans), SIL Open Font License.
+Videos und Audio: [FFmpeg](https://ffmpeg.org) unter der LGPL 2.1 (Lizenztext in der App unter
+`Contents/Resources/LICENSE-ffmpeg.txt`, Quellen und Bauweise: `scripts/build-ffmpeg.sh`), mit
+[libvpx](https://chromium.googlesource.com/webm/libvpx) (BSD), [Opus](https://opus-codec.org) (BSD),
+[LAME](https://lame.sourceforge.io) (LGPL) und [zimg](https://github.com/sekrit-twc/zimg) (WTFPL).

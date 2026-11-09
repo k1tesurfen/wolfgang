@@ -4,13 +4,24 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use wolfgang_core::kind::FileKind;
-use wolfgang_core::settings::ImageSettings;
+use wolfgang_core::settings::{AudioSettings, ImageSettings, VideoSettings};
+use wolfgang_core::workspace::Piles;
 use wolfgang_core::{RunSettings, Summary, UserStore, Workspace};
 
 /// Conditions usable in `when:` (prefix with `!` to negate).
 pub const FLAGS: &[&str] = &[
     "has_images",
+    "has_videos",
+    "has_audio",
     "has_fonts",
+    "has_media",
+    "only_images",
+    "several_piles",
+    "videos_have_sound",
+    "media_tools_missing",
+    "images_asked",
+    "videos_asked",
+    "audio_asked",
     "has_unknown",
     "has_duplicates",
     "nothing_to_do",
@@ -36,6 +47,8 @@ pub const FLAGS: &[&str] = &[
 /// Placeholders holding numbers (usable as `{name:Einzahl:Mehrzahl}`).
 pub const NUMBER_VARS: &[&str] = &[
     "images",
+    "videos",
+    "audio_files",
     "fonts",
     "unknown",
     "duplicates",
@@ -55,6 +68,7 @@ pub const NUMBER_VARS: &[&str] = &[
 /// Placeholders holding text.
 pub const TEXT_VARS: &[&str] = &[
     "last_run",
+    "pile_list",
     "summary",
     "output_folder",
     "default_web_format",
@@ -93,18 +107,71 @@ impl Context {
         }
     }
 
+    pub fn piles(&self) -> Piles {
+        self.summary.piles()
+    }
+
     pub fn has_images(&self) -> bool {
-        self.summary.images.total > 0
+        self.piles().images
     }
 
     pub fn has_fonts(&self) -> bool {
-        self.summary.fonts.total > 0
+        self.piles().fonts
     }
 
-    /// A last run is only offered if it actually configured images.
+    /// A last run is only offered if it configured a pile that's on the desk now.
     pub fn last_run(&self) -> Option<&RunSettings> {
-        self.store.last_run.as_ref().filter(|r| r.images.is_some())
+        let p = self.piles();
+        self.store.last_run.as_ref().filter(|r| (p.images && r.images.is_some()) || (p.videos && r.videos.is_some()) || (p.audio && r.audio.is_some()))
     }
+
+    /// The last run, described for the piles on the desk.
+    pub fn describe_last_run(&self) -> String {
+        let p = self.piles();
+        self.last_run().map(|r| describe_settings(r, p)).unwrap_or_default()
+    }
+}
+
+/// „42 Fotos, 3 Videos und eine Schrift“
+pub fn pile_list(s: &Summary) -> String {
+    let p = s.piles();
+    let mut parts = Vec::new();
+    let mut add = |on: bool, n: usize, one: &str, many: &str| {
+        if on {
+            parts.push(if n == 1 { one.to_owned() } else { format!("{n} {many}") });
+        }
+    };
+    add(p.images, s.images.total, "ein Foto", "Fotos");
+    add(p.videos, s.videos.total, "ein Video", "Videos");
+    add(p.audio, s.audio.total, "eine Audiodatei", "Audiodateien");
+    add(p.fonts, s.fonts.total, "eine Schrift", "Schriften");
+    join_and(&parts)
+}
+
+/// `a`, `a und b`, `a, b und c`
+pub fn join_and(parts: &[String]) -> String {
+    match parts {
+        [] => String::new(),
+        [one] => one.clone(),
+        [init @ .., last] => format!("{} und {last}", init.join(", ")),
+    }
+}
+
+/// Describes the piles of a run (or preset); `on` limits it to piles that matter.
+pub fn describe_settings(s: &RunSettings, on: Piles) -> String {
+    let mut parts = Vec::new();
+    let several = [on.images && s.images.is_some(), on.videos && s.videos.is_some(), on.audio && s.audio.is_some()].iter().filter(|b| **b).count() > 1;
+    let label = |what: &str, text: String| if several { format!("{what} {text}") } else { text };
+    if let Some(i) = s.images.as_ref().filter(|_| on.images) {
+        parts.push(label("Fotos", describe_images(i)));
+    }
+    if let Some(v) = s.videos.as_ref().filter(|_| on.videos) {
+        parts.push(label("Videos", describe_videos(v)));
+    }
+    if let Some(a) = s.audio.as_ref().filter(|_| on.audio) {
+        parts.push(label("Audio", describe_audio(a)));
+    }
+    parts.join("; ")
 }
 
 /// `41,7 MB`, `312 KB`
@@ -143,6 +210,27 @@ pub fn describe_images(s: &ImageSettings) -> String {
     }
 }
 
+/// „als MP4, 1080p, mit Ton und Vorschaubild“
+pub fn describe_videos(v: &VideoSettings) -> String {
+    let size = v.size.map_or("Originalgröße".to_owned(), |p| format!("{p}p"));
+    let mut t = format!("als {}, {size}", v.format.label());
+    if v.quality != wolfgang_core::VideoQuality::Balanced {
+        t.push_str(&format!(", {}", v.quality.label()));
+    }
+    t.push_str(match (v.sound, v.poster) {
+        (true, true) => ", mit Ton und Vorschaubild",
+        (true, false) => ", mit Ton",
+        (false, true) => ", ohne Ton, mit Vorschaubild",
+        (false, false) => ", ohne Ton",
+    });
+    t
+}
+
+/// „als MP3 (Sprache)“
+pub fn describe_audio(a: &AudioSettings) -> String {
+    format!("als {} ({})", a.format.label(), a.content.label())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -155,5 +243,17 @@ mod tests {
         assert_eq!(format_duration(Duration::from_millis(1500)), "1,5 Sekunden");
         assert_eq!(format_duration(Duration::from_secs(45)), "45 Sekunden");
         assert_eq!(format_duration(Duration::from_secs(600)), "10 Minuten");
+        assert_eq!(join_and(&["a".into(), "b".into(), "c".into()]), "a, b und c");
+    }
+
+    #[test]
+    fn describes_videos_and_audio() {
+        assert_eq!(describe_videos(&VideoSettings::default()), "als MP4, 1080p, mit Ton und Vorschaubild");
+        let v = VideoSettings { format: wolfgang_core::VideoFormat::Webm, size: None, sound: false, poster: false, quality: wolfgang_core::VideoQuality::Nicer };
+        assert_eq!(describe_videos(&v), "als WebM, Originalgröße, schöner, ohne Ton");
+        let all = Piles { images: true, videos: true, audio: true, fonts: false };
+        let s = RunSettings { videos: Some(VideoSettings::default()), audio: Some(AudioSettings::default()), ..Default::default() };
+        assert_eq!(describe_settings(&s, all), "Videos als MP4, 1080p, mit Ton und Vorschaubild; Audio als MP3 (Musik)");
+        assert_eq!(describe_settings(&s, Piles { audio: true, ..Default::default() }), "als MP3 (Musik)");
     }
 }

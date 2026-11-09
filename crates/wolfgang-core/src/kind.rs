@@ -8,12 +8,17 @@ const IMAGE_EXTS: &[&str] = &[
     "cr2", "cr3", "nef", "arw", "dng", // camera RAW
 ];
 const FONT_EXTS: &[&str] = &["ttf", "otf", "woff"];
+const VIDEO_EXTS: &[&str] = &["mp4", "mov", "m4v", "mkv", "webm", "avi", "mts", "m2ts", "mpg", "mpeg", "wmv", "3gp"];
+const AUDIO_EXTS: &[&str] = &["wav", "aif", "aiff", "flac", "m4a", "mp3", "aac", "ogg", "opus", "caf", "wma"];
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FileKind {
     Image,
     Font,
+    /// Converted with the bundled ffmpeg.
+    Video,
+    Audio,
     /// A `*.txt` next to images, holding SEO keywords.
     KeywordFile,
     /// Something Wolfgang can't handle (yet).
@@ -30,6 +35,8 @@ pub fn classify(path: &Path) -> Option<FileKind> {
     Some(match ext.as_deref() {
         Some(e) if IMAGE_EXTS.contains(&e) => FileKind::Image,
         Some(e) if FONT_EXTS.contains(&e) => FileKind::Font,
+        Some(e) if VIDEO_EXTS.contains(&e) => FileKind::Video,
+        Some(e) if AUDIO_EXTS.contains(&e) => FileKind::Audio,
         Some("txt") => FileKind::KeywordFile,
         _ => FileKind::Unknown,
     })
@@ -45,6 +52,10 @@ mod tests {
         assert_eq!(classify(Path::new("x.NEF")), Some(FileKind::Image));
         assert_eq!(classify(Path::new("Inter Bold.otf")), Some(FileKind::Font));
         assert_eq!(classify(Path::new("keywords.txt")), Some(FileKind::KeywordFile));
+        assert_eq!(classify(Path::new("Drohne.MOV")), Some(FileKind::Video));
+        assert_eq!(classify(Path::new("clip.webm")), Some(FileKind::Video));
+        assert_eq!(classify(Path::new("Interview.WAV")), Some(FileKind::Audio));
+        assert_eq!(classify(Path::new("anim.gif")), Some(FileKind::Image), "GIFs stay photos");
         assert_eq!(classify(Path::new("doc.pdf")), Some(FileKind::Unknown));
         assert_eq!(classify(Path::new("font.woff2")), Some(FileKind::Unknown));
         assert_eq!(classify(Path::new("noext")), Some(FileKind::Unknown));

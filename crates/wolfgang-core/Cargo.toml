@@ -1,6 +1,6 @@
 [package]
 name = "wolfgang-core"
-description = "Wolfgang's conversion engine: images and fonts, shared by CLI and app"
+description = "Wolfgang's conversion engine: images, videos, audio and fonts, shared by CLI and app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

@@ -3,8 +3,8 @@
 #
 #   scripts/build-app.sh
 #
-# Needs: Rust, cmake + nasm (brew install cmake nasm), Tauri CLI
-# (cargo install tauri-cli --version "^2" --locked).
+# Needs: Rust, Tauri CLI (cargo install tauri-cli --version "^2" --locked) and the
+# build tools for the codecs: brew install cmake nasm pkg-config autoconf automake libtool
 # Result: target/release/bundle/macos/Wolfgang.app and target/release/bundle/dmg/*.dmg
 #
 # Self-update: with the signing key (TAURI_SIGNING_PRIVATE_KEY, or ~/.tauri/wolfgang.key
@@ -18,6 +18,9 @@ step() { echo; echo "▶ $1"; }
 
 step "Pixel art (assets/pixel) aktuell?"
 cargo run --quiet --release -p wolfgang-art -- build >/dev/null
+
+step "ffmpeg für Videos und Audio (wird nur gebaut, wenn sich was geändert hat)"
+scripts/build-ffmpeg.sh
 
 step "Kommandozeile bauen (kommt mit in die App)"
 cargo build --release -p wolfgang-cli
@@ -40,6 +43,10 @@ APP="target/release/bundle/macos/Wolfgang.app"
 step "Prüfen"
 [[ -x "$APP/Contents/MacOS/wolfgang" ]] || { echo "Kommandozeile fehlt in der App"; exit 1; }
 "$APP/Contents/MacOS/wolfgang" --version
+for tool in ffmpeg ffprobe; do
+  [[ -x "$APP/Contents/MacOS/$tool" ]] || { echo "$tool fehlt in der App"; exit 1; }
+done
+"$APP/Contents/MacOS/ffmpeg" -hide_banner -L | grep -q "Lesser General Public" && echo "ffmpeg (LGPL) ok"
 codesign --verify --deep --strict "$APP" && echo "Signatur (ad-hoc) ok"
 /usr/libexec/PlistBuddy -c "Print :CFBundleDocumentTypes:0:LSHandlerRank" "$APP/Contents/Info.plist" | grep -q Alternate && echo "Dock-Ablage ok"
 

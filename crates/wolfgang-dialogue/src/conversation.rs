@@ -1,6 +1,6 @@
 //! The state machine. CLI and app only render [`Step`]s and report choices.
 
-use crate::context::{describe_images, format_bytes, format_duration, Context};
+use crate::context::{describe_audio, describe_images, describe_videos, format_bytes, format_duration, join_and, pile_list, Context};
 use crate::draft::{Draft, Mode, Template};
 use crate::script::{Each, Foreach, InputKind, Line, Mood, Node, Script, Value};
 use crate::template::{self, Var};
@@ -211,9 +211,7 @@ impl Conversation {
     /// „letztes Mal“, and a preset if the user named one.
     pub fn remember(&self, store: &mut UserStore) {
         if let Some(settings) = &self.started_with {
-            if settings.images.is_some() {
-                store.last_run = Some(settings.clone());
-            }
+            store.remember_run(settings);
             if let Some(name) = &self.state.draft.save_preset {
                 let _ = store.save_preset(name, settings.clone());
             }
@@ -232,7 +230,7 @@ impl Conversation {
     }
 
     pub fn settings(&self) -> RunSettings {
-        self.state.draft.settings(self.ctx.has_images(), self.ctx.has_fonts())
+        self.state.draft.settings(self.ctx.piles())
     }
 
     // ---------------------------------------------------------------------
@@ -445,17 +443,29 @@ impl Conversation {
         let s = &self.ctx.summary;
         let d = &self.state.draft;
         let run = self.run.as_ref();
+        let p = self.ctx.piles();
+        let piles = s.convertible();
         match name {
-            "has_images" => self.ctx.has_images(),
-            "has_fonts" => self.ctx.has_fonts(),
+            "has_images" => p.images,
+            "has_videos" => p.videos,
+            "has_audio" => p.audio,
+            "has_fonts" => p.fonts,
+            "has_media" => p.media(),
+            "only_images" => p.images && !p.videos && !p.audio && !p.fonts,
+            "several_piles" => piles.len() > 1,
+            "videos_have_sound" => s.videos_with_sound > 0,
+            "media_tools_missing" => s.media_tools_missing,
+            "images_asked" => d.images_asked,
+            "videos_asked" => d.videos_asked,
+            "audio_asked" => d.audio_asked,
             "has_unknown" => !s.unknown.is_empty(),
             "has_duplicates" => s.duplicates > 0,
-            "nothing_to_do" => !self.ctx.has_images() && !self.ctx.has_fonts(),
-            "only_fonts" => !self.ctx.has_images() && self.ctx.has_fonts(),
-            "has_last_run" => self.ctx.has_images() && self.ctx.last_run().is_some(),
-            "has_presets" => self.ctx.has_images() && !self.ctx.store.presets.is_empty(),
-            "has_known" => s.images.known + s.fonts.known > 0,
-            "has_new" => s.images.fresh() + s.fonts.fresh() > 0,
+            "nothing_to_do" => piles.is_empty(),
+            "only_fonts" => p.fonts && !p.media(),
+            "has_last_run" => self.ctx.last_run().is_some(),
+            "has_presets" => p.media() && !self.ctx.store.presets.is_empty(),
+            "has_known" => piles.iter().any(|p| p.known > 0),
+            "has_new" => piles.iter().any(|p| p.fresh() > 0),
             "keyword_files_found" => !s.keyword_files.is_empty(),
             "folders_without_keywords" => !s.folders_without_keywords.is_empty(),
             "several_folders_without_keywords" => s.folders_without_keywords.len() > 1,
@@ -477,8 +487,11 @@ impl Conversation {
         let run = self.run.clone().unwrap_or_default();
         let num = |n: usize| Some(Var::Num(n as u64));
         let text = |t: String| Some(Var::Text(t));
+        let piles = s.convertible();
         match name {
             "images" => num(s.images.total),
+            "videos" => num(s.videos.total),
+            "audio_files" => num(s.audio.total),
             "fonts" => num(s.fonts.total),
             "unknown" => num(s.unknown.len()),
             "duplicates" => num(s.duplicates),
@@ -486,14 +499,15 @@ impl Conversation {
             "known_images" => num(s.images.known),
             "new_fonts" => num(s.fonts.fresh()),
             "known_fonts" => num(s.fonts.known),
-            "new_files" => num(s.images.fresh() + s.fonts.fresh()),
-            "known_files" => num(s.images.known + s.fonts.known),
+            "new_files" => num(piles.iter().map(|p| p.fresh()).sum()),
+            "known_files" => num(piles.iter().map(|p| p.known).sum()),
             "keyword_folders" => num(s.keyword_files.len()),
             "folders_without_keywords" => num(s.folders_without_keywords.len()),
             "converted" => num(run.converted),
             "failed" => num(run.failed),
             "saved_percent" => num((run.bytes_out * 100).checked_div(run.bytes_in).map_or(0, |kept| 100usize.saturating_sub(kept as usize))),
-            "last_run" => text(self.ctx.last_run().and_then(|r| r.images.as_ref()).map(describe_images).unwrap_or_default()),
+            "last_run" => text(self.ctx.describe_last_run()),
+            "pile_list" => text(pile_list(s)),
             "summary" => text(self.summary_text()),
             "output_folder" => text(self.output_folder()),
             "default_web_format" => text(ImageFormat::from(self.ctx.store.defaults.web_format).label().into()),
@@ -536,24 +550,36 @@ impl Conversation {
             let n = if only_new { pile.fresh() } else { pile.total };
             if n == 1 { one.to_owned() } else { format!("{n} {many}") }
         };
-        let mut parts = Vec::new();
-        if let Some(images) = &self.settings().images {
-            let what = if only_new && s.images.known > 0 {
-                count(&s.images, "das neue Foto", "neue Fotos")
+        let what = |pile: &wolfgang_core::workspace::PileSummary, one: &str, many: &str, new_one: &str, new_many: &str| {
+            if only_new && pile.known > 0 {
+                count(pile, new_one, new_many)
             } else {
-                count(&s.images, "ein Foto", "Fotos")
-            };
-            let mut t = format!("{what} {}", describe_images(images));
+                count(pile, one, many)
+            }
+        };
+        let settings = self.settings();
+        let mut parts = Vec::new();
+        if let Some(images) = &settings.images {
+            let mut t = format!("{} {}", what(&s.images, "ein Foto", "Fotos", "das neue Foto", "neue Fotos"), describe_images(images));
             if let ImageSettings::Web(w) = images {
                 t.push_str(&format!(" – Dateinamen wie „{}“", self.preview(w.naming.separator)));
             }
             parts.push(t);
         }
+        if let Some(v) = &settings.videos {
+            // Without any sound track, „mit Ton“ would be a promise Wolfgang can't keep.
+            let v = wolfgang_core::VideoSettings { sound: v.sound && s.videos_with_sound > 0, ..v.clone() };
+            parts.push(format!("{} {}", what(&s.videos, "ein Video", "Videos", "das neue Video", "neue Videos"), describe_videos(&v)));
+        }
+        if let Some(a) = &settings.audio {
+            parts.push(format!("{} {}", what(&s.audio, "eine Audiodatei", "Audiodateien", "die neue Audiodatei", "neue Audiodateien"), describe_audio(a)));
+        }
+        let mut text = if parts.len() > 2 { parts.join("; ") } else { join_and(&parts) };
         if self.ctx.has_fonts() {
             let fonts = count(&s.fonts, "eine Schrift", "Schriften");
-            parts.push(if parts.is_empty() { format!("{fonts} als WOFF2") } else { format!("dazu {fonts} als WOFF2") });
+            text = if text.is_empty() { format!("{fonts} als WOFF2") } else { format!("{text}, dazu {fonts} als WOFF2") };
         }
-        let mut text = format!("Also: {}.", parts.join(", "));
+        let mut text = format!("Also: {text}.");
         if d.template == Some(Template::LastRun) {
             text = format!("{} So wie letztes Mal.", text);
         }

@@ -4,6 +4,7 @@
 use crate::error::{io_err, Error, Result};
 use crate::font::{self, Woff2Mode};
 use crate::image;
+use crate::media;
 use crate::runlog::{Entry, FileRecord, LogWriter, LOG_VERSION};
 use crate::workspace::{rel_string, Job, Plan, Task};
 use rayon::prelude::*;
@@ -16,6 +17,8 @@ use std::time::{Duration, Instant};
 pub enum Event {
     Started { total: usize, output_root: PathBuf },
     FileStarted { number: usize, total: usize, rel: PathBuf },
+    /// How far a long file (video, audio) is, 0–1. Not sent for images and fonts.
+    FileProgress { number: usize, rel: PathBuf, fraction: f64 },
     FileDone(FileResult),
 }
 
@@ -77,14 +80,18 @@ pub fn execute(plan: &Plan, on_event: &(dyn Fn(Event) + Sync), cancel: &AtomicBo
             }
             let number = counter.fetch_add(1, Ordering::Relaxed) + 1;
             on_event(Event::FileStarted { number, total, rel: job.rel.clone() });
-            let outcome = convert_job(job, &plan.output_root).map_err(|e| e.to_string());
+            let progress = |fraction: f64| on_event(Event::FileProgress { number, rel: job.rel.clone(), fraction });
+            let outcome = match convert_job(job, &plan.output_root, &progress, cancel) {
+                Err(Error::Cancelled) => return, // stopped halfway: neither done nor failed
+                other => other.map_err(|e| e.to_string()),
+            };
             if let Ok(done) = &outcome {
                 let rec = FileRecord {
                     hash: job.hash.clone(),
                     source: rel_string(&job.rel),
                     dir: job.dir.clone(),
                     index: job.index,
-                    outputs: vec![rel_string(&job.target)],
+                    outputs: job.outputs().iter().map(|p| rel_string(p)).collect(),
                     bytes_in: job.size,
                     bytes_out: done.bytes_out,
                 };
@@ -121,8 +128,25 @@ pub fn execute(plan: &Plan, on_event: &(dyn Fn(Event) + Sync), cancel: &AtomicBo
     Ok(report)
 }
 
-fn convert_job(job: &Job, output_root: &Path) -> Result<Done> {
+fn convert_job(job: &Job, output_root: &Path, progress: &(dyn Fn(f64) + Sync), cancel: &AtomicBool) -> Result<Done> {
+    let target = output_root.join(&job.target);
     let (bytes, note) = match &job.task {
+        // ffmpeg writes the file itself, to a temp name that's renamed at the end.
+        Task::Video(task) => {
+            let tmp = temp_path(&target)?;
+            let poster = media::convert_video(&job.source, task, &tmp, progress, cancel)?;
+            let mut bytes_out = finish(&tmp, &target)?;
+            if let (Some(rel), Some(data)) = (&task.poster, poster) {
+                write_atomic(&output_root.join(rel), &data)?;
+                bytes_out += data.len() as u64;
+            }
+            return Ok(Done { bytes_out, note: None });
+        }
+        Task::Audio(settings) => {
+            let tmp = temp_path(&target)?;
+            media::convert_audio(&job.source, settings, &tmp, progress, cancel)?;
+            return Ok(Done { bytes_out: finish(&tmp, &target)?, note: None });
+        }
         Task::Image(task) => (image::convert(&job.source, task)?, None),
         Task::Font => {
             let data = std::fs::read(&job.source).map_err(io_err(&job.source))?;
@@ -131,7 +155,6 @@ fn convert_job(job: &Job, output_root: &Path) -> Result<Done> {
             (w.data, note)
         }
     };
-    let target = output_root.join(&job.target);
     write_atomic(&target, &bytes)?;
     Ok(Done { bytes_out: bytes.len() as u64, note })
 }
@@ -139,9 +162,21 @@ fn convert_job(job: &Job, output_root: &Path) -> Result<Done> {
 /// Writes to a hidden temp file next to the target, then renames:
 /// a cancelled or crashed run never leaves half-written files behind.
 fn write_atomic(target: &Path, bytes: &[u8]) -> Result<()> {
+    let tmp = temp_path(target)?;
+    std::fs::write(&tmp, bytes).map_err(io_err(&tmp))?;
+    finish(&tmp, target).map(|_| ())
+}
+
+/// `.name.part` next to the target (its folder is created).
+fn temp_path(target: &Path) -> Result<PathBuf> {
     let dir = target.parent().expect("target has a folder");
     std::fs::create_dir_all(dir).map_err(io_err(dir))?;
-    let tmp = dir.join(format!(".{}.part", target.file_name().unwrap().to_string_lossy()));
-    std::fs::write(&tmp, bytes).map_err(io_err(&tmp))?;
-    std::fs::rename(&tmp, target).map_err(io_err(target))
+    Ok(dir.join(format!(".{}.part", target.file_name().unwrap().to_string_lossy())))
+}
+
+/// Moves a finished temp file into place; returns its size.
+fn finish(tmp: &Path, target: &Path) -> Result<u64> {
+    let size = std::fs::metadata(tmp).map_err(io_err(tmp))?.len();
+    std::fs::rename(tmp, target).map_err(io_err(target))?;
+    Ok(size)
 }
