@@ -563,8 +563,14 @@ impl Conversation {
         wolfgang_core::media::estimate(&infos?, &v)
     }
 
+    /// `Urlaub/wolfgang_output`: the output folder alone says too little.
     fn output_folder(&self) -> String {
-        self.ctx.output_root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+        let name = |p: &std::path::Path| p.file_name().map(|n| n.to_string_lossy().into_owned());
+        let folder = name(&self.ctx.output_root).unwrap_or_default();
+        match self.ctx.output_root.parent().and_then(name) {
+            Some(parent) => format!("{parent}/{folder}"),
+            None => folder,
+        }
     }
 
     /// Example file name for the first image with the current naming choices.

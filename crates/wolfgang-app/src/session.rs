@@ -224,8 +224,8 @@ mod tests {
         let report = wolfgang_core::execute(&plan, &|_| {}, &AtomicBool::new(false)).unwrap();
         let v = o.finished(&report).unwrap();
         assert!(!o.running);
-        assert_eq!(v.output, Some(t.path().canonicalize().unwrap().join("Bilder-wolfgang")));
-        assert!(t.path().join("Bilder-wolfgang/a.png").exists());
+        assert_eq!(v.output, Some(t.path().canonicalize().unwrap().join("Bilder/wolfgang_output")));
+        assert!(t.path().join("Bilder/wolfgang_output/a.png").exists());
 
         let v = pick(&mut o, &v, "Danke");
         assert!(matches!(v.step, Step::End { .. }));

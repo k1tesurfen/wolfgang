@@ -132,7 +132,7 @@ fn first_web_run_then_preset_then_like_last_time() {
     assert_eq!(node(&c), "confirm");
     let summary = said(&c);
     assert!(summary.contains("3 Fotos fürs Web als AVIF, 2000 px, Qualität 75"), "{summary}");
-    assert!(summary.contains("Hotel-wolfgang"), "{summary}");
+    assert!(summary.contains("Hotel/wolfgang_output"), "{summary}");
     assert_eq!(summary.contains("Schriften") || summary.contains("Schrift"), has_font, "{summary}");
 
     pick(&mut c, "Los");
@@ -149,7 +149,7 @@ fn first_web_run_then_preset_then_like_last_time() {
     let report = execute(&ws.plan(&settings, rerun).unwrap(), &|_| {}, &AtomicBool::new(false)).unwrap();
     c.finished(&report);
     assert_eq!(node(&c), "done");
-    assert!(said(&c).contains("Hotel-wolfgang"), "{}", said(&c));
+    assert!(said(&c).contains("Hotel/wolfgang_output"), "{}", said(&c));
     pick(&mut c, "Als Vorlage merken");
     c.type_answer("  Hotelbilder ");
     let Step::End { lines, .. } = c.step() else { panic!("{:?}", c.step()) };
@@ -186,7 +186,7 @@ fn everything_known_is_said_up_front() {
 
     let (_, mut c) = talk(&[root], &UserStore::default());
     assert_eq!(node(&c), "rerun_all_known");
-    assert!(said(&c).contains("„Alt-wolfgang“"), "{}", said(&c));
+    assert!(said(&c).contains("„Alt/wolfgang_output“"), "{}", said(&c));
     pick(&mut c, "Trotzdem");
     pick(&mut c, "Hochwertig");
     pick(&mut c, "JPG");

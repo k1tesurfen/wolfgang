@@ -23,9 +23,9 @@ if (!window.__TAURI__) {
       confirm: ask('confirm', 'happy', ['Also: 42 Fotos fürs Web als WebP, 1600 px, Qualität 80, Name „Kunde Müller“ – Dateinamen wie „kunde-mueller-buero-0001.webp“, dazu 6 Schriften als WOFF2. Landet alles in „Kunde-wolfgang“.', 'Passt das so?'],
         ["Los geht's!", 'Nochmal ändern', 'Lass mal, doch nicht']),
       start: { type: 'start', mood: 'happy', lines: [], output: null },
-      done: ask('done', 'proud', ['So, erledigt. 41,7 MB rein, 1,2 MB raus – 98 Prozent gespart.', 'Liegt alles in „Kunde-wolfgang“.'],
-        ['Als Vorlage merken', 'Danke, Wolfgang!'], { can_go_back: false, output: '/Users/du/Kunde-wolfgang' }),
-      end: { type: 'end', mood: 'happy', lines: ['Bis bald!'], output: '/Users/du/Kunde-wolfgang' },
+      done: ask('done', 'proud', ['So, erledigt. 41,7 MB rein, 1,2 MB raus – 98 Prozent gespart.', 'Liegt alles in „Kunde/wolfgang_output“.'],
+        ['Als Vorlage merken', 'Danke, Wolfgang!'], { can_go_back: false, output: '/Users/du/Kunde/wolfgang_output' }),
+      end: { type: 'end', mood: 'happy', lines: ['Bis bald!'], output: '/Users/du/Kunde/wolfgang_output' },
       cancelled: { type: 'cancelled', mood: 'neutral', lines: ['Kein Ding. Wenn du’s dir anders überlegst, ich bin hier.'], output: null },
     };
     const next = { mode: ['size', 'confirm'], size: ['confirm', 'confirm', 'confirm'], confirm: ['start', 'mode', 'cancelled'], done: ['end', 'end'] };

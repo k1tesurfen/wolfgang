@@ -9,7 +9,7 @@ use crate::kind::FileKind;
 use crate::media::{self, MediaInfo, VideoTask};
 use crate::naming;
 use crate::runlog::{self, RunLog};
-use crate::scan::{self, Scan, ScannedFile, OUTPUT_SUFFIX};
+use crate::scan::{self, Scan, ScannedFile, OUTPUT_DIR};
 use crate::settings::{self, AudioSettings, ImageSettings, Naming, RunSettings};
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -22,7 +22,7 @@ pub const POSTER_EXT: &str = "webp";
 
 pub struct Workspace {
     pub scan: Scan,
-    /// Where results go, e.g. `~/Bilder/Urlaub-wolfgang`.
+    /// Where results go, e.g. `~/Bilder/Urlaub/wolfgang_output`.
     pub output_root: PathBuf,
     /// Identifies the drop so a later drop of the same thing finds this folder.
     pub source_key: String,
@@ -475,35 +475,25 @@ fn hash_file(path: &Path) -> Result<String> {
     Ok(h.finalize().to_hex().to_string())
 }
 
-/// A single folder → `<folder>-wolfgang` next to it. Anything else →
-/// `<parent>-wolfgang` inside the first item's parent. If such a folder exists
-/// but belongs to a different source, `-2`, `-3`, … are tried.
+/// Results go into `wolfgang_output` where the files are: a single folder →
+/// inside that folder; files (or several items) → next to the first one.
+/// Every drop from the same place shares it (the run log knows the files by
+/// content). A `wolfgang_output` that isn't Wolfgang's (no run log, not empty)
+/// is never written into; `-2`, `-3`, … are tried instead.
 fn locate_output(items: &[PathBuf]) -> Result<(PathBuf, String, RunLog)> {
     let first = &items[0];
-    let parent = first.parent().unwrap_or(first);
-    let (base_name, source_key) = if items.len() == 1 && first.is_dir() {
-        (dir_name(first), first.to_string_lossy().into_owned())
-    } else {
-        (dir_name(parent), format!("files in {}", parent.to_string_lossy()))
-    };
+    let base = if items.len() == 1 && first.is_dir() { first.as_path() } else { first.parent().unwrap_or(first) };
+    let source_key = base.to_string_lossy().into_owned();
     for n in 1u32.. {
-        let name = if n == 1 { format!("{base_name}{OUTPUT_SUFFIX}") } else { format!("{base_name}{OUTPUT_SUFFIX}-{n}") };
-        let root = parent.join(name);
+        let root = base.join(if n == 1 { OUTPUT_DIR.to_owned() } else { format!("{OUTPUT_DIR}-{n}") });
         if !root.exists() {
             return Ok((root, source_key, RunLog::default()));
         }
-        let log = RunLog::open(&root)?;
-        if log.source.as_deref() == Some(source_key.as_str()) {
-            return Ok((root, source_key, log));
-        }
-        // An empty folder we may have created earlier without a log is fine to reuse.
-        if !runlog::log_path(&root).exists() && std::fs::read_dir(&root).map(|mut d| d.next().is_none()).unwrap_or(false) {
-            return Ok((root, source_key, log));
+        let ours = runlog::log_path(&root).exists();
+        let empty = std::fs::read_dir(&root).map(|mut d| d.next().is_none()).unwrap_or(false);
+        if ours || empty {
+            return Ok((root.clone(), source_key, RunLog::open(&root)?));
         }
     }
     unreachable!()
-}
-
-fn dir_name(p: &Path) -> String {
-    p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| "Ablage".into())
 }

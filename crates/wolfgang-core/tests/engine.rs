@@ -95,7 +95,7 @@ fn web_run_end_to_end() {
     let has_font = Path::new(ARIAL).exists();
 
     let ws = Workspace::open(std::slice::from_ref(&root)).unwrap();
-    assert_eq!(ws.output_root, t.path().canonicalize().unwrap().join("Urlaub-wolfgang"));
+    assert_eq!(ws.output_root, t.path().canonicalize().unwrap().join("Urlaub/wolfgang_output"));
     let s = ws.summary();
     assert_eq!((s.images.total, s.images.known), (3, 0));
     assert_eq!(s.fonts.total, has_font as usize);
@@ -142,7 +142,7 @@ fn rerun_skips_known_and_continues_index() {
 
     write_image(&root.join("d.jpg"), &pixels(1000, 500, false), ImageFormat::Jpg);
     let ws = Workspace::open(std::slice::from_ref(&root)).unwrap();
-    assert!(ws.output_root.ends_with("Urlaub-wolfgang"), "same folder found again");
+    assert!(ws.output_root.ends_with("Urlaub/wolfgang_output"), "same folder found again");
     let s = ws.summary();
     assert_eq!((s.images.total, s.images.known, s.images.fresh()), (4, 3, 1));
     assert_eq!(s.previous_runs, 1);
@@ -217,16 +217,40 @@ fn heic_input_via_imageio() {
 }
 
 #[test]
-fn output_folder_of_another_source_is_not_reused() {
+fn a_foreign_wolfgang_output_is_not_written_into() {
     let t = tempfile::tempdir().unwrap();
     let a = t.path().join("one/Bilder");
     write_image(&a.join("x.jpg"), &pixels(50, 50, false), ImageFormat::Jpg);
-    // Someone already has a "Bilder-wolfgang" folder next to it that isn't ours.
-    std::fs::create_dir_all(t.path().join("one/Bilder-wolfgang")).unwrap();
-    std::fs::write(t.path().join("one/Bilder-wolfgang/private.txt"), "nicht anfassen").unwrap();
+    // Someone already has a "wolfgang_output" folder there that isn't ours.
+    std::fs::create_dir_all(a.join("wolfgang_output")).unwrap();
+    std::fs::write(a.join("wolfgang_output/private.txt"), "nicht anfassen").unwrap();
 
     let ws = Workspace::open(&[a]).unwrap();
-    assert!(ws.output_root.ends_with("Bilder-wolfgang-2"), "{}", ws.output_root.display());
+    assert!(ws.output_root.ends_with("Bilder/wolfgang_output-2"), "{}", ws.output_root.display());
+}
+
+#[test]
+fn a_folder_and_single_files_from_it_share_one_output() {
+    let t = tempfile::tempdir().unwrap();
+    let dir = t.path().join("Messe");
+    write_image(&dir.join("a.jpg"), &pixels(60, 40, false), ImageFormat::Jpg);
+    write_image(&dir.join("b.jpg"), &pixels(40, 60, false), ImageFormat::Jpg);
+    let hq = RunSettings { images: Some(ImageSettings::HighQuality { format: ImageFormat::Png }), ..Default::default() };
+
+    // The whole folder → inside it.
+    let ws = Workspace::open(std::slice::from_ref(&dir)).unwrap();
+    assert_eq!(ws.output_root, dir.canonicalize().unwrap().join("wolfgang_output"));
+    run(&ws.plan(&hq, RerunPolicy::OnlyNew).unwrap());
+    assert!(dir.join("wolfgang_output/a.png").exists());
+
+    // Later just one file from it → the same folder, and Wolfgang knows it.
+    let ws = Workspace::open(&[dir.join("b.jpg")]).unwrap();
+    assert_eq!(ws.output_root, dir.canonicalize().unwrap().join("wolfgang_output"));
+    assert_eq!(ws.summary().images.known, 1);
+
+    // Dropping the folder again doesn't pick up the results as new pictures.
+    let ws = Workspace::open(&[dir]).unwrap();
+    assert_eq!(ws.summary().images.total, 2);
 }
 
 #[test]
@@ -238,7 +262,7 @@ fn loose_files_go_next_to_their_folder_and_duplicates_are_skipped() {
     std::fs::copy(desk.join("one.jpg"), desk.join("copy of one.jpg")).unwrap();
 
     let ws = Workspace::open(&[desk.join("one.jpg"), desk.join("copy of one.jpg")]).unwrap();
-    assert!(ws.output_root.ends_with("Schreibtisch/Schreibtisch-wolfgang"));
+    assert!(ws.output_root.ends_with("Schreibtisch/wolfgang_output"));
     assert_eq!(ws.summary().duplicates, 1);
     let plan = ws.plan(&web("x", WebFormat::Webp, 1400), RerunPolicy::OnlyNew).unwrap();
     assert_eq!(plan.jobs.len(), 1);

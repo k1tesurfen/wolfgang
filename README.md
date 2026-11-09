@@ -113,7 +113,7 @@ fragt er auch nicht danach. Kurz vor dem Loslegen fasst er alles zusammen:
 
 > *„Also: 42 Fotos fürs Web als WebP, 1600 px, Qualität 80 – Dateinamen wie
 > „hotel-seeblick-0001.webp“ und 3 Videos als MP4, 1080p, mit Ton und Vorschaubild,
-> dazu eine Schrift als WOFF2. Landet alles in „Hotel-wolfgang“. Passt das so?“*
+> dazu eine Schrift als WOFF2. Landet alles in „Hotel/wolfgang_output“. Passt das so?“*
 
 Während er arbeitet, tippt er, stempelt und nippt am Kaffee. Danach reicht er dir den Ordner
 rüber – mit „📂 Im Finder zeigen“ bist du direkt da.
@@ -133,8 +133,10 @@ rüber – mit „📂 Im Finder zeigen“ bist du direkt da.
 
 ## Gut zu wissen
 
-**Wohin kommt alles?** In einen Ordner `…-wolfgang` direkt neben dem, was du ihm gegeben hast.
-Unterordner werden gespiegelt, Schriften landen unter `fonts/`.
+**Wohin kommt alles?** Immer in einen Ordner `wolfgang_output` dort, wo deine Dateien liegen:
+Gibst du Wolfgang einen Ordner, landet `wolfgang_output` *in* diesem Ordner. Gibst du ihm einzelne
+Dateien (zum Beispiel ein Video), liegt `wolfgang_output` direkt *daneben*. Unterordner werden
+gespiegelt, Schriften landen unter `fonts/`.
 
 **Dateinamen für Web-Bilder** setzen sich zusammen aus `[Vorsilbe]-[Stichworte]-[alter Name]-[Nummer]`.
 Umlaute werden zu `ae`, `oe`, `ue`, `ss`, die Nummer zählt pro Ordner in Finder-Reihenfolge.

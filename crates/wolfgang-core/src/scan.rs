@@ -8,8 +8,10 @@ use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 use walkdir::WalkDir;
 
-/// Folder name suffix of Wolfgang's output folders; never scanned.
-pub const OUTPUT_SUFFIX: &str = "-wolfgang";
+/// Wolfgang's output folder, inside the folder the files come from; never scanned.
+pub const OUTPUT_DIR: &str = "wolfgang_output";
+/// Output folders up to 2.3 were named `<folder>-wolfgang`; still never scanned.
+const OLD_OUTPUT_SUFFIX: &str = "-wolfgang";
 
 #[derive(Debug, Clone)]
 pub struct ScannedFile {
@@ -141,13 +143,14 @@ pub fn finder_order(a: &Path, b: &Path) -> std::cmp::Ordering {
     comps(a).cmp(&comps(b)).then_with(|| a.cmp(b))
 }
 
-/// `foo-wolfgang`, `foo-wolfgang-2`, …
+/// `wolfgang_output`, `wolfgang_output-2`, … and the old `foo-wolfgang`, `foo-wolfgang-2`.
 pub(crate) fn is_output_dir_name(name: &str) -> bool {
-    if name.ends_with(OUTPUT_SUFFIX) {
+    let numbered = |stem: &str| name.strip_prefix(stem).is_some_and(|rest| rest.is_empty() || rest.strip_prefix('-').is_some_and(|n| n.parse::<u32>().is_ok()));
+    if numbered(OUTPUT_DIR) || name.ends_with(OLD_OUTPUT_SUFFIX) {
         return true;
     }
     match name.rsplit_once('-') {
-        Some((head, n)) => head.ends_with(OUTPUT_SUFFIX) && n.parse::<u32>().is_ok(),
+        Some((head, n)) => head.ends_with(OLD_OUTPUT_SUFFIX) && n.parse::<u32>().is_ok(),
         None => false,
     }
 }
@@ -174,6 +177,8 @@ mod tests {
         touch(&root.join(".hidden/c.jpg"), "x");
         touch(&root.join("Urlaub-wolfgang/old.webp"), "x");
         touch(&root.join("x-wolfgang-2/old.webp"), "x");
+        touch(&root.join("wolfgang_output/new.webp"), "x");
+        touch(&root.join("Strand/wolfgang_output/new.webp"), "x");
 
         let s = scan(&[root]).unwrap();
         let rels: Vec<_> = s.files.iter().map(|f| (f.rel.to_string_lossy().into_owned(), f.kind)).collect();
@@ -230,6 +235,9 @@ mod tests {
 
     #[test]
     fn output_dir_names() {
+        assert!(is_output_dir_name("wolfgang_output"));
+        assert!(is_output_dir_name("wolfgang_output-2"));
+        assert!(!is_output_dir_name("wolfgang_outputs"));
         assert!(is_output_dir_name("Urlaub-wolfgang"));
         assert!(is_output_dir_name("Urlaub-wolfgang-12"));
         assert!(!is_output_dir_name("wolfgang"));

@@ -30,7 +30,7 @@ fn converts_with_flags_and_remembers_last_run() {
     let o = wolfgang(&home, &["--yes", "-f", "avif", "-d", "450", "-n", "Strand Tag", "-k", "Meer", root.to_str().unwrap()]);
     assert!(o.status.success(), "{}", text(&o));
     assert!(text(&o).contains("Fertig!"), "{}", text(&o));
-    let out = t.path().join("Urlaub-wolfgang");
+    let out = t.path().join("Urlaub/wolfgang_output");
     assert!(out.join("strand-tag-meer-0001.avif").exists() && out.join("strand-tag-meer-0002.avif").exists());
 
     let settings = std::fs::read_to_string(home.join("settings.json")).unwrap();
@@ -92,7 +92,7 @@ fn only_fonts_leaves_images_alone() {
     std::fs::copy(font, root.join("Arial.ttf")).unwrap();
     let o = wolfgang(&t.path().join("home"), &["-y", "--only", "fonts", root.to_str().unwrap()]);
     assert!(o.status.success(), "{}", text(&o));
-    let out = t.path().join("Mix-wolfgang");
+    let out = t.path().join("Mix/wolfgang_output");
     assert!(out.join("fonts/arial-400.woff2").exists());
     assert!(!out.join("a.webp").exists() && std::fs::read_dir(&out).unwrap().filter(|e| e.as_ref().unwrap().path().extension().is_some_and(|x| x == "webp")).count() == 0);
 }
@@ -116,7 +116,7 @@ fn settings_and_presets_commands() {
     let root = t.path().join("D");
     jpg(&root.join("a.jpg"), 50);
     assert!(wolfgang(&home, &["-y", root.to_str().unwrap()]).status.success());
-    assert!(t.path().join("D-wolfgang/a-0001.avif").exists());
+    assert!(t.path().join("D/wolfgang_output/a-0001.avif").exists());
 
     assert!(text(&wolfgang(&home, &["presets"])).contains("Noch keine Vorlagen"));
     assert_eq!(wolfgang(&home, &["presets", "remove", "x"]).status.code(), Some(2));
@@ -168,7 +168,7 @@ fn videos_and_audio_without_questions() {
 
     let o = wolfgang(&home, &["--yes", "--only", "videos", "--video-size", "original", "--no-poster", root.to_str().unwrap()]);
     assert!(o.status.success(), "{}", text(&o));
-    let out = t.path().join("Messe-wolfgang");
+    let out = t.path().join("Messe/wolfgang_output");
     assert!(out.join("rundgang-halle-3.mp4").exists(), "{}", text(&o));
     assert!(!out.join("rundgang-halle-3.webp").exists() && !out.join("stand.webp").exists() && !out.join("begruessung.mp3").exists());
 

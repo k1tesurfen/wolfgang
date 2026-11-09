@@ -234,6 +234,8 @@ pub fn non_interactive(ui: &Ui, ws: Workspace, store: &mut UserStore, store_path
     }
 }
 
+/// `Urlaub/wolfgang_output`
 fn folder_name(plan: &Plan) -> String {
-    plan.output_root.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+    let parts: Vec<String> = plan.output_root.iter().rev().take(2).map(|p| p.to_string_lossy().into_owned()).collect();
+    parts.into_iter().rev().collect::<Vec<_>>().join("/")
 }

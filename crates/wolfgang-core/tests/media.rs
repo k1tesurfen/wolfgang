@@ -304,7 +304,7 @@ fn animated_gifs_become_videos_on_the_chosen_background() {
 
     for (bg, expect_dark) in [(Background::White, false), (Background::Black, true)] {
         let out = t.path().join(format!("out-{bg:?}"));
-        let _ = std::fs::remove_dir_all(t.path().join("Gifs-wolfgang"));
+        let _ = std::fs::remove_dir_all(dir.join("wolfgang_output"));
         let settings = videos(VideoSettings { size: None, background: bg, ..Default::default() });
         let (plan, _) = run(&dir, &settings);
         let video = plan.output_root.join("tanzende-katze.mp4");

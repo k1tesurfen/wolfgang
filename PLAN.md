@@ -87,9 +87,8 @@ Wolfgang sorts what was dropped into piles: „Ich hab 42 Fotos, 6 Schriften und
 
 ### 3.6 Output location & layout
 
-- A single dropped folder → `<folder>-wolfgang/` next to it, mirroring the folder's contents.
-- Anything else (single files, several items) → `<parent>-wolfgang/` inside the first item's parent folder, mirroring the dropped items by name.
-- If that folder exists but belongs to a different source (or isn't Wolfgang's), `-2`, `-3`, … are used. Wolfgang never writes into a foreign folder.
+- **After 2.3.0 (2026-11-09, user's request): always `wolfgang_output/` where the files are.** A single dropped folder → `<folder>/wolfgang_output/` inside it, mirroring the folder's contents. Anything else (single files, several items) → `wolfgang_output/` next to the first item, mirroring the dropped items by name. Before, it was `<folder>-wolfgang/` next to the folder, and a single file got a folder named after its parent, which was confusing.
+- Every drop from the same place shares one `wolfgang_output` (the run log knows files by content, so „Kenn ich schon“ works across folder and single-file drops). A `wolfgang_output` that isn't Wolfgang's (no run log, not empty) is never written into; `-2`, `-3`, … are used instead. Scanning skips `wolfgang_output*` and the old `*-wolfgang` folders. Old `*-wolfgang` folders are not picked up again: things converted there count as new once.
 - SEO names are lowercase for dash/underscore styles.
 - Mirrors the input's subfolder structure. Files of all formats sit side by side; fonts go under `fonts/` with the same mirroring.
 - Run log `.wolfgang/run.jsonl` inside the output folder holds settings, file hashes and indexes.
@@ -352,7 +351,7 @@ Product questions were answered by the user one by one; this is the result. Vide
 **Shared**
 - „So wie letztes Mal“ and presets cover photos, videos and audio. The last run is remembered **per pile**: a run with only videos doesn't forget how the photos were done last time. Piles the template doesn't cover are asked as usual.
 - Long videos report progress *within* the file (from ffmpeg's progress output), so the bar keeps moving. Cancelling stops a running ffmpeg right away; the half-written file is thrown away.
-- Originals are never touched; output goes into `<input>-wolfgang/` mirroring the folders, side by side with the photos. Same behaviour in the app and the CLI. CLI flags: `--video-format mp4|webm`, `--video-size 720|1080|original|N`, `--video-quality smaller|balanced|nicer`, `--no-sound`, `--no-poster`, `--audio-format mp3|aac`, `--audio speech|music|best`, and `--only images|videos|audio|fonts`.
+- Originals are never touched; output goes into `wolfgang_output/` (see 3.6) mirroring the folders, side by side with the photos. Same behaviour in the app and the CLI. CLI flags: `--video-format mp4|webm`, `--video-size 720|1080|original|N`, `--video-quality smaller|balanced|nicer`, `--no-sound`, `--no-poster`, `--audio-format mp3|aac`, `--audio speech|music|best`, and `--only images|videos|audio|fonts`.
 
 ### Milestone 9 result (2026-11-09) ✅
 
