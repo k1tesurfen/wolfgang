@@ -299,6 +299,10 @@ und zimg (HDR → SDR) – kein x264/x265. Neue Versionen: Nummern und Prüfsumm
 CI baut dann neu. Zum Testen mit einem anderen ffmpeg: `WOLFGANG_FFMPEG_DIR=/pfad/zum/ordner`.
 Ohne gebautes ffmpeg werden die Video-/Audio-Tests übersprungen.
 
+**Branch:** alles liegt auf `main` (der alte Branch `v2` ist stillgelegt). Die Tests auf GitHub
+laufen bei jedem Push auf `main`; ist dort gerade kein Apple-Silicon-Rechner frei, meldet GitHub
+den Lauf als fehlgeschlagen, obwohl am Code nichts falsch ist.
+
 **Eine neue Version veröffentlichen** – gebaut auf einem Mac wie denen der Kolleg:innen:
 Version in `Cargo.toml` (workspace) und `crates/wolfgang-app/tauri.conf.json` anheben, committen,
 dann `scripts/release.sh` (legt einen Entwurf an) oder `scripts/release.sh --publish`. Das Skript

@@ -1,9 +1,13 @@
 name: CI
 
+# Only on main (everything lives there since 2026-11-09; v2 is retired), for pull
+# requests, and by hand (Actions → CI → Run workflow). The tests also run locally
+# before each commit, and scripts/release.sh won't release with a failing test.
 on:
   push:
-    branches: [main, v2]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 jobs:
   test:

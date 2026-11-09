@@ -4,8 +4,8 @@
 #   scripts/release.sh             # creates a *draft* release to check first
 #   scripts/release.sh --publish   # publishes right away (installed Wolfgangs see it)
 #
-# Before: bump the version in Cargo.toml (workspace) and crates/wolfgang-app/tauri.conf.json,
-# commit. Needs: everything for scripts/build-app.sh, the update key (~/.tauri/wolfgang.key),
+# Before: on main, bump the version in Cargo.toml (workspace) and
+# crates/wolfgang-app/tauri.conf.json, commit. Needs: everything for scripts/build-app.sh, the update key (~/.tauri/wolfgang.key),
 # and the GitHub CLI logged in (gh auth login).
 
 set -euo pipefail
@@ -23,6 +23,7 @@ CARGO_VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
 
 step "Prüfen, ob alles bereit ist ($TAG)"
 [[ "$CARGO_VERSION" == "$VERSION" ]] || fail "Cargo.toml sagt $CARGO_VERSION, tauri.conf.json sagt $VERSION"
+[[ "$(git branch --show-current)" == main ]] || fail "Releases kommen nur von main (gerade: $(git branch --show-current))"
 git diff --quiet && git diff --cached --quiet || fail "Es gibt noch nicht committete Änderungen"
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null && fail "Tag $TAG gibt es schon"
 git ls-remote --exit-code --tags origin "$TAG" >/dev/null 2>&1 && fail "Tag $TAG gibt es auf GitHub schon"
@@ -42,8 +43,8 @@ for f in "${FILES[@]}"; do [[ -f "$f" ]] || fail "$f fehlt"; done
 grep -q "\"version\": \"$VERSION\"" "$MACOS/latest.json" || fail "latest.json passt nicht zu $VERSION"
 
 step "Hochladen"
-# The commit goes to v2 and main (fast-forward only), then the tag.
-git push origin "HEAD:v2" "HEAD:main"
+# The commit goes to main, then the tag.
+git push origin main
 git tag "$TAG"
 git push origin "$TAG"
 NOTES=$(mktemp)
