@@ -9,5 +9,11 @@ edition = "2021"
 license = "MIT"
 rust-version = "1.85"
 
+# Test/debug builds: no debug info for dependencies (we never step into Tauri or
+# the codecs). On macOS, debug info stays behind in thousands of object files in
+# target/debug that are never cleaned up; this keeps that folder small.
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
 lto = "thin"
