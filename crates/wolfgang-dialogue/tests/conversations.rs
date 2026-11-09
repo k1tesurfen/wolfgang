@@ -581,3 +581,18 @@ fn long_videos_come_with_an_estimate() {
     }
     assert!(said(&c).contains("etwa 2 Minuten"), "MP4 is much quicker (reading 4K is what takes time): {}", said(&c));
 }
+
+#[test]
+fn thanks_get_a_last_word_and_the_conversation_ends() {
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("Kunde");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("Broschüre.pdf"), "%PDF").unwrap();
+    let (_, mut c) = talk(&[root], &UserStore::default());
+    pick(&mut c, "Los");
+    c.finished(&wolfgang_core::Report { converted: 1, pdf_pictures: 3, ..Default::default() });
+    assert!(said(&c).contains("3 Bilder rausgeholt"), "{}", said(&c));
+    pick(&mut c, "Danke");
+    let Step::End { lines, .. } = c.step() else { panic!("{:?}", c.step()) };
+    assert_eq!(lines.len(), 1, "one short reply, then the app goes back to the desk: {lines:?}");
+}

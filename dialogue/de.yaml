@@ -656,7 +656,14 @@ nodes:
           when: [has_media, "!from_template", converted_any],
           to: preset_name,
         }
-      - { label: "Danke, Wolfgang!", to: "@end" }
+      - { label: "Danke, Wolfgang!", to: bye }
+
+  bye:
+    mood: happy
+    say:
+      - ["Gern geschehen!", "Immer wieder gern.", "Dafür nicht. Bis zum nächsten Stapel!"]
+    go:
+      - { to: "@end" }
 
   preset_name:
     say:

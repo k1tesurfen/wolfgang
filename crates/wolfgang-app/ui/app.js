@@ -524,11 +524,15 @@ async function render(view) {
     if (my !== token) return;
     startWork();
   } else {
-    // end / cancelled: say goodbye, then back to the empty desk.
-    await say(view.lines, { mood: view.mood });
-    if (my !== token) return;
-    setChoices([...extra, { label: 'Danke, Wolfgang!', run: goIdle }]);
-    if (!extra.length) setTimeout(() => my === token && goIdle(), 6000);
+    // end / cancelled: Wolfgang's last word (if any), a moment to read it, then the empty desk.
+    // No second „Danke“: „Im Finder zeigen“ was there in the question before.
+    if (view.lines.length) {
+      await say(view.lines, { mood: view.mood });
+      if (my !== token) return;
+      await sleep(2200);
+      if (my !== token) return;
+    }
+    goIdle();
   }
 }
 
