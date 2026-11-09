@@ -46,7 +46,7 @@ if (!window.__TAURI__) {
       set_settings: ({ defaults }) => (settings = defaults),
       presets: () => presets,
       remove_preset: ({ name }) => (presets = presets.filter(p => p.name !== name)),
-      about: () => ({ version: '2.0.0-alpha.1 (Vorschau)', cli_installed: false }),
+      about: () => ({ version: '2.0.0 (Vorschau)', cli_installed: false }),
       install_cli: () => { throw 'In der Vorschau geht das nicht.'; },
       idle_line: () => 'Leg mir einfach was auf den Tisch. Bilder, Schriften … ich guck’s mir an.',
       working_line: () => ['Moment, bin dran …', 'Jubdidubdidub. Was? Ja gleich fertig.', 'Pixel sortieren, Bytes rausschütteln …'][Math.floor(Math.random() * 3)],
