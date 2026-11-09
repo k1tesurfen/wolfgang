@@ -300,8 +300,9 @@ CI baut dann neu. Zum Testen mit einem anderen ffmpeg: `WOLFGANG_FFMPEG_DIR=/pfa
 Ohne gebautes ffmpeg werden die Video-/Audio-Tests übersprungen.
 
 **Branch:** alles liegt auf `main` (der alte Branch `v2` ist stillgelegt). Die Tests auf GitHub
-laufen bei jedem Push auf `main`; ist dort gerade kein Apple-Silicon-Rechner frei, meldet GitHub
-den Lauf als fehlgeschlagen, obwohl am Code nichts falsch ist.
+laufen bei jedem Push auf `main`, außer wenn nur Doku geändert wurde (`*.md`, `docs/`,
+Referenzbilder) oder `[skip ci]` in der Commit-Nachricht steht. Ist bei GitHub gerade kein
+Apple-Silicon-Rechner frei, meldet GitHub den Lauf als fehlgeschlagen, obwohl am Code nichts falsch ist.
 
 **Eine neue Version veröffentlichen** – gebaut auf einem Mac wie denen der Kolleg:innen:
 Version in `Cargo.toml` (workspace) und `crates/wolfgang-app/tauri.conf.json` anheben, committen,

@@ -3,10 +3,14 @@ name: CI
 # Only on main (everything lives there since 2026-11-09; v2 is retired), for pull
 # requests, and by hand (Actions → CI → Run workflow). The tests also run locally
 # before each commit, and scripts/release.sh won't release with a failing test.
+# Skipped when a push only touches documentation, or with „[skip ci]“ in the
+# commit message (built into GitHub).
 on:
   push:
     branches: [main]
+    paths-ignore: ["**.md", "docs/**", "assets/reference/**", "LICENSE"]
   pull_request:
+    paths-ignore: ["**.md", "docs/**", "assets/reference/**", "LICENSE"]
   workflow_dispatch:
 
 jobs:
