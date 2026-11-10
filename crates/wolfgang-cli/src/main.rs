@@ -40,6 +40,7 @@ fn main() -> ExitCode {
     match cli.command {
         Some(Command::Presets { action }) => manage::presets(&ui, &mut store, &store_path, action),
         Some(Command::Settings { action }) => manage::settings(&ui, &mut store, &store_path, action),
+        Some(Command::Transcription { action }) => manage::transcription(&ui, action),
         Some(Command::LegacyReset { path, yes }) => legacy_reset(&ui, &path, yes),
         None if cli.run.reset => {
             let dir = cli.run.paths.first().cloned().unwrap_or_else(|| ".".into());
@@ -63,6 +64,10 @@ fn convert(ui: &Ui, store: &mut UserStore, store_path: &Path, mut args: flags::R
             return ExitCode::from(2);
         }
     };
+    if args.wants_transcripts() && !wolfgang_core::transcribe::installed() {
+        ui.error("Fürs Aufschreiben fehlt mir noch das Zusatzmodul (≈ 575 MB). Installier es mit: wolfgang transcription install");
+        return ExitCode::from(2);
+    }
 
     if args.paths.is_empty() {
         if !interactive {

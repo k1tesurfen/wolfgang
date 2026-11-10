@@ -14,7 +14,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_updater::{Update, UpdaterExt};
 use wolfgang_core::run::Event;
 use wolfgang_core::store::Defaults;
-use wolfgang_core::UserStore;
+use wolfgang_core::{transcribe, UserStore};
 
 struct AppState {
     office: Mutex<Office>,
@@ -24,6 +24,10 @@ struct AppState {
     pending: Mutex<Vec<String>>,
     /// A newer Wolfgang found on GitHub, waiting for a yes.
     update: Mutex<Option<Update>>,
+    /// The add-on for „Nur aufschreiben“ is being downloaded …
+    addon_installing: Arc<AtomicBool>,
+    /// … and should stop.
+    addon_cancel: Arc<AtomicBool>,
 }
 
 type Res<T> = Result<T, String>;
@@ -278,6 +282,60 @@ async fn install_update(app: AppHandle, state: State<'_, AppState>) -> Res<()> {
     app.restart()
 }
 
+/// The add-on for „Nur aufschreiben“, for the settings panel.
+#[derive(Clone, Serialize)]
+struct Addon {
+    installed: bool,
+    installing: bool,
+    /// Bytes to download.
+    size: u64,
+}
+
+fn addon(state: &AppState) -> Addon {
+    Addon { installed: transcribe::installed(), installing: state.addon_installing.load(Ordering::SeqCst), size: transcribe::install_size() }
+}
+
+#[tauri::command]
+fn transcription(state: State<AppState>) -> Addon {
+    addon(&state)
+}
+
+/// Downloads the add-on in the background: `transcription-progress` events while
+/// it runs, then `transcription-done` with the new state or an error message.
+#[tauri::command]
+fn install_transcription(app: AppHandle, state: State<AppState>) -> Addon {
+    if !state.addon_installing.swap(true, Ordering::SeqCst) {
+        state.addon_cancel.store(false, Ordering::SeqCst);
+        let cancel = state.addon_cancel.clone();
+        std::thread::spawn(move || {
+            let result = transcribe::install(&|done, total| drop(app.emit("transcription-progress", Download { done: done as usize, total: Some(total) })), &cancel);
+            let state = app.state::<AppState>();
+            state.addon_installing.store(false, Ordering::SeqCst);
+            eprintln!("wolfgang-app: add-on install: {}", result.as_ref().map_or_else(|e| e.to_string(), |_| "ok".into()));
+            let done: Result<Addon, String> = match result {
+                Ok(()) | Err(wolfgang_core::Error::Cancelled) => Ok(addon(&state)),
+                Err(e) => Err(e.to_string()),
+            };
+            let _ = app.emit("transcription-done", done);
+        });
+    }
+    addon(&state)
+}
+
+#[tauri::command]
+fn cancel_transcription_install(state: State<AppState>) {
+    state.addon_cancel.store(true, Ordering::SeqCst);
+}
+
+#[tauri::command]
+fn remove_transcription(state: State<AppState>) -> Res<Addon> {
+    if lock(&state).running {
+        return Err("Moment, ich bin gerade dran. Danach kannst du's entfernen.".into());
+    }
+    transcribe::remove().map_err(|e| e.to_string())?;
+    Ok(addon(&state))
+}
+
 /// Scene size in points; the window is always an exact whole multiple of it.
 const SCENE: (f64, f64) = (320.0, 180.0);
 /// 1280×720: comfortable on Full HD and on Retina screens alike.
@@ -356,7 +414,14 @@ fn main() {
     let store_path = UserStore::default_path();
     let store = UserStore::load(&store_path).map(|l| l.store).unwrap_or_default();
     let script = wolfgang_dialogue::load().unwrap_or_else(|_| wolfgang_dialogue::builtin());
-    let state = AppState { office: Mutex::new(Office::new(store_path, store, script)), cancel: Arc::new(AtomicBool::new(false)), pending: Mutex::new(Vec::new()), update: Mutex::new(None) };
+    let state = AppState {
+        office: Mutex::new(Office::new(store_path, store, script)),
+        cancel: Arc::new(AtomicBool::new(false)),
+        pending: Mutex::new(Vec::new()),
+        update: Mutex::new(None),
+        addon_installing: Arc::new(AtomicBool::new(false)),
+        addon_cancel: Arc::new(AtomicBool::new(false)),
+    };
 
     tauri::Builder::default()
         .plugin(tauri_plugin_updater::Builder::new().build())
@@ -382,7 +447,11 @@ fn main() {
             take_pending,
             pick_files,
             check_update,
-            install_update
+            install_update,
+            transcription,
+            install_transcription,
+            cancel_transcription_install,
+            remove_transcription
         ])
         .setup(|app| {
             // Exactly the office, at the largest whole scale that fits this screen.

@@ -465,6 +465,17 @@ pub fn convert_audio(src: &Path, s: &AudioSettings, out: &Path, progress: &(dyn 
     ffmpeg(src, &audio_args(&info, s)?, out, info.duration, progress, cancel)
 }
 
+// ── Speech, for transcripts ──────────────────────────────────────────────────
+
+/// The first sound track as 16 kHz mono 16-bit WAV (what Whisper listens to), written to `out`.
+pub(crate) fn speech_wav(src: &Path, info: &MediaInfo, out: &Path, progress: &(dyn Fn(f64) + Sync), cancel: &AtomicBool) -> Result<()> {
+    if info.audio.is_none() {
+        return Err(Error::Media("Da ist gar kein Ton drin.".into()));
+    }
+    let args = ["-map", "0:a:0", "-vn", "-sn", "-dn", "-map_metadata", "-1", "-ac", "1", "-ar", "16000", "-c:a", "pcm_s16le", "-f", "wav"].map(String::from);
+    ffmpeg(src, &args, out, info.duration, progress, cancel)
+}
+
 // ── Running ffmpeg ───────────────────────────────────────────────────────────
 
 fn ffmpeg(src: &Path, args: &[String], out: &Path, duration: Option<f64>, progress: &(dyn Fn(f64) + Sync), cancel: &AtomicBool) -> Result<()> {
@@ -543,10 +554,10 @@ fn file_name(p: &Path) -> String {
 }
 
 /// A temporary file in the system temp folder, removed when dropped.
-struct TempFile(PathBuf);
+pub(crate) struct TempFile(pub(crate) PathBuf);
 
 impl TempFile {
-    fn new(ext: &str) -> Self {
+    pub(crate) fn new(ext: &str) -> Self {
         static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = COUNTER.fetch_add(1, Ordering::Relaxed);
         Self(std::env::temp_dir().join(format!("wolfgang-{}-{n}.{ext}", std::process::id())))

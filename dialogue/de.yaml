@@ -409,6 +409,18 @@ nodes:
           set: { video.format: webm },
           to: video_size,
         }
+      # Aufschreiben ist immer die letzte Antwort (Besprechungen, siehe unten).
+      - {
+          label: "Nur aufschreiben, was gesagt wird",
+          when: [transcription_installed],
+          set: { video.format: transcript },
+          to: transcript,
+        }
+      - {
+          label: "Nur aufschreiben – muss ich erst installieren",
+          when: ["!transcription_installed", "!transcript_explained"],
+          to: transcript_missing,
+        }
 
   video_size:
     say:
@@ -537,6 +549,17 @@ nodes:
           set: { audio.format: aac },
           to: audio_content,
         }
+      - {
+          label: "Nur aufschreiben, was gesagt wird",
+          when: [transcription_installed],
+          set: { audio.format: transcript },
+          to: transcript,
+        }
+      - {
+          label: "Nur aufschreiben – muss ich erst installieren",
+          when: ["!transcription_installed", "!transcript_explained"],
+          to: transcript_missing,
+        }
 
   audio_content:
     mood: thinking
@@ -559,6 +582,48 @@ nodes:
     set: { audio.asked: true }
     go:
       - { to: piles }
+
+  # ── Aufschreiben ───────────────────────────────────────────────────────────
+  # Für Besprechungen: statt umzuwandeln schreibt Wolfgang auf, was gesagt wird
+  # (eine .txt pro Aufnahme). Gilt für den ganzen Stapel (alle Videos bzw. alle
+  # Audiodateien). Dafür braucht er ein Zusatzmodul aus den Einstellungen.
+
+  transcript_missing:
+    mood: sorry
+    set: { transcript.explained: true }
+    say:
+      - "Fürs Aufschreiben brauch ich noch ein Zusatzmodul, so 575 MB. Das installierst du einmal in den Einstellungen – klick einfach auf meinen Computer."
+      - "Diesmal also ganz normal:"
+    go:
+      - { when: [has_videos, "!videos_asked"], to: video_format }
+      - { to: audio_format }
+
+  transcript:
+    go:
+      - { when: [transcript_asked], to: transcript_done }
+      - { to: transcript_timestamps }
+
+  transcript_timestamps:
+    mood: thinking
+    say:
+      - "Mit Zeitangaben? Dann steht vor jedem Absatz, wann's gesagt wurde – so findest du die Stelle in der Aufnahme wieder."
+    answers:
+      - {
+          label: "Mit Zeitangaben",
+          set: { transcript.timestamps: true },
+          to: transcript_done,
+        }
+      - {
+          label: "Ohne – nur der Text",
+          set: { transcript.timestamps: false },
+          to: transcript_done,
+        }
+
+  transcript_done:
+    set: { transcript.asked: true }
+    go:
+      - { when: [has_videos, "!videos_asked"], to: videos_done }
+      - { to: audio_done }
 
   # ── Schon mal gemacht? ─────────────────────────────────────────────────────
 
@@ -594,7 +659,7 @@ nodes:
         text:
           [
             "Das dauert {estimate}. Zeit für 'nen Kaffee.",
-            "Die Videos brauchen {estimate}. Ich hab Geduld – du auch?",
+            "Das braucht {estimate}. Ich hab Geduld – du auch?",
           ]
       - ["Passt das so?", "Soll ich?", "Einverstanden?"]
     answers:
@@ -632,6 +697,8 @@ nodes:
         text: ["Fertig! Hat {duration} gedauert.", "So, erledigt."]
       - when: [pictures_from_pdfs]
         text: "Aus {pdfs:dem PDF:den PDFs} hab ich {pdf_pictures:ein Bild:Bilder} rausgeholt."
+      - when: [wrote_transcripts]
+        text: "{transcripts:Eine Aufnahme hab ich:Aufnahmen hab ich} aufgeschrieben. Namen und Fachwörter schreib ich nach Gehör – lies da lieber nochmal drüber."
       - when: [failed_any, "!all_failed"]
         text: "{converted:Eine Datei hat:Dateien haben} geklappt, aber bei {failed:einer:} hat's gehakt. Zum Beispiel: {first_error}"
       - when: [all_failed]

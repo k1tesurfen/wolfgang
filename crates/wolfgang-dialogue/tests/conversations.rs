@@ -54,6 +54,13 @@ fn talk(items: &[PathBuf], store: &UserStore) -> (Workspace, Conversation) {
     (ws, conv)
 }
 
+/// Like [`talk`], with or without the add-on for „Nur aufschreiben“.
+fn talk_transcribing(items: &[PathBuf], store: &UserStore, installed: bool) -> (Workspace, Conversation) {
+    let ws = Workspace::open(items).unwrap();
+    let ctx = Context { transcription: installed, ..Context::new(&ws, store) };
+    (ws, Conversation::new(builtin(), ctx, 7))
+}
+
 fn ask(step: &Step) -> (&str, &[String], Vec<&str>) {
     match step {
         Step::Ask { node, lines, answers, .. } => (node.as_str(), lines.as_slice(), answers.iter().map(|a| a.label.as_str()).collect()),
@@ -284,7 +291,8 @@ fn random_conversations_always_end_cleanly() {
     for round in 0..300 {
         let drop = &drops[round % drops.len()];
         let ws = Workspace::open(std::slice::from_ref(drop)).unwrap();
-        let mut c = Conversation::new(builtin(), Context::new(&ws, &store), round as u64);
+        let ctx = Context { transcription: round % 4 < 2, ..Context::new(&ws, &store) };
+        let mut c = Conversation::new(builtin(), ctx, round as u64);
         for _hop in 0..150 {
             match c.step().clone() {
                 Step::Ask { node, lines, answers, input, can_go_back, .. } => {
@@ -458,7 +466,7 @@ fn missing_media_tools_are_mentioned() {
     let mut s = wolfgang_core::Summary::default();
     s.videos.total = 2;
     s.media_tools_missing = true;
-    let ctx = Context { summary: s, output_root: "/x/y-wolfgang".into(), store: UserStore::default(), keyword_words: Default::default(), sample_image: None };
+    let ctx = Context { summary: s, output_root: "/x/y-wolfgang".into(), store: UserStore::default(), keyword_words: Default::default(), sample_image: None, transcription: false };
     let c = Conversation::new(builtin(), ctx, 1);
     assert_eq!(node(&c), "nothing");
     assert!(said(&c).contains("fehlt mein Werkzeug"), "{}", said(&c));
@@ -561,7 +569,7 @@ fn long_videos_come_with_an_estimate() {
     s.video_facts = vec![VideoFacts { info: Some(clip), known: false }];
     let mut store = UserStore::default();
     store.defaults.video_format = wolfgang_core::VideoFormat::Webm;
-    let ctx = Context { summary: s, output_root: "/x/Filme-wolfgang".into(), store, keyword_words: Default::default(), sample_image: None };
+    let ctx = Context { summary: s, output_root: "/x/Filme-wolfgang".into(), store, keyword_words: Default::default(), sample_image: None, transcription: false };
     let mut c = Conversation::new(builtin(), ctx, 2);
     let Step::Ask { answers, .. } = c.step() else { panic!() };
     assert!(answers[1].current && answers[1].label.starts_with("WebM"), "the default from the settings is marked: {answers:?}");
@@ -595,4 +603,89 @@ fn thanks_get_a_last_word_and_the_conversation_ends() {
     pick(&mut c, "Danke");
     let Step::End { lines, .. } = c.step() else { panic!("{:?}", c.step()) };
     assert_eq!(lines.len(), 1, "one short reply, then the app goes back to the desk: {lines:?}");
+}
+
+#[test]
+fn meetings_are_written_down_instead_of_converted() {
+    if !media_tools() {
+        return;
+    }
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("Besprechungen");
+    fake_media(&root.join("Teammeeting 12.11.mp4"));
+    fake_media(&root.join("Kunde.m4a"));
+    let mut store = UserStore::default();
+    let (ws, mut c) = talk_transcribing(std::slice::from_ref(&root), &store, true);
+    let (_, _, labels) = ask(c.step());
+    assert_eq!(labels.last(), Some(&"Nur aufschreiben, was gesagt wird"), "always the last answer: {labels:?}");
+    pick(&mut c, "Nur aufschreiben");
+    assert_eq!(node(&c), "transcript_timestamps");
+    let Step::Ask { answers, .. } = c.step() else { panic!() };
+    assert!(answers[0].current, "with timestamps is the default: {answers:?}");
+    pick(&mut c, "Ohne");
+    assert_eq!(node(&c), "audio_format", "the video questions are skipped");
+    let (_, _, labels) = ask(c.step());
+    assert_eq!(labels.last(), Some(&"Nur aufschreiben, was gesagt wird"));
+    pick(&mut c, "Nur aufschreiben");
+    assert_eq!(node(&c), "confirm", "timestamps are asked once for both piles");
+    assert!(said(&c).contains("Also: ein Video aufschreiben, ohne Zeitangaben und eine Audiodatei aufschreiben, ohne Zeitangaben."), "{}", said(&c));
+    pick(&mut c, "Los");
+    let Step::Start { settings, .. } = c.step().clone() else { panic!("{:?}", c.step()) };
+    assert_eq!((settings.videos.is_none(), settings.audio.is_none()), (true, true));
+    assert_eq!(settings.video_transcript, Some(wolfgang_core::TranscriptSettings { timestamps: false }));
+    let plan = ws.plan(&settings, RerunPolicy::OnlyNew).unwrap();
+    // On this machine the add-on may be missing; then planning says so instead.
+    if wolfgang_core::transcribe::installed() {
+        let targets: Vec<_> = plan.jobs.iter().map(|j| j.target.to_string_lossy().into_owned()).collect();
+        assert_eq!(targets, ["kunde.txt", "teammeeting-12-11.txt"]);
+    } else {
+        assert!(plan.problems.iter().all(|(_, e)| e.contains("Zusatzmodul")), "{:?}", plan.problems);
+    }
+
+    c.finished(&wolfgang_core::Report { converted: 2, transcripts: 2, ..Default::default() });
+    let text = said(&c);
+    assert!(text.contains("Fertig! Hat") && text.contains("Aufnahmen hab ich aufgeschrieben") && text.contains("nach Gehör"), "{text}");
+    pick(&mut c, "Danke");
+    c.remember(&mut store);
+
+    // Next time: „So wie letztes Mal“ writes them down again.
+    let (_, mut c) = talk_transcribing(&[root], &store, true);
+    pick(&mut c, "So wie letztes Mal");
+    assert!(said(&c).contains("aufschreiben, ohne Zeitangaben") && said(&c).contains("So wie letztes Mal"), "{}", said(&c));
+}
+
+#[test]
+fn without_the_add_on_wolfgang_explains_once_and_goes_on() {
+    if !media_tools() {
+        return;
+    }
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("Call");
+    fake_media(&root.join("call.m4a"));
+    let (_, mut c) = talk_transcribing(&[root], &UserStore::default(), false);
+    let (_, _, labels) = ask(c.step());
+    assert_eq!(labels.last(), Some(&"Nur aufschreiben – muss ich erst installieren"), "{labels:?}");
+    pick(&mut c, "muss ich erst installieren");
+    assert_eq!(node(&c), "audio_format", "the same question again");
+    assert!(said(&c).contains("Zusatzmodul") && said(&c).contains("Einstellungen"), "{}", said(&c));
+    let (_, _, labels) = ask(c.step());
+    assert!(!labels.iter().any(|l| l.contains("aufschreiben")), "said once is enough: {labels:?}");
+    c.back();
+    pick(&mut c, "MP3");
+    assert_eq!(node(&c), "audio_content");
+}
+
+#[test]
+fn transcripts_come_with_an_estimate() {
+    use wolfgang_core::media::{AudioStream, MediaInfo};
+    use wolfgang_core::workspace::VideoFacts;
+    let mut s = wolfgang_core::Summary::default();
+    s.audio.total = 1;
+    let meeting = MediaInfo { duration: Some(3600.0), video: None, audio: Some(AudioStream { channels: 1, sample_rate: 44100, codec: "aac".into() }) };
+    s.audio_facts = vec![VideoFacts { info: Some(meeting), known: false }];
+    let ctx = Context { summary: s, output_root: "/x/Calls/wolfgang_output".into(), store: UserStore::default(), keyword_words: Default::default(), sample_image: None, transcription: true };
+    let mut c = Conversation::new(builtin(), ctx, 3);
+    pick(&mut c, "Nur aufschreiben");
+    pick(&mut c, "Mit Zeitangaben");
+    assert!(said(&c).contains("etwa 4 Minuten"), "an hour of meeting: {}", said(&c));
 }

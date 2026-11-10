@@ -1,2 +1,5 @@
 /target/
 .DS_Store
+
+# Real meeting recordings for the transcription spike: never commit
+/transcription-test/

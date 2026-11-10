@@ -3,7 +3,7 @@
 > Wolfgang is the personification of conversion: a cozy, bearded guy in a cardigan who sits behind his desk with a coffee and converts whatever you put in front of him.
 > Usability for non-technical colleagues is the top priority.
 
-Status: **approved**. Milestones 1–10 are done; v2.2.0 brought video and audio, milestone 10 is waiting for the next release.
+Status: **approved**. Milestones 1–10 are done and released (v2.2 video and audio, v2.3 the polish of milestone 10; current release 2.3.4). Milestone 11 (transcription) is implemented and waiting for the next release. Open points: section 9.
 
 ---
 
@@ -19,9 +19,10 @@ Status: **approved**. Milestones 1–10 are done; v2.2.0 brought video and audio
 
 - ~~Audio (WAV/AIFF → MP3/AAC/Opus)~~ — done in v2.2 (MP3/AAC)
 - ~~Video (MP4/WebM, poster frames), which will mean bundling ffmpeg~~ — done in v2.2
-- PDF image extraction
-- V3/V4: speech-to-text transcription of audio/video via Python + a local model (spoken word only)
-- English UI, Intel/Linux builds, code signing, auto-update
+- ~~PDF image extraction~~ — done in v2.3 (pictures from PDFs)
+- V3/V4: speech-to-text transcription of audio/video with a local model (spoken word only) — done in *Milestone 11*, for meeting recordings; ~~via Python~~ whisper.cpp inside Wolfgang (no Python runtime to bundle)
+- English UI, Intel/Linux builds
+- ~~Auto-update~~ — done in v2.1. ~~Code signing~~ — dropped: no Apple Developer account, Wolfgang stays ad-hoc signed (decided in milestone 10)
 
 ---
 
@@ -205,6 +206,7 @@ wolfgang/
 │   │   ├── src/image/        # ImageIO decode (+ colour), Lanczos resize, jpg/webp/avif/png encode
 │   │   ├── src/font.rs       # ttf/otf/woff → woff2 with round-trip check, web names
 │   │   ├── src/media.rs      # videos + audio via the bundled ffmpeg: probe, filters, progress, cancel
+│   │   ├── src/transcribe.rs # meeting transcripts: add-on install, voice detection, whisper.cpp, paragraphs
 │   │   ├── src/naming.rs     # SEO names, transliteration, separators
 │   │   ├── src/runlog.rs     # .wolfgang/run.jsonl
 │   │   ├── src/settings.rs   # RunSettings (what the conversation produces)
@@ -223,7 +225,7 @@ wolfgang/
 └── PLAN.md
 ```
 
-- **Extending with new converters**: each pile is a `FileKind` (classification), a section in `RunSettings`, a `Task` variant (planning → target names) and a branch in `run::convert_job`. Audio, video and PDF are added the same way, with their questions living in the dialogue file. This is deliberately simpler than the trait from the first draft: two converters didn't justify the abstraction, and the shape will be clearer once audio/video exist. The later Python/local-model transcription can be a task that calls a bundled sidecar process.
+- **Extending with new converters**: each pile is a `FileKind` (classification), a section in `RunSettings`, a `Task` variant (planning → target names) and a branch in `run::convert_job`. Audio, video and PDF are added the same way, with their questions living in the dialogue file. This is deliberately simpler than the trait from the first draft: two converters didn't justify the abstraction, and the shape will be clearer once audio/video exist. The recipe held up for video, audio and PDF. Transcription (*Milestone 11*) is a `Task::Transcript` that runs whisper.cpp in-process, not a Python sidecar; it's not a pile of its own but the other way of handling the video and audio piles.
 - **Parallelism**: jobs run on a thread pool (rayon) with cancellation support.
 - **Image pipeline (decided by the spike, replaces the libvips idea)**:
   - **Decode with Apple ImageIO** (system framework, via `objc2-image-io`). It reads JPG/PNG/GIF/TIFF/WebP/HEIC/AVIF and Camera RAW, applies EXIF orientation and develops RAW with Apple's engine.
@@ -306,7 +308,7 @@ Findings:
 - **`scripts/build-app.sh`** builds the pixel art, the CLI and then `Wolfgang.app` plus the `.dmg` (`cargo tauri build`), and checks the result: CLI inside the app, signature, document types. Result: app 26 MB, **dmg 9.9 MB**.
 - **CLI inside the app:** `bundle.macOS.files` copies `target/release/wolfgang` to `Contents/MacOS/wolfgang`. „Über Wolfgang → Installieren“ links it to `/usr/local/bin/wolfgang` (admin password via `osascript`).
 - **Dock drop:** `crates/wolfgang-app/Info.plist` adds `CFBundleDocumentTypes` (`public.item`, `public.folder`) with `LSHandlerRank = Alternate`, so Wolfgang never becomes the default app for anything. Paths arriving via LaunchServices are kept in Rust (`take_pending`) until the UI is ready, so dropping on the icon of a closed app works too (tested with `open -a`).
-- **Signing:** ad-hoc (`signingIdentity: "-"`), no notarization. Without any signature, Apple Silicon calls downloaded apps "damaged" with no way past it; ad-hoc gives the normal "can't be checked" dialog, which can be allowed once (README „Erster Start“). Real signing/notarization needs an Apple Developer account and could be added to the release workflow later.
+- **Signing:** ad-hoc (`signingIdentity: "-"`), no notarization. Without any signature, Apple Silicon calls downloaded apps "damaged" with no way past it; ad-hoc gives the normal "can't be checked" dialog, which can be allowed once (README „Erster Start“). Real signing/notarization would need an Apple Developer account; milestone 10 decided against one for good.
 - **GitHub Actions:** `ci.yml` runs clippy (`-D warnings`) and all tests on macOS 15 for pushes to main (only main since 2026-11-09, when the v2 branch was retired); skipped for documentation-only pushes (`*.md`, `docs/`, `assets/reference/`, `LICENSE`) and with `[skip ci]` in the commit message and for PRs. `release.yml` runs on tag `v*`: it checks that the tag matches the app version, tests, builds, and creates a **draft** release with the dmg attached. Not run yet (nothing pushed).
 - **README** rewritten in German: install, first launch, app, CLI, tips, switching from 1.x, developer notes, how to release.
 
@@ -381,6 +383,67 @@ Decided with the user: no paid Apple Developer account, ever (internal tool; col
 - **Wilma, redrawn from the user's character study (`assets/reference/wilma-study.jpeg`):** the study is on a clean 31.7 px grid, so the sleeping, sitting and walking poses were sampled cell by cell and snapped to her palette (dark eyes now, as in the study). She's about 1.6× bigger (sitting 22×23, walking 35×19, cushion 35 wide), which still fits the gap under the desk and the floor strip. User feedback: sitting kept as is; walking got a one-pixel snout; the bright mouth bar of the sleeping pose is hidden behind the cushion's front rim (she lies one row above its top). Derived by hand: breathing, ear twitch, eyes open, blinking, washing (tongue), a yawn instead of the stretch (no clean stretch in the study's style), three more walking frames.
 - **App check:** settings panel and progress checked in the browser mock (headless screenshots); the app logic with a real video drop is a test in `session.rs`. Not done: clicking through the real app window (no desktop control in this environment) — a short manual check before the next release.
 
+### Milestone 11: transcription — decisions (2026-11-10)
+
+Product questions answered by the user (2026-11-10); engine confirmed by the spike the same day.
+
+**What it's for:** **meeting recordings**, sometimes audio, sometimes video. Wolfgang writes down what is said. The meetings are in German, with the odd English word dropped in. Everything runs locally on the Mac; nothing is uploaded. Not meant for interviews, podcasts or social clips, and not combined with converting.
+
+**A choice, not an extra (user's decision):** when video or audio files land on the desk, Wolfgang can't know whether they're for the web or a meeting to write down. So the **first** video question and the **first** audio question get one more answer, always the **last** one:
+
+```
+Was soll aus den Videos werden?
+  MP4 – läuft überall ★
+  WebM – kleiner, dauert aber länger
+  Nur aufschreiben, was gesagt wird
+```
+
+Picking it writes the transcript only: the video/audio isn't converted and the pile's other questions are skipped. Instead there is one follow-up question (user's decision, 2026-11-10; sometimes timestamps aren't wanted): „Mit Zeitangaben?“ **Mit** (`[00:12:30]` at the start of each paragraph, to find a spot in the recording) / Ohne (clean text). It applies to the whole pile (all videos, or all audio files); a mixed drop with photos asks the photo questions as usual.
+
+**Hidden behind an install in settings (user's decision):** transcription needs a module (the model plus a small voice detector, ≈ 575 MB) that isn't in the app.
+- **Settings** (the computer) gets a row „Aufschreiben (Besprechungen)“ with *Installieren* (download with progress, checked against a pinned SHA-256, stored in `~/Library/Application Support/Wolfgang/models/`) and *Entfernen*. CLI: `wolfgang transcription install|remove|status`.
+- **Not installed yet:** the answer still appears, always last, but says so („Nur aufschreiben – muss ich erst installieren“). Picking it: Wolfgang explains it's a one-time download in the settings, at the computer, skips the transcript this time and goes on with the pile's normal questions. No install from inside the conversation.
+- The model is pinned in Wolfgang's source, so a self-update can move to a newer one (and offer the update in settings).
+
+**Output (user's decision):** **`.txt` only**, plain text with paragraphs, named like the recording, in `wolfgang_output/` as usual: `Teammeeting 12.11.mp4` → `teammeeting-12-11.txt`. No subtitles. Timestamps or not: asked, see above. Paragraphs, not one line per Whisper segment: segments are joined until a longer pause (≥ ~1.5 s, to tune in the spike), so the text reads like minutes.
+
+**Language:** fixed to **German** (`language = de`), not auto-detect: auto-detect decides from the first 30 seconds and can pick the wrong language or translate. Whisper in German mode keeps English words that are spoken in between (to check in the spike with a real meeting).
+
+**Speakers:** not needed. Only if free — it isn't: whisper.cpp's speaker turns (`tinydiarize`) work only with an English model, and its stereo mode needs one speaker per channel. So no speaker names in v1.
+
+**Engine (confirmed by the spike):** [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) through the `whisper-rs` crate, statically linked into `wolfgang-core`, using Metal on Apple Silicon. Python was the original idea, but a Python runtime plus PyTorch is gigabytes and breaks *zero setup*; whisper.cpp needs nothing at runtime and builds with the `cmake` the build machines already have. Audio comes from the bundled ffmpeg (decoded to 16 kHz mono float, voice-band filtered), so every video/audio format Wolfgang reads works.
+- *Not taken:* ffmpeg's own `whisper` filter (ffmpeg 8+, also whisper.cpp). `whisper-rs` worked right away, and Wolfgang needs its own VAD joining (see *Spike result*), which the filter doesn't allow.
+- **Model:** Whisper `large-v3-turbo`, quantized q5_0 (574 MB) plus the Silero VAD model; see *Spike result*. Models are MIT too.
+
+**Where it fits (recipe from section 7):** no new pile. `VideoSettings` / `AudioSettings` get a „transcript only“ choice, planning makes a `Task::Transcript` instead of the video/audio task, a branch in `run::convert_job`, the answers in `dialogue/de.yaml` (with an `installed` condition for the text), CLI `--video-format transcript` / `--audio-format transcript` plus `--timestamps` / `--no-timestamps` (refused with a hint when the module is missing). „So wie letztes Mal“ and presets remember it per pile like any other answer.
+
+**Long recordings:** meetings run 1–2 hours, so progress *within* the file (from whisper's segment callback), cancelling within a second, and Wolfgang's time estimate before the run all matter („Das dauert etwa 6 Minuten.“).
+
+**Test material:** a real 40-minute German client call (`.m4a`, AAC mono 44.1 kHz) and the user's own transcript of it, made with faster-whisper `large-v3-turbo` (auto-detect said `de`, 0.82). Kept only locally for the spike and deleted before the release; nothing from it is in the repo. That transcript shows what to beat: one line per segment; towards the end the segments break into 1–3-word lines; a client's name is spelled several ways.
+
+**Spike result (2026-11-10) ✅** — on the 40-minute test meeting, M2 Pro, `whisper-rs` 0.16 (whisper.cpp) with Metal, model `ggml-large-v3-turbo-q5_0.bin` (574 MB, SHA-256 `394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2`), language fixed to `de`, greedy decoding:
+- **Speed:** 2 min 15 s for 40 min of recording, **≈ 16× realtime** (1 h meeting ≈ 4 min). Model load 0.5 s (the first start ever compiles the Metal shaders once, 7 s). Peak memory 1.2 GB. Linking whisper.cpp adds only ≈ 2 MB to the binary.
+- **Audio in:** the bundled ffmpeg already writes WAV `pcm_s16le`, so `-ac 1 -ar 16000 -c:a pcm_s16le` over a pipe is enough (1 s for 40 min); **no change to `build-ffmpeg.sh`**.
+- **Quality:** on par with the user's faster-whisper transcript, in places better. English words stay English. Names are spelled inconsistently in both — accepted by the user: even people get that wrong from audio; no name/vocabulary prompt.
+- **VAD is needed — speech parts joined, not silence zeroed:** without it, the waiting music at the start became „... Musik ...“ and swallowed the greetings in the same 30-s window. `suppress_nst` and `no_context` didn't help. whisper.cpp's built-in VAD only runs in `whisper_full`, which `whisper-rs` doesn't call (`state.full` → `whisper_full_with_state` skips it), so Wolfgang runs the Silero VAD itself (`WhisperVadContext`, model `ggml-silero-v5.1.2.bin`, 885 kB, SHA-256 `29940d98d42b91fbd05ce489f3ecf7c72f0a42f027e4875919a28fb4c04ea2cf`, 5 s for 40 min), joins the speech parts (± 0.2 s padding, overlapping parts merged) and maps Whisper's timestamps back to the recording. Result: greetings back at 00:00:41 (same as the reference), no „Musik“, half as many 1–2-word lines (70 vs. 152). **Zeroing** the non-speech instead was tried and is much worse: Whisper invents „Vielen Dank“ in the silence and then drops all punctuation and capitals.
+- **The module** = both model files (≈ 575 MB), downloaded together by *Installieren*.
+- **Still to do in the real implementation:** paragraphs from segments (pause threshold), progress from the progress callback mapped to the time estimate (16×), cancelling via whisper.cpp's abort callback (to test: within a second), a video recording as input (same ffmpeg path).
+
+### Milestone 11 result (2026-11-10) ✅
+
+- **Core (`transcribe.rs`):** the add-on is two pinned files (`WHISPER`, `VAD`: URL at a fixed Hugging Face commit, size, blake3). `install` downloads with the Mac's own `/usr/bin/curl` (no HTTP crate; `--continue-at -`, so a cancelled download resumes), polls the file size for progress, checks the blake3, then renames. `installed()` only checks sizes. `transcribe`: ffmpeg → 16 kHz mono WAV in a temp file (`media::speech_wav`, the existing ffmpeg runner with progress/cancel) → Silero VAD (`WhisperVadContext`) → speech parts padded ± 0.2 s, merged, joined → Whisper (greedy, `de`) on a scoped worker thread, progress and cancel through atomics → timestamps mapped back → noise lines dropped („... Musik ...“, „(Applaus)“, ZDF/Amara subtitle credits) → paragraphs (new one after a pause ≥ 1 s, or at a sentence end once it has 60 words) → `Transkript von „name“` + paragraphs, with or without `[hh:mm:ss]`. One transcript at a time (a static mutex: GPU + 1.2 GB). whisper.cpp's logging is switched off (`install_logging_hooks` without a log backend), so the CLI's terminal stays clean.
+- **whisper-rs bug:** `set_abort_callback_safe` (0.16) double-boxes the closure but casts it back as the bare closure type, so whisper.cpp reads garbage as „abort“ and fails with error -6 („failed to encode“). Wolfgang uses the raw `set_abort_callback` with a C function reading an `AtomicBool`. The progress callback is fine. Worth re-checking when updating whisper-rs.
+- **Settings:** `RunSettings.video_transcript` / `.audio_transcript: Option<TranscriptSettings { timestamps }>`, never together with `videos` / `audio` (validated). Last run per pile: a transcript replaces the conversion and vice versa. Old settings files and run logs load unchanged.
+- **Planning/run:** `Task::Transcript` → `name.txt` next to where the converted file would be (web-safe original name); transcripts count like PDF pictures (`Report.transcripts`, not in „gespart“). Missing add-on → a plan problem, not a crash. Audio files are now probed too (`Summary.audio_facts`), for the estimate (duration ÷ 16).
+- **Conversation:** `video.format: transcript` / `audio.format: transcript` (the last answer, only `when: [transcription_installed]`), then `transcript_timestamps` (asked once for both piles, „Mit“ marked). Without the add-on the answer reads „Nur aufschreiben – muss ich erst installieren“; picking it explains the settings once (`transcript.explained`) and asks the same question again without it. After the run: „… aufgeschrieben. Namen und Fachwörter schreib ich nach Gehör – lies da lieber nochmal drüber.“
+- **App:** settings row „Besprechungen aufschreiben“ (11th row; row spacing 2.5 → 1.5 so it fits without scrolling): *Installieren (575 MB)* → progress in the label + *Abbrechen* → *Installiert ✓* / *Entfernen*. Commands `transcription`, `install_transcription` (background thread, `transcription-progress` / `transcription-done` events), `cancel_transcription_install`, `remove_transcription` (not while a run is going). If the download finishes with the panel closed, Wolfgang says so. Credits in „Über Wolfgang“. Mock: `?addon`, `?addon=installing`.
+- **CLI:** `--video-format transcript`, `--audio-format transcript`, `--timestamps` / `--no-timestamps`; refused with exit 2 and the install hint when the add-on is missing. `wolfgang transcription [status|install|remove]` (progress bar, Ctrl-C cancels and resumes next time).
+- **Tests:** unit tests for joining/mapping, noise, paragraphs, rendering, WAV reading, estimate, and install (via `file://` URLs: resume, wrong hash, missing file, cancel). End-to-end with real German speech from macOS's voice „Anna“ after 8 s of tones, as `.m4a` and inside an `.mp4`: words found, first timestamp after the music, no „Musik“, no timestamps when not wanted, cancelling stops within 2 s. CLI run with `--audio-format transcript`. Conversation tests for both paths, the estimate, and „So wie letztes Mal“; the 300 random conversations alternate with/without add-on. The speech tests need the model files in `target/models` and are skipped otherwise (also on CI — the model is too big to download there).
+- **Real meeting (the test recording, release CLI, M2 Pro):** 40 min in 2 min 34 s; 95 paragraphs, median 64 words; greetings at 00:00:41 as in the reference.
+- **Build:** whisper.cpp's Metal code needs `__isPlatformVersionAtLeast` (clang's runtime) once it's built for macOS 13; rustc links with `-nodefaultlibs`, so `wolfgang-core/build.rs` links `libclang_rt.osx.a`. `.cargo/config.toml` pins `MACOSX_DEPLOYMENT_TARGET=13.0` for every cargo build: before, only the Tauri build used 13.0, while the CLI bundled in the app was built for the build machine's macOS. App and CLI now both say `minos 13.0`. dmg 31 → 34 MB.
+- **Digits (user's feedback after trying it, 2026-11-10: „575 looks like 878“):** Pixelify's 5 reads as S and its 7 as a hook. Digits now come from VT323 (OFL) through a separate family „Wolfgang Digits“ with `unicode-range: 0–9`, scaled 125 % to Pixelify's cap height and with Pixelify's line metrics as overrides, so no row moves. Compared on the real panel at scale 4: Tiny5 (8 smudges into 3), Silkscreen (clear but wide), a whole-font switch (loses the look). Overriding digits inside the „Pixelify Sans“ family didn't work in WebKit/Chrome; a separate family first in `font-family` does.
+- **Not done:** the real app window (install button, a drop with „Nur aufschreiben“) was only checked in the browser mock — part of the manual check before the next release.
+
 ---
 
 ## 8. Milestones
@@ -394,12 +457,18 @@ Decided with the user: no paid Apple Developer account, ever (internal tool; col
 7. ✅ **Release**: `.dmg` build via GitHub Actions (macOS arm64 runner), README rewrite (German), first-launch instructions for the unsigned app. Released as v2.0.0. See *Milestone 7 result*.
 8. ✅ **Self-update** (v2.1). See *v2.1: self-update*.
 9. ✅ **Video + audio** (v2.2): MP4/WebM for the web, poster frames, MP3/AAC, on a bundled LGPL ffmpeg. See *Milestone 9* and *Milestone 9 result*.
-10. ✅ **Polish** (next release): video/audio settings, time estimates, well-packed videos, animated GIFs → videos, pictures from PDFs, releases from the Mac. See *Milestone 10*.
+10. ✅ **Polish** (v2.3): video/audio settings, time estimates, well-packed videos, animated GIFs → videos, pictures from PDFs, releases from the Mac. See *Milestone 10*.
+11. ✅ **Transcription** (next release): meeting recordings (video/audio) → German `.txt`, locally with whisper.cpp; add-on installed in the settings, „Nur aufschreiben“ always the last answer. See *Milestone 11* and *Milestone 11 result*.
 
 ---
 
 ## 9. Open points
 
-- Exact default quality values per codec (calibrated during the spike so that WebP/AVIF at „Ausgewogen“ look the same)
-- Final dialogue texts: I write the first draft in `dialogue/de.yaml` for you to review
-- App icon: Wolfgang's face in pixel art
+Settled: the app icon (milestone 5, redone 2026-11-09), the dialogue texts (shipped with 2.0, edited since), the video/audio quality steps (milestone 9 calibration).
+
+Still open — mostly checks that need real files from colleagues:
+- **Image quality calibration:** a visual pass with real photos so WebP/AVIF at „Ausgewogen“ look the same (`settings::encoder_quality`: AVIF uses 0.9× the user's number; see *Milestone 2 result*).
+- **RAW:** confirm RAW files are really developed, not the embedded preview, across several camera brands (see *Spike result*).
+- **iPhone video:** real HDR/Dolby Vision/rotated footage to confirm the tone mapping beyond the synthetic clip; whether CI's virtual Macs take the software H.264 fallback (see *Milestone 9 result*).
+- **WOFF2:** an actual browser render test (the glyph-by-glyph round trip exists).
+- **Real app window:** click through the app by hand before the next release (see *Milestone 10*, App check), now including the add-on install and a „Nur aufschreiben“ drop (*Milestone 11 result*).

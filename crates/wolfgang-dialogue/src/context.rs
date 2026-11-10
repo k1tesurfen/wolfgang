@@ -4,7 +4,7 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use wolfgang_core::kind::FileKind;
-use wolfgang_core::settings::{AudioSettings, ImageSettings, VideoSettings};
+use wolfgang_core::settings::{AudioSettings, ImageSettings, TranscriptSettings, VideoSettings};
 use wolfgang_core::workspace::Piles;
 use wolfgang_core::{RunSettings, Summary, UserStore, Workspace};
 
@@ -33,6 +33,10 @@ pub const FLAGS: &[&str] = &[
     "images_asked",
     "videos_asked",
     "audio_asked",
+    "transcription_installed",
+    "transcript_asked",
+    "transcript_explained",
+    "wrote_transcripts",
     "has_unknown",
     "has_duplicates",
     "nothing_to_do",
@@ -66,6 +70,7 @@ pub const NUMBER_VARS: &[&str] = &[
     "videos_grew",
     "pdfs_without_pictures",
     "pdf_pictures",
+    "transcripts",
     "fonts",
     "unknown",
     "duplicates",
@@ -110,6 +115,8 @@ pub struct Context {
     pub keyword_words: BTreeMap<String, Vec<String>>,
     /// First image (relative folder, file stem), for name previews.
     pub sample_image: Option<(String, String)>,
+    /// The add-on for „Nur aufschreiben“ is installed.
+    pub transcription: bool,
 }
 
 impl Context {
@@ -122,6 +129,7 @@ impl Context {
             sample_image: ws.scan.of_kind(FileKind::Image).next().map(|f| {
                 (f.rel_dir(), f.rel.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default())
             }),
+            transcription: wolfgang_core::transcribe::installed(),
         }
     }
 
@@ -140,7 +148,9 @@ impl Context {
     /// A last run is only offered if it configured a pile that's on the desk now.
     pub fn last_run(&self) -> Option<&RunSettings> {
         let p = self.piles();
-        self.store.last_run.as_ref().filter(|r| (p.images && r.images.is_some()) || (p.videos && r.videos.is_some()) || (p.audio && r.audio.is_some()))
+        self.store.last_run.as_ref().filter(|r| {
+            (p.images && r.images.is_some()) || (p.videos && (r.videos.is_some() || r.video_transcript.is_some())) || (p.audio && (r.audio.is_some() || r.audio_transcript.is_some()))
+        })
     }
 
     /// The last run, described for the piles on the desk.
@@ -202,7 +212,9 @@ pub fn join_and(parts: &[String]) -> String {
 /// Describes the piles of a run (or preset); `on` limits it to piles that matter.
 pub fn describe_settings(s: &RunSettings, on: Piles) -> String {
     let mut parts = Vec::new();
-    let several = [on.images && s.images.is_some(), on.videos && s.videos.is_some(), on.audio && s.audio.is_some()].iter().filter(|b| **b).count() > 1;
+    let videos = on.videos && (s.videos.is_some() || s.video_transcript.is_some());
+    let audio = on.audio && (s.audio.is_some() || s.audio_transcript.is_some());
+    let several = [on.images && s.images.is_some(), videos, audio].iter().filter(|b| **b).count() > 1;
     let label = |what: &str, text: String| if several { format!("{what} {text}") } else { text };
     if let Some(i) = s.images.as_ref().filter(|_| on.images) {
         parts.push(label("Fotos", describe_images(i)));
@@ -210,8 +222,14 @@ pub fn describe_settings(s: &RunSettings, on: Piles) -> String {
     if let Some(v) = s.videos.as_ref().filter(|_| on.videos) {
         parts.push(label("Videos", describe_videos(v)));
     }
+    if let Some(t) = s.video_transcript.as_ref().filter(|_| on.videos) {
+        parts.push(label("Videos", describe_transcript(t)));
+    }
     if let Some(a) = s.audio.as_ref().filter(|_| on.audio) {
         parts.push(label("Audio", describe_audio(a)));
+    }
+    if let Some(t) = s.audio_transcript.as_ref().filter(|_| on.audio) {
+        parts.push(label("Audio", describe_transcript(t)));
     }
     parts.join("; ")
 }
@@ -268,6 +286,11 @@ pub fn describe_videos(v: &VideoSettings) -> String {
     t
 }
 
+/// „aufschreiben, mit Zeitangaben“
+pub fn describe_transcript(t: &TranscriptSettings) -> String {
+    format!("aufschreiben, {} Zeitangaben", if t.timestamps { "mit" } else { "ohne" })
+}
+
 /// „als MP3 (Sprache)“
 pub fn describe_audio(a: &AudioSettings) -> String {
     format!("als {} ({})", a.format.label(), a.content.label())
@@ -310,5 +333,7 @@ mod tests {
         let s = RunSettings { videos: Some(VideoSettings::default()), audio: Some(AudioSettings::default()), ..Default::default() };
         assert_eq!(describe_settings(&s, all), "Videos als MP4, 1080p, mit Ton und Vorschaubild; Audio als MP3 (Musik)");
         assert_eq!(describe_settings(&s, Piles { audio: true, ..Default::default() }), "als MP3 (Musik)");
+        let meeting = RunSettings { videos: Some(VideoSettings::default()), audio_transcript: Some(TranscriptSettings { timestamps: false }), ..Default::default() };
+        assert_eq!(describe_settings(&meeting, all), "Videos als MP4, 1080p, mit Ton und Vorschaubild; Audio aufschreiben, ohne Zeitangaben");
     }
 }

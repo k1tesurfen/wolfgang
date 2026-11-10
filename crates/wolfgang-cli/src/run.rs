@@ -31,6 +31,14 @@ pub fn install_ctrlc() {
     });
 }
 
+/// Runs `work` so that the first Ctrl-C cancels it (via [`CANCEL`]) instead of quitting.
+pub fn while_cancellable<T>(work: impl FnOnce() -> T) -> T {
+    CONVERTING.store(true, Ordering::SeqCst);
+    let result = work();
+    CONVERTING.store(false, Ordering::SeqCst);
+    result
+}
+
 pub enum Output<'a> {
     Interactive { ui: &'a Ui, working: &'a [String] },
     Plain { ui: &'a Ui },
@@ -77,6 +85,7 @@ pub fn convert(plan: &Plan, out: Output) -> wolfgang_core::Result<Report> {
                     "failed": r.failed.len(),
                     "bytes_in": r.bytes_in,
                     "bytes_out": r.bytes_out,
+                    "transcripts": r.transcripts,
                     "duration_ms": r.duration.as_millis() as u64,
                     "cancelled": r.cancelled,
                 }));
@@ -213,6 +222,9 @@ pub fn non_interactive(ui: &Ui, ws: Workspace, store: &mut UserStore, store_path
         first.push('.');
         if report.pdf_pictures > 0 {
             first.push_str(&format!(" Aus den PDFs: {} Bilder.", report.pdf_pictures));
+        }
+        if report.transcripts > 0 {
+            first.push_str(&format!(" Aufgeschrieben: {} (Namen nach Gehör – lieber nochmal drüberlesen).", if report.transcripts == 1 { "1 Aufnahme".into() } else { format!("{} Aufnahmen", report.transcripts) }));
         }
         let mut lines = vec![first];
         for (p, note) in &report.notes {

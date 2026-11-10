@@ -10,7 +10,8 @@ use crate::media::{self, MediaInfo, VideoTask};
 use crate::naming;
 use crate::runlog::{self, RunLog};
 use crate::scan::{self, Scan, ScannedFile, OUTPUT_DIR};
-use crate::settings::{self, AudioSettings, ImageSettings, Naming, RunSettings};
+use crate::settings::{self, AudioSettings, ImageSettings, Naming, RunSettings, TranscriptSettings};
+use crate::transcribe;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -19,6 +20,8 @@ use std::path::{Path, PathBuf};
 pub const FONTS_DIR: &str = "fonts";
 /// Poster frames of videos are WebP, named like the video.
 pub const POSTER_EXT: &str = "webp";
+/// Transcripts are plain text, named like the recording.
+pub const TRANSCRIPT_EXT: &str = "txt";
 
 pub struct Workspace {
     pub scan: Scan,
@@ -36,7 +39,7 @@ pub struct Workspace {
 /// What was found out about a file while opening the drop.
 #[derive(Debug, Clone, Default)]
 struct Facts {
-    /// Videos only; `None` if ffprobe couldn't read it (dealt with when converting).
+    /// Videos and audio only; `None` if ffprobe couldn't read it (dealt with when converting).
     media: Option<MediaInfo>,
     /// An animated GIF (now in the video pile).
     animated_gif: bool,
@@ -44,7 +47,7 @@ struct Facts {
     transparent: bool,
 }
 
-/// A video on the desk, for time estimates.
+/// A video or audio file on the desk, for time estimates.
 #[derive(Debug, Clone, Default)]
 pub struct VideoFacts {
     /// `None` if ffprobe couldn't read it.
@@ -125,6 +128,8 @@ pub struct Summary {
     pub transparent_gifs: usize,
     /// Every video, for estimating how long they take.
     pub video_facts: Vec<VideoFacts>,
+    /// Every audio file (for how long writing them down takes).
+    pub audio_facts: Vec<VideoFacts>,
     /// There are videos or audio, but the bundled ffmpeg can't be found.
     pub media_tools_missing: bool,
     pub unknown: Vec<PathBuf>,
@@ -154,6 +159,8 @@ pub enum Task {
     Font,
     Video(VideoTask),
     Audio(AudioSettings),
+    /// A video or audio file written down as text.
+    Transcript(TranscriptSettings),
     /// `target` is the folder the pictures go into.
     Pdf,
 }
@@ -220,12 +227,13 @@ impl Workspace {
             .map(|f| if f.kind == FileKind::Unknown { Ok(String::new()) } else { hash_file(&f.path) })
             .collect::<Result<Vec<_>>>()?;
         // For the questions (sound?) and time estimates; a broken file is dealt with later.
+        let probe = |kind| matches!(kind, FileKind::Video | FileKind::Audio) && media::tools().is_some();
         let facts = scan
             .files
             .par_iter()
             .zip(&gifs)
             .map(|(f, g)| Facts {
-                media: (f.kind == FileKind::Video && media::tools().is_some()).then(|| media::probe(&f.path).ok()).flatten(),
+                media: probe(f.kind).then(|| media::probe(&f.path).ok()).flatten(),
                 animated_gif: f.kind == FileKind::Video && g.is_some(),
                 transparent: f.kind == FileKind::Video && g.is_some_and(|g| g.transparent),
             })
@@ -280,7 +288,10 @@ impl Workspace {
                     s.video_facts.push(VideoFacts { info: facts.media.clone(), known: self.log.files.contains_key(hash) });
                     &mut s.videos
                 }
-                FileKind::Audio => &mut s.audio,
+                FileKind::Audio => {
+                    s.audio_facts.push(VideoFacts { info: facts.media.clone(), known: self.log.files.contains_key(hash) });
+                    &mut s.audio
+                }
                 FileKind::Pdf => &mut s.pdfs,
                 _ => &mut s.fonts,
             };
@@ -321,8 +332,8 @@ impl Workspace {
             let wanted = match f.kind {
                 FileKind::Image => settings.images.is_some(),
                 FileKind::Font => settings.fonts.is_some(),
-                FileKind::Video => settings.videos.is_some(),
-                FileKind::Audio => settings.audio.is_some(),
+                FileKind::Video => settings.videos.is_some() || settings.video_transcript.is_some(),
+                FileKind::Audio => settings.audio.is_some() || settings.audio_transcript.is_some(),
                 FileKind::Pdf => settings.pdfs.is_some(),
                 _ => false,
             };
@@ -340,6 +351,15 @@ impl Workspace {
             }
             if matches!(f.kind, FileKind::Video | FileKind::Audio) && media::tools().is_none() {
                 plan.problems.push((f.rel.clone(), "Mein Werkzeug für Videos und Audio (ffmpeg) fehlt".into()));
+                continue;
+            }
+            let transcript = match f.kind {
+                FileKind::Video => settings.video_transcript,
+                FileKind::Audio => settings.audio_transcript,
+                _ => None,
+            };
+            if transcript.is_some() && !transcribe::installed() {
+                plan.problems.push((f.rel.clone(), "Das Zusatzmodul fürs Aufschreiben fehlt (Einstellungen)".into()));
                 continue;
             }
             let previous_outputs: HashSet<&str> = known.map(|k| k.outputs.iter().map(String::as_str).collect()).unwrap_or_default();
@@ -363,6 +383,10 @@ impl Workspace {
                     let keywords = self.keywords_for(&job.dir, &w.naming);
                     let original = w.naming.append_original.then(|| file_stem(&f.rel));
                     naming::seo_name(&w.naming.prefix, &keywords, original.as_deref(), &file_stem(&f.rel), index, w.naming.separator)
+                }
+                (FileKind::Video | FileKind::Audio, _) if transcript.is_some() => {
+                    job.task = Task::Transcript(transcript.expect("checked"));
+                    web_safe_stem(&f.rel, "transkript")
                 }
                 (FileKind::Video, _) => {
                     let v = settings.videos.clone().expect("wanted");
@@ -392,6 +416,7 @@ impl Workspace {
                 Task::Font => (Path::new(FONTS_DIR).join(&job.dir), "woff2"),
                 Task::Video(t) => (PathBuf::from(&job.dir), t.settings.format.ext()),
                 Task::Audio(a) => (PathBuf::from(&job.dir), a.format.ext()),
+                Task::Transcript(_) => (PathBuf::from(&job.dir), TRANSCRIPT_EXT),
                 Task::Pdf => (PathBuf::from(&job.dir), ""), // a folder
             };
             let poster = matches!(&job.task, Task::Video(t) if t.settings.poster);

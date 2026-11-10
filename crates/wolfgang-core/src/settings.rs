@@ -258,6 +258,21 @@ pub struct AudioSettings {
     pub content: AudioContent,
 }
 
+/// „Nur aufschreiben, was gesagt wird“: a German text of a meeting recording,
+/// instead of converting the video or audio file (see [`crate::transcribe`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TranscriptSettings {
+    /// `[00:12:30]` at the start of each paragraph, to find the spot in the recording.
+    pub timestamps: bool,
+}
+
+impl Default for TranscriptSettings {
+    fn default() -> Self {
+        Self { timestamps: true }
+    }
+}
+
 /// Pictures are pulled out of PDFs as they are; nothing to configure.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct PdfSettings {}
@@ -273,6 +288,10 @@ pub struct RunSettings {
     pub images: Option<ImageSettings>,
     pub videos: Option<VideoSettings>,
     pub audio: Option<AudioSettings>,
+    /// Videos are written down instead of converted (never together with `videos`).
+    pub video_transcript: Option<TranscriptSettings>,
+    /// Audio files are written down instead of converted (never together with `audio`).
+    pub audio_transcript: Option<TranscriptSettings>,
     pub pdfs: Option<PdfSettings>,
     pub fonts: Option<FontSettings>,
 }
@@ -291,6 +310,9 @@ impl RunSettings {
             if !QUALITY_RANGE.contains(&w.quality) {
                 return Err(Error::Settings(format!("Qualität {} liegt nicht zwischen 1 und 100", w.quality)));
             }
+        }
+        if (self.videos.is_some() && self.video_transcript.is_some()) || (self.audio.is_some() && self.audio_transcript.is_some()) {
+            return Err(Error::Settings("Aufschreiben oder umwandeln – beides zugleich geht nicht".into()));
         }
         if let Some(size) = self.videos.as_ref().and_then(|v| v.size) {
             if !VIDEO_SIZE_RANGE.contains(&size) {
@@ -338,6 +360,8 @@ mod tests {
             })),
             videos: Some(VideoSettings { format: VideoFormat::Webm, size: None, ..Default::default() }),
             audio: Some(AudioSettings { format: AudioFormat::Aac, content: AudioContent::Speech }),
+            video_transcript: None,
+            audio_transcript: Some(TranscriptSettings { timestamps: false }),
             pdfs: Some(PdfSettings {}),
             fonts: Some(FontSettings {}),
         };
@@ -348,6 +372,7 @@ mod tests {
         let hq: RunSettings = serde_json::from_str(r#"{"images":{"mode":"high_quality","format":"png"}}"#).unwrap();
         assert_eq!(hq.images, Some(ImageSettings::HighQuality { format: ImageFormat::Png }));
         assert_eq!((hq.videos, hq.audio), (None, None), "settings from 2.1 still load");
+        assert_eq!((hq.video_transcript, hq.audio_transcript), (None, None), "settings from 2.3 still load");
     }
 
     #[test]
@@ -363,5 +388,7 @@ mod tests {
         let video = |size| RunSettings { videos: Some(VideoSettings { size, ..Default::default() }), ..Default::default() };
         assert!(video(None).validate().is_ok());
         assert!(video(Some(100)).validate().is_err());
+        let both = RunSettings { videos: Some(VideoSettings::default()), video_transcript: Some(TranscriptSettings::default()), ..Default::default() };
+        assert!(both.validate().is_err(), "a video is either converted or written down");
     }
 }

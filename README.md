@@ -35,6 +35,7 @@ daneben. **Deine Originale fasst er dabei nie an.**
 | **Bilder hochwertig behalten** | nur ein anderes Format (JPG, WebP, AVIF, PNG) – Originalgröße, Farbprofil bleibt erhalten |
 | **Videos fürs Web** | MP4 (läuft überall) oder WebM (kleiner), in 720p, 1080p oder Originalgröße, auf Wunsch ohne Ton und mit Vorschaubild. iPhone-Videos in HDR sehen danach nicht flau aus. Animierte GIFs werden auch zu Videos – viel kleiner, gleicher Look. |
 | **Audio** | MP3 oder AAC – passend eingestellt für Sprache (Podcast, Interview) oder Musik |
+| **Besprechungen aufschreiben** | schreibt auf, was in einer Aufnahme gesagt wird (Video oder Audio) – als Textdatei, auf Wunsch mit Zeitangaben. Läuft komplett auf deinem Mac, nichts geht ins Internet. Braucht einmal ein Zusatzmodul aus den Einstellungen |
 | **Bilder aus PDFs** | holt die Fotos und Grafiken aus einem PDF (z. B. der Broschüre vom Kunden) – so, wie sie drin sind, Seite für Seite nummeriert |
 | **Schriften** | TTF, OTF und WOFF werden zu WOFF2 – eins zu eins, nichts wird weggelassen, und hinterher Glyphe für Glyphe nachgeprüft |
 
@@ -126,7 +127,7 @@ rüber – mit „📂 Im Finder zeigen“ bist du direkt da.
 | Eigene Antwort | „✎ Selbst eintippen …“, z. B. eine eigene Größe |
 | „So wie letztes Mal“ | Wolfgang merkt sich deine letzte Wahl – für Fotos, Videos und Audio jeweils einzeln |
 | Vorlagen | nach getaner Arbeit „Als Vorlage merken“; ansehen und löschen über das **Klemmbrett** |
-| Einstellungen | auf den **Computer** klicken: Lieblingsformate für Bilder, Videos und Audio, Größe, Qualität, Schreibweise, Geräusche |
+| Einstellungen | auf den **Computer** klicken: Lieblingsformate für Bilder, Videos und Audio, Größe, Qualität, Schreibweise, Geräusche – und das Zusatzmodul fürs Aufschreiben |
 | Über Wolfgang | auf **Wolfgang selbst** klicken – dort gibt's auch die Kommandozeile |
 | Kaffeepause | auf die **Tasse** klicken |
 | Wilma | die orange Bürokatze wohnt in ihrem Kissen unterm Schreibtisch. Meistens schläft sie, manchmal macht sie eine Runde durchs Büro. Streicheln: draufklicken |
@@ -177,6 +178,16 @@ alles andere wird PNG. `Broschüre.pdf` → Ordner `broschuere/` mit `broschuere
 Der PDF-Name steckt in jedem Bild, damit man es auch woanders noch wiederfindet (lange Namen
 kürzt Wolfgang auf etwa 40 Zeichen).
 Winzige Schnipsel (Linien, Icons) und Logos, die auf jeder Seite wiederkommen, lässt er weg.
+
+**Besprechungen aufschreiben:** Leg die Aufnahme auf den Tisch (Video oder Audio) und nimm bei
+der ersten Frage die letzte Antwort, *„Nur aufschreiben, was gesagt wird“*. Wolfgang fragt dann
+noch, ob vor jedem Absatz eine Zeitangabe stehen soll (`[00:12:30]`), und legt eine Textdatei mit
+dem Namen der Aufnahme in `wolfgang_output`. Eine Stunde Besprechung dauert etwa 4 Minuten.
+Er hört auf Deutsch zu (englische Wörter dazwischen schreibt er englisch) und überspringt
+Wartemusik. Wer spricht, schreibt er nicht dazu, und Namen und Fachwörter schreibt er nach Gehör –
+lies da lieber nochmal drüber. Dafür braucht er einmal ein Zusatzmodul (575 MB): in den
+Einstellungen (**Computer**) bei „Besprechungen aufschreiben“ auf *Installieren*. Alles läuft auf
+deinem Mac, die Aufnahme verlässt ihn nicht.
 
 **Nochmal ablegen:** Gibst du Wolfgang denselben Ordner noch einmal, erkennt er, was schon fertig
 ist – *„Moment, die kenn ich doch!“* – und macht auf Wunsch nur die neuen Dateien.
@@ -231,13 +242,16 @@ wolfgang --json --yes ~/Bilder | jq .        # eine JSON-Zeile pro Ereignis
 | `--gif-background` | was hinter durchsichtige Stellen animierter GIFs kommt: `white` (Standard) oder `black` |
 | `--audio-format` | `mp3` (Standard) oder `aac` |
 | `--audio` | was drauf ist: `speech`, `music` (Standard), `best` |
+| `--video-format transcript`, `--audio-format transcript` | nur aufschreiben, was gesagt wird (braucht das Zusatzmodul) |
+| `--timestamps` / `--no-timestamps` | beim Aufschreiben Zeitangaben vor jeden Absatz (Standard) / keine |
 | `-p, --preset` | gespeicherte Vorlage benutzen |
 | `--only images\|videos\|audio\|pdfs\|fonts` | nur einen Stapel bearbeiten |
 | `--all` | auch schon Umgewandeltes nochmal machen |
 | `-y, --yes` | nicht fragen |
 | `--json` | maschinenlesbare Ausgabe |
 
-Weitere Befehle: `wolfgang presets`, `wolfgang settings`, `wolfgang settings set web-format avif`
+Weitere Befehle: `wolfgang transcription` (`install`, `remove`: das Zusatzmodul fürs Aufschreiben),
+`wolfgang presets`, `wolfgang settings`, `wolfgang settings set web-format avif`
 (Schlüssel: `web-format`, `size`, `quality`, `hq-format`, `separator`, `video-format`, `video-size`,
 `video-quality`, `audio-format`, `sound`),
 `wolfgang legacy-reset ORDNER` (siehe unten). Exit-Codes: 0 ok, 1 einzelne Dateien fehlgeschlagen,
@@ -278,7 +292,7 @@ scripts/build-app.sh                             # → target/release/bundle/dmg
 
 | Ordner | Was |
 |---|---|
-| `crates/wolfgang-core` | die Umwandlung: Ordner einlesen, Namen, Bilder (Apple ImageIO + mozjpeg/libwebp/rav1e), Schriften (Google woff2), Videos/Audio (ffmpeg), Logbuch, Einstellungen |
+| `crates/wolfgang-core` | die Umwandlung: Ordner einlesen, Namen, Bilder (Apple ImageIO + mozjpeg/libwebp/rav1e), Schriften (Google woff2), Videos/Audio (ffmpeg), Aufschreiben (whisper.cpp), Logbuch, Einstellungen |
 | `crates/wolfgang-dialogue` | das Gespräch als Zustandsmaschine |
 | `dialogue/de.yaml` | **alles, was Wolfgang sagt** – zum Ausprobieren ohne neu zu bauen: `WOLFGANG_DIALOGUE=dialogue/de.yaml wolfgang …` |
 | `crates/wolfgang-cli` | der Befehl `wolfgang` |
@@ -298,6 +312,14 @@ LGPL-Teilen: Apples VideoToolbox (H.264) und AudioToolbox (AAC), libvpx (VP9), O
 und zimg (HDR → SDR) – kein x264/x265. Neue Versionen: Nummern und Prüfsummen im Skript ändern,
 CI baut dann neu. Zum Testen mit einem anderen ffmpeg: `WOLFGANG_FFMPEG_DIR=/pfad/zum/ordner`.
 Ohne gebautes ffmpeg werden die Video-/Audio-Tests übersprungen.
+
+**Aufschreiben:** whisper.cpp (über `whisper-rs`, mit Metal) ist fest eingebaut, das Modell nicht:
+Das Zusatzmodul (`large-v3-turbo` q5_0 + der Silero-Sprachfinder, zusammen 575 MB) lädt Wolfgang
+mit dem `curl` des Macs von einer festen Hugging-Face-Version und prüft jede Datei gegen ihre
+Prüfsumme (`crates/wolfgang-core/src/transcribe.rs`). Es liegt in
+`~/Library/Application Support/Wolfgang/models`, zum Testen woanders: `WOLFGANG_MODELS_DIR`.
+Die Aufschreib-Tests (deutsche Sprache von der Mac-Stimme „Anna“) laufen nur, wenn die beiden
+Modelldateien in `target/models` liegen – sonst werden sie übersprungen, auch auf GitHub.
 
 **Branch:** alles liegt auf `main` (der alte Branch `v2` ist stillgelegt). Die Tests auf GitHub
 laufen bei jedem Push auf `main`, außer wenn nur Doku geändert wurde (`*.md`, `docs/`,
@@ -328,10 +350,12 @@ Updates mehr an und müssen einmal von Hand neu installiert werden. Der öffentl
 
 MIT © k1te – siehe [LICENSE](LICENSE).
 
-- Schrift: [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans), SIL Open Font License
+- Schrift: [Pixelify Sans](https://github.com/eifetx/Pixelify-Sans), die Ziffern aus [VT323](https://fonts.google.com/specimen/VT323) (besser lesbar), beide SIL Open Font License
 - Videos und Audio: [FFmpeg](https://ffmpeg.org) unter der LGPL 2.1 (Lizenztext in der App unter
   `Contents/Resources/LICENSE-ffmpeg.txt`, Quellen und Bauweise: `scripts/build-ffmpeg.sh`), mit
   [libvpx](https://chromium.googlesource.com/webm/libvpx) (BSD), [Opus](https://opus-codec.org) (BSD),
   [LAME](https://lame.sourceforge.io) (LGPL) und [zimg](https://github.com/sekrit-twc/zimg) (WTFPL)
+- Aufschreiben: [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) mit dem Modell
+  [Whisper](https://github.com/openai/whisper) von OpenAI (MIT) und [Silero VAD](https://github.com/snakers4/silero-vad) (MIT)
 
 <p align="center"><sub>☕ Gebraut mit viel Kaffee. Wolfgang wünscht einen schönen Tag.</sub></p>

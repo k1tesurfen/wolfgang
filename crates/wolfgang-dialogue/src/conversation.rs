@@ -1,6 +1,6 @@
 //! The state machine. CLI and app only render [`Step`]s and report choices.
 
-use crate::context::{describe_audio, describe_images, describe_videos, format_bytes, format_duration, format_estimate, join_and, pile_list, Context};
+use crate::context::{describe_audio, describe_images, describe_transcript, describe_videos, format_bytes, format_duration, format_estimate, join_and, pile_list, Context};
 use crate::draft::{Draft, Mode, Template};
 use crate::script::{Each, Foreach, InputKind, Line, Mood, Node, Script, Value};
 use crate::template::{self, Var};
@@ -79,6 +79,7 @@ struct RunInfo {
     pdfs_empty: usize,
     pdfs_unreadable: usize,
     pdf_pictures: usize,
+    transcripts: usize,
     bytes_in: u64,
     bytes_out: u64,
     duration: std::time::Duration,
@@ -209,6 +210,7 @@ impl Conversation {
             pdfs_empty: count(Note::PdfNoPictures),
             pdfs_unreadable: count(Note::PdfSomeUnreadable),
             pdf_pictures: report.pdf_pictures,
+            transcripts: report.transcripts,
             bytes_in: report.bytes_in,
             bytes_out: report.bytes_out,
             duration: report.duration,
@@ -481,6 +483,10 @@ impl Conversation {
             "images_asked" => d.images_asked,
             "videos_asked" => d.videos_asked,
             "audio_asked" => d.audio_asked,
+            "transcription_installed" => self.ctx.transcription,
+            "transcript_asked" => d.transcript_asked,
+            "transcript_explained" => d.transcript_explained,
+            "wrote_transcripts" => run.is_some_and(|r| r.transcripts > 0),
             "has_unknown" => !s.unknown.is_empty(),
             "has_duplicates" => s.duplicates > 0,
             "nothing_to_do" => piles.is_empty(),
@@ -521,6 +527,7 @@ impl Conversation {
             "videos_grew" => num(run.grew),
             "pdfs_without_pictures" => num(run.pdfs_empty),
             "pdf_pictures" => num(run.pdf_pictures),
+            "transcripts" => num(run.transcripts),
             "estimate" => text(self.estimate().map(format_estimate).unwrap_or_default()),
             "fonts" => num(s.fonts.total),
             "unknown" => num(s.unknown.len()),
@@ -553,14 +560,30 @@ impl Conversation {
         }
     }
 
-    /// How long the videos will take, from what ffprobe found (`None` without videos
-    /// or if a video couldn't be read). Other piles are quick in comparison.
+    /// How long the videos and transcripts will take, from what ffprobe found (`None`
+    /// without either, or if a file couldn't be read). Other piles are quick in comparison.
     fn estimate(&self) -> Option<std::time::Duration> {
-        let v = self.settings().videos?;
+        let settings = self.settings();
         let only_new = self.state.draft.rerun == RerunPolicy::OnlyNew;
-        let infos: Option<Vec<&wolfgang_core::media::MediaInfo>> =
-            self.ctx.summary.video_facts.iter().filter(|f| !(only_new && f.known)).map(|f| f.info.as_ref()).collect();
-        wolfgang_core::media::estimate(&infos?, &v)
+        let s = &self.ctx.summary;
+        let infos = |facts: &'_ [wolfgang_core::workspace::VideoFacts]| -> Option<Vec<wolfgang_core::media::MediaInfo>> {
+            facts.iter().filter(|f| !(only_new && f.known)).map(|f| f.info.clone()).collect()
+        };
+        let mut total = None;
+        if let Some(v) = &settings.videos {
+            let videos = infos(&s.video_facts)?;
+            total = Some(wolfgang_core::media::estimate(&videos.iter().collect::<Vec<_>>(), v)?);
+        }
+        let mut lengths = Vec::new();
+        for (on, facts) in [(settings.video_transcript.is_some(), &s.video_facts), (settings.audio_transcript.is_some(), &s.audio_facts)] {
+            if on {
+                lengths.extend(infos(facts)?.iter().map(|i| i.duration).collect::<Option<Vec<f64>>>()?);
+            }
+        }
+        if !lengths.is_empty() {
+            total = Some(total.unwrap_or_default() + wolfgang_core::transcribe::estimate(&lengths));
+        }
+        total
     }
 
     /// `Urlaub/wolfgang_output`: the output folder alone says too little.
@@ -621,8 +644,14 @@ impl Conversation {
             }
             parts.push(t);
         }
+        if let Some(t) = &settings.video_transcript {
+            parts.push(format!("{} {}", what(&s.videos, "ein Video", "Videos", "das neue Video", "neue Videos"), describe_transcript(t)));
+        }
         if let Some(a) = &settings.audio {
             parts.push(format!("{} {}", what(&s.audio, "eine Audiodatei", "Audiodateien", "die neue Audiodatei", "neue Audiodateien"), describe_audio(a)));
+        }
+        if let Some(t) = &settings.audio_transcript {
+            parts.push(format!("{} {}", what(&s.audio, "eine Audiodatei", "Audiodateien", "die neue Audiodatei", "neue Audiodateien"), describe_transcript(t)));
         }
         let mut text = if parts.len() > 2 { parts.join("; ") } else { join_and(&parts) };
         // Piles without questions come last: „…, dazu die Bilder aus 2 PDFs und eine Schrift als WOFF2“.

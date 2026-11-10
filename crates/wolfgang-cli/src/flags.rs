@@ -11,8 +11,9 @@ use wolfgang_dialogue::script::Value;
 #[command(
     name = "wolfgang",
     version,
-    about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs, Schriften zu WOFF2.",
-    long_about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs, Schriften zu WOFF2.\n\n\
+    about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs, Schriften zu WOFF2. Und er schreibt Besprechungen auf.",
+    long_about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs, Schriften zu WOFF2. \
+        Und er schreibt auf, was in Besprechungen gesagt wird (--video-format/--audio-format transcript).\n\n\
         Im Terminal fragt er dich, was du willst. Optionen beantworten seine Fragen vorab; \
         mit --yes (oder ohne Terminal) fragt er gar nicht und nimmt deine Standards.",
     args_conflicts_with_subcommands = true
@@ -80,6 +81,12 @@ pub struct RunArgs {
     /// Was ist auf den Audiodateien?
     #[arg(long = "audio", value_enum)]
     pub audio_content: Option<AudioContentArg>,
+    /// Beim Aufschreiben Zeitangaben vor jeden Absatz
+    #[arg(long, conflicts_with = "no_timestamps")]
+    pub timestamps: bool,
+    /// Beim Aufschreiben keine Zeitangaben
+    #[arg(long)]
+    pub no_timestamps: bool,
     /// Gespeicherte Vorlage benutzen
     #[arg(short, long)]
     pub preset: Option<String>,
@@ -112,6 +119,11 @@ pub enum Command {
         #[command(subcommand)]
         action: Option<SettingsAction>,
     },
+    /// Zusatzmodul fürs Aufschreiben (≈ 575 MB): anzeigen, installieren, entfernen
+    Transcription {
+        #[command(subcommand)]
+        action: Option<TranscriptionAction>,
+    },
     /// Umbenennungen des alten Wolfgang (1.x) an Originaldateien rückgängig machen
     LegacyReset {
         /// Ordner, in dem der alte Wolfgang lief
@@ -129,6 +141,16 @@ pub enum PresetAction {
     List,
     /// Eine Vorlage löschen
     Remove { name: String },
+}
+
+#[derive(Subcommand, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TranscriptionAction {
+    /// Ist es installiert?
+    Status,
+    /// Herunterladen und installieren
+    Install,
+    /// Wieder entfernen
+    Remove,
 }
 
 #[derive(Subcommand, Debug)]
@@ -181,6 +203,8 @@ pub enum OnlyArg {
 pub enum VideoFormatArg {
     Mp4,
     Webm,
+    /// Nur aufschreiben, was gesagt wird (braucht das Zusatzmodul)
+    Transcript,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -217,6 +241,8 @@ pub enum BackgroundArg {
 pub enum AudioFormatArg {
     Mp3,
     Aac,
+    /// Nur aufschreiben, was gesagt wird (braucht das Zusatzmodul)
+    Transcript,
 }
 
 #[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
@@ -370,10 +396,18 @@ impl RunArgs {
         if let Some(c) = self.audio_content {
             put("audio.content", text(&arg_name(c)));
         }
+        if self.timestamps || self.no_timestamps {
+            put("transcript.timestamps", yaml(if self.timestamps { "true" } else { "false" }));
+        }
         if self.all {
             put("rerun", text("all"));
         }
         Ok(f)
+    }
+
+    /// „Nur aufschreiben“ was asked for (it needs the add-on).
+    pub fn wants_transcripts(&self) -> bool {
+        self.video_format == Some(VideoFormatArg::Transcript) || self.audio_format == Some(AudioFormatArg::Transcript)
     }
 
     /// Settings without a conversation: defaults, then preset, then flags.
@@ -461,6 +495,13 @@ mod tests {
         assert_eq!(s.videos.unwrap().size, None);
         assert!(Cli::try_parse_from(["wolfgang", "--video-size", "5"]).is_err());
         assert!(args(&["--video-format", "webm", "x"]).settings(&store, IMAGES).unwrap().0.videos.is_none(), "no videos on the desk");
+
+        let a = args(&["--audio-format", "transcript", "--no-timestamps", "x"]);
+        assert!(a.wants_transcripts());
+        let (s, _) = a.settings(&store, all).unwrap();
+        assert_eq!((s.audio, s.audio_transcript), (None, Some(wolfgang_core::TranscriptSettings { timestamps: false })));
+        assert!(s.videos.is_some() && s.video_transcript.is_none(), "videos are still converted");
+        assert!(Cli::try_parse_from(["wolfgang", "--timestamps", "--no-timestamps"]).is_err());
     }
 
     #[test]
@@ -476,6 +517,10 @@ mod tests {
         assert!(matches!(
             Cli::try_parse_from(["wolfgang", "settings", "set", "web-format", "avif"]).unwrap().command,
             Some(Command::Settings { action: Some(SettingsAction::Set { key: SettingKey::WebFormat, .. }) })
+        ));
+        assert!(matches!(
+            Cli::try_parse_from(["wolfgang", "transcription", "install"]).unwrap().command,
+            Some(Command::Transcription { action: Some(TranscriptionAction::Install) })
         ));
     }
 }

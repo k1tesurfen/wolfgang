@@ -179,3 +179,38 @@ fn videos_and_audio_without_questions() {
     let settings = std::fs::read_to_string(home.join("settings.json")).unwrap();
     assert!(settings.contains("\"videos\"") && settings.contains("\"speech\""), "remembered per pile: {settings}");
 }
+
+#[test]
+fn transcripts_need_the_add_on() {
+    let t = tempfile::tempdir().unwrap();
+    let home = t.path().join("home");
+    let root = t.path().join("Besprechung");
+    std::fs::create_dir_all(&root).unwrap();
+    let o = wolfgang(&home, &["transcription"]);
+    assert!(o.status.success() && text(&o).contains("fehlt noch das Zusatzmodul"), "{}", text(&o));
+    let o = wolfgang(&home, &["-y", "--audio-format", "transcript", root.to_str().unwrap()]);
+    assert_eq!(o.status.code(), Some(2), "{}", text(&o));
+    assert!(text(&o).contains("wolfgang transcription install"), "{}", text(&o));
+
+    // With the add-on's files in target/models (see crates/wolfgang-core/tests/transcribe.rs):
+    // a spoken file, written down without timestamps.
+    let models = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/models");
+    if wolfgang_core::media::tools().is_none() || !models.join(wolfgang_core::transcribe::WHISPER.name).exists() {
+        eprintln!("skipped the real run: no ffmpeg or no model files in target/models");
+        return;
+    }
+    let spoken = root.join("Kurze Ansage.aiff");
+    let said = Command::new("say").args(["-v", "Anna", "-o"]).arg(&spoken).arg("Das Projekt startet im Januar.").status().unwrap();
+    assert!(said.success());
+    let o = Command::new(env!("CARGO_BIN_EXE_wolfgang"))
+        .args(["-y", "--audio-format", "transcript", "--no-timestamps", root.to_str().unwrap()])
+        .env("WOLFGANG_HOME", &home)
+        .env(wolfgang_core::transcribe::DIR_ENV, &models)
+        .env("NO_COLOR", "1")
+        .output()
+        .unwrap();
+    assert!(o.status.success(), "{}", text(&o));
+    assert!(text(&o).contains("Aufgeschrieben: 1 Aufnahme"), "{}", text(&o));
+    let written = std::fs::read_to_string(root.join("wolfgang_output/kurze-ansage.txt")).unwrap();
+    assert!(written.contains("Projekt") && written.contains("Januar") && !written.contains("[00:"), "{written}");
+}

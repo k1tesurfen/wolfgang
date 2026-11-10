@@ -1,6 +1,6 @@
 //! `wolfgang presets` and `wolfgang settings`.
 
-use crate::flags::{PresetAction, SettingKey, SettingsAction};
+use crate::flags::{PresetAction, SettingKey, SettingsAction, TranscriptionAction};
 use crate::ui::Ui;
 use std::path::Path;
 use std::process::ExitCode;
@@ -150,6 +150,60 @@ fn set(store: &mut UserStore, key: SettingKey, value: &str) -> Result<(), String
         }
     }
     Ok(())
+}
+
+/// `wolfgang transcription [status|install|remove]`: the add-on for „Nur aufschreiben“.
+pub fn transcription(ui: &Ui, action: Option<TranscriptionAction>) -> ExitCode {
+    use wolfgang_core::transcribe;
+    let mb = |b: u64| format!("{} MB", b / 1_000_000);
+    let dir = transcribe::models_dir();
+    match action.unwrap_or(TranscriptionAction::Status) {
+        TranscriptionAction::Status => {
+            if transcribe::installed() {
+                ui.say(&[format!("Das Zusatzmodul fürs Aufschreiben ist da ({}).", dir.display())], None);
+            } else {
+                ui.say(&[format!("Fürs Aufschreiben fehlt noch das Zusatzmodul ({}). Installieren: wolfgang transcription install", mb(transcribe::install_size()))], None);
+            }
+            ExitCode::SUCCESS
+        }
+        TranscriptionAction::Install => {
+            if transcribe::installed() {
+                ui.say(&["Ist schon installiert.".into()], None);
+                return ExitCode::SUCCESS;
+            }
+            crate::run::CANCEL.store(false, std::sync::atomic::Ordering::SeqCst);
+            let pb = indicatif::ProgressBar::new(transcribe::install_size());
+            pb.set_style(
+                indicatif::ProgressStyle::with_template("  Lade das Zusatzmodul … {bar:32.yellow/238} {bytes}/{total_bytes} · {eta}").expect("valid template").progress_chars("█▓░"),
+            );
+            let result = crate::run::while_cancellable(|| transcribe::install(&|done, _| pb.set_position(done), &crate::run::CANCEL));
+            pb.finish_and_clear();
+            match result {
+                Ok(()) => {
+                    ui.say(&["Fertig! Jetzt kann ich aufschreiben, was in Besprechungen gesagt wird: wolfgang --audio-format transcript ORDNER (oder --video-format transcript).".into()], None);
+                    ExitCode::SUCCESS
+                }
+                Err(wolfgang_core::Error::Cancelled) => {
+                    ui.say(&["Abgebrochen. Beim nächsten Mal mach ich da weiter, wo ich aufgehört hab.".into()], None);
+                    ExitCode::from(130)
+                }
+                Err(e) => {
+                    ui.error(&e.to_string());
+                    ExitCode::from(1)
+                }
+            }
+        }
+        TranscriptionAction::Remove => match transcribe::remove() {
+            Ok(()) => {
+                ui.say(&[format!("Weg damit – {} wieder frei.", mb(transcribe::install_size()))], None);
+                ExitCode::SUCCESS
+            }
+            Err(e) => {
+                ui.error(&e.to_string());
+                ExitCode::from(1)
+            }
+        },
+    }
 }
 
 fn save(ui: &Ui, store: &UserStore, path: &Path) {

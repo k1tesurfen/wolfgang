@@ -4,7 +4,7 @@
 use crate::script::Value;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use wolfgang_core::settings::{AudioSettings, FontSettings, ImageFormat, ImageSettings, PdfSettings, RunSettings, VideoSettings, WebSettings};
+use wolfgang_core::settings::{AudioSettings, FontSettings, ImageFormat, ImageSettings, PdfSettings, RunSettings, TranscriptSettings, VideoSettings, WebSettings};
 use wolfgang_core::workspace::Piles;
 use wolfgang_core::store::{Defaults, UserStore};
 use wolfgang_core::RerunPolicy;
@@ -33,6 +33,9 @@ pub const KEYS: &[&str] = &[
     "audio.format",
     "audio.content",
     "audio.asked",
+    "transcript.timestamps",
+    "transcript.asked",
+    "transcript.explained",
     "restart",
     "rerun",
     "use_last",
@@ -66,6 +69,15 @@ pub struct Draft {
     pub videos_asked: bool,
     pub audio: AudioSettings,
     pub audio_asked: bool,
+    /// „Nur aufschreiben“ was picked for the videos (`video.format: transcript`) …
+    pub video_transcript: bool,
+    /// … or for the audio files (`audio.format: transcript`).
+    pub audio_transcript: bool,
+    /// Shared by both piles; asked once.
+    pub transcript: TranscriptSettings,
+    pub transcript_asked: bool,
+    /// Wolfgang has said that the add-on is missing (he says it once).
+    pub transcript_explained: bool,
     pub rerun: RerunPolicy,
     pub template: Option<Template>,
     pub save_preset: Option<String>,
@@ -86,6 +98,11 @@ impl Draft {
             videos_asked: false,
             audio: AudioSettings { format: d.audio_format, ..Default::default() },
             audio_asked: false,
+            video_transcript: false,
+            audio_transcript: false,
+            transcript: TranscriptSettings::default(),
+            transcript_asked: false,
+            transcript_explained: false,
             rerun: RerunPolicy::OnlyNew,
             template: None,
             save_preset: None,
@@ -111,7 +128,13 @@ impl Draft {
             "naming.separator" => n.separator = typed(value)?,
             "naming.append_original" => n.append_original = typed(value)?,
             "images.asked" => self.images_asked = typed(value)?,
-            "video.format" => self.video.format = typed(value)?,
+            // `transcript` = „Nur aufschreiben“ instead of a format
+            "video.format" => {
+                self.video_transcript = value.as_str() == Some("transcript");
+                if !self.video_transcript {
+                    self.video.format = typed(value)?;
+                }
+            }
             // `original` or the shorter side in pixels
             "video.size" => self.video.size = if value.as_str() == Some("original") { None } else { Some(typed(value)?) },
             "video.quality" => self.video.quality = typed(value)?,
@@ -119,9 +142,17 @@ impl Draft {
             "video.poster" => self.video.poster = typed(value)?,
             "video.background" => self.video.background = typed(value)?,
             "video.asked" => self.videos_asked = typed(value)?,
-            "audio.format" => self.audio.format = typed(value)?,
+            "audio.format" => {
+                self.audio_transcript = value.as_str() == Some("transcript");
+                if !self.audio_transcript {
+                    self.audio.format = typed(value)?;
+                }
+            }
             "audio.content" => self.audio.content = typed(value)?,
             "audio.asked" => self.audio_asked = typed(value)?,
+            "transcript.timestamps" => self.transcript.timestamps = typed(value)?,
+            "transcript.asked" => self.transcript_asked = typed(value)?,
+            "transcript.explained" => self.transcript_explained = typed(value)?,
             // „Nochmal ändern“: every pile is asked again, current answers stay marked.
             "restart" => {
                 if typed::<bool>(value)? {
@@ -129,6 +160,7 @@ impl Draft {
                     self.images_asked = false;
                     self.videos_asked = false;
                     self.audio_asked = false;
+                    self.transcript_asked = false;
                     self.template = None;
                 }
             }
@@ -166,6 +198,7 @@ impl Draft {
             "naming.separator" => serde_norway::to_value(n.separator),
             "naming.append_original" => serde_norway::to_value(n.append_original),
             "naming.use_keyword_files" => serde_norway::to_value(n.use_keyword_files),
+            "video.format" if self.video_transcript => serde_norway::to_value("transcript"),
             "video.format" => serde_norway::to_value(self.video.format),
             "video.size" => match self.video.size {
                 Some(px) => serde_norway::to_value(px),
@@ -175,7 +208,9 @@ impl Draft {
             "video.sound" => serde_norway::to_value(self.video.sound),
             "video.poster" => serde_norway::to_value(self.video.poster),
             "video.background" => serde_norway::to_value(self.video.background),
+            "audio.format" if self.audio_transcript => serde_norway::to_value("transcript"),
             "audio.format" => serde_norway::to_value(self.audio.format),
+            "transcript.timestamps" => serde_norway::to_value(self.transcript.timestamps),
             "audio.content" => serde_norway::to_value(self.audio.content),
             "rerun" => serde_norway::to_value(self.rerun),
             _ => return None,
@@ -201,11 +236,20 @@ impl Draft {
         }
         if let Some(v) = &s.videos {
             self.video = v.clone();
+            self.video_transcript = false;
             self.videos_asked = true;
         }
         if let Some(a) = s.audio {
             self.audio = a;
+            self.audio_transcript = false;
             self.audio_asked = true;
+        }
+        for (written, on, asked) in [(s.video_transcript, &mut self.video_transcript, &mut self.videos_asked), (s.audio_transcript, &mut self.audio_transcript, &mut self.audio_asked)] {
+            if let Some(t) = written {
+                (*on, *asked) = (true, true);
+                self.transcript = t;
+                self.transcript_asked = true;
+            }
         }
     }
 
@@ -216,10 +260,14 @@ impl Draft {
             (true, Some(Mode::Hq)) => Some(ImageSettings::HighQuality { format: self.hq_format }),
             _ => None,
         };
+        let videos = piles.videos && self.videos_asked;
+        let audio = piles.audio && self.audio_asked;
         RunSettings {
             images,
-            videos: (piles.videos && self.videos_asked).then(|| self.video.clone()),
-            audio: (piles.audio && self.audio_asked).then_some(self.audio),
+            videos: (videos && !self.video_transcript).then(|| self.video.clone()),
+            audio: (audio && !self.audio_transcript).then_some(self.audio),
+            video_transcript: (videos && self.video_transcript).then_some(self.transcript),
+            audio_transcript: (audio && self.audio_transcript).then_some(self.transcript),
             pdfs: piles.pdfs.then(PdfSettings::default),
             fonts: piles.fonts.then(FontSettings::default),
         }
@@ -295,6 +343,14 @@ mod tests {
         assert_eq!(s.videos.unwrap().size, Some(720));
         assert!(s.fonts.is_none() && s.audio.is_none());
         assert!(d.settings(Piles { fonts: true, ..Default::default() }).images.is_none());
+
+        d.apply("video.format", &v("transcript"), &store, None).unwrap();
+        d.apply("transcript.timestamps", &v("false"), &store, None).unwrap();
+        assert_eq!(d.get("video.format"), Some(v("transcript")));
+        let s = d.settings(Piles { videos: true, ..Default::default() });
+        assert_eq!((s.videos, s.video_transcript), (None, Some(TranscriptSettings { timestamps: false })), "written down instead of converted");
+        d.apply("video.format", &v("mp4"), &store, None).unwrap();
+        assert!(d.settings(Piles { videos: true, ..Default::default() }).video_transcript.is_none());
 
         d.apply("restart", &v("true"), &store, None).unwrap();
         assert!(d.mode.is_none() && !d.images_asked && !d.videos_asked);

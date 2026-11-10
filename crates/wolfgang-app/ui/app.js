@@ -59,6 +59,8 @@ async function init() {
   api.listen('finished', onFinished);
   api.listen('failed', msg => { mode = 'talk'; play('idle'); oops(msg); });
   api.listen('update-progress', onUpdateProgress);
+  api.listen('transcription-progress', onAddonProgress);
+  api.listen('transcription-done', onAddonDone);
 
   setupStage();
   goIdle();
@@ -843,9 +845,74 @@ async function settingsPanel() {
     row('Videoqualität', [['Kleiner', 'smaller'], ['Ausgewogen', 'balanced'], ['Schöner', 'nicer']], d.video_quality, 'video_quality');
     row('Audio am liebsten', [['MP3', 'mp3'], ['AAC', 'aac']], d.audio_format, 'audio_format');
     row('Geräusche', [['An', true], ['Aus', false]], d.sound, 'sound');
+    addonRow(body, draw);
     restyle();
   };
+  addon = await api.invoke('transcription');
   draw();
+}
+
+/* ── Add-on for „Nur aufschreiben“ (a row in the settings) ─────────────── */
+
+let addon = null;    // { installed, installing, size } once the settings asked
+let addonDone = 0;   // bytes so far while it downloads
+let addonNote = '';  // what went wrong last time, under the row
+
+const addonMB = n => Math.round(n / 1e6);
+const addonLabel = () => (addon?.installing ? `Besprechungen aufschreiben: lade … ${addonMB(addonDone)} von ${addonMB(addon.size)} MB` : 'Besprechungen aufschreiben');
+
+function addonRow(body, redraw) {
+  const r = document.createElement('div');
+  r.className = 'row addon';
+  r.innerHTML = `<div class="label">${addonLabel()}</div>`;
+  const seg = document.createElement('div');
+  seg.className = 'seg';
+  if (addon.installed) {
+    seg.appendChild(button('Installiert ✓', true, () => {}));
+    seg.appendChild(button('Entfernen', false, async () => {
+      try { addon = await api.invoke('remove_transcription'); addonNote = ''; } catch (e) { addonNote = String(e); }
+      redraw();
+    }));
+  } else if (addon.installing) {
+    seg.appendChild(button('Abbrechen', false, () => api.invoke('cancel_transcription_install')));
+  } else {
+    seg.appendChild(button(`Installieren (${addonMB(addon.size)} MB)`, false, async () => {
+      addonNote = '';
+      addonDone = 0;
+      addon = await api.invoke('install_transcription');
+      redraw();
+    }));
+  }
+  r.appendChild(seg);
+  body.appendChild(r);
+  if (addonNote) {
+    const note = document.createElement('p');
+    note.className = 'muted';
+    note.textContent = addonNote;
+    body.appendChild(note);
+  }
+}
+
+const settingsOpen = () => mode === 'panel' && $('panel-title').textContent === 'Einstellungen';
+
+function onAddonProgress(p) {
+  addonDone = p.done;
+  if (addon) addon.installing = true;
+  const label = document.querySelector('#panel .addon .label');
+  if (label && settingsOpen()) label.textContent = addonLabel();
+}
+
+// The download ended: { Ok: state } or { Err: message } (cancelled counts as Ok).
+async function onAddonDone(r) {
+  addonNote = r.Err ? String(r.Err) : '';
+  addon = r.Ok || { ...addon, installing: false };
+  if (settingsOpen()) return settingsPanel();
+  if (mode !== 'idle') return;
+  if (r.Err) return oops(r.Err);
+  if (addon.installed) {
+    play('happy', 900);
+    await say(['Das Zusatzmodul ist da. Jetzt kann ich auch aufschreiben, was in Besprechungen gesagt wird.'], { mood: 'happy' });
+  }
 }
 
 async function presetsPanel() {
@@ -878,7 +945,7 @@ async function aboutPanel() {
       <div class="row cli"><div class="label">Wolfgang im Terminal (<code>wolfgang</code>)</div></div>
       <p class="muted">${escapeHtml(note)}</p>
       <p class="muted">Tastenkürzel: <b>?</b> zeigt alle, auch für Vim-Leute.</p>
-      <p class="muted">Schrift: Pixelify Sans (SIL Open Font License)<br>Videos und Audio: FFmpeg (LGPL 2.1, ffmpeg.org)</p>`;
+      <p class="muted">Schrift: Pixelify Sans, Ziffern aus VT323 (beide SIL Open Font License)<br>Videos und Audio: FFmpeg (LGPL 2.1, ffmpeg.org)<br>Aufschreiben: whisper.cpp und Whisper von OpenAI (MIT)</p>`;
     body.querySelector('.update')?.appendChild(button('Auffrischen', false, installUpdate));
     const r = body.querySelector('.cli');
     r.appendChild(a.cli_installed ? button('Installiert ✓', true, () => {}) : button('Installieren', false, async () => {

@@ -1,0 +1,5 @@
+[env]
+# Same as the app's minimum (tauri.conf.json) and scripts/build-ffmpeg.sh, so the CLI,
+# the tests and the C parts inside them (codecs, whisper.cpp) are built for macOS 13 too,
+# not for whatever macOS the build machine runs.
+MACOSX_DEPLOYMENT_TARGET = "13.0"

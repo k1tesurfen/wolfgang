@@ -1,6 +1,6 @@
 [package]
 name = "wolfgang-core"
-description = "Wolfgang's conversion engine: images, videos, audio and fonts, shared by CLI and app"
+description = "Wolfgang's conversion engine: images, videos, audio, fonts and transcripts, shared by CLI and app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -34,6 +34,8 @@ lopdf = { version = "0.47", default-features = false }
 objc2-core-foundation = "0.3"
 objc2-core-graphics = "0.3"
 objc2-image-io = "0.3"
+# Transcripts (whisper.cpp on the GPU); the model itself is an add-on, see src/transcribe.rs.
+whisper-rs = { version = "0.16", features = ["metal"] }
 
 [dev-dependencies]
 tempfile = "3"

@@ -6,6 +6,7 @@ use crate::font::{self, Woff2Mode};
 use crate::image;
 use crate::media;
 use crate::pdf;
+use crate::transcribe;
 use crate::runlog::{Entry, FileRecord, LogWriter, LOG_VERSION};
 use crate::workspace::{rel_string, Job, Plan, Task};
 use rayon::prelude::*;
@@ -30,6 +31,8 @@ pub struct FileResult {
     pub bytes_in: u64,
     /// Pictures pulled out of a PDF: not a conversion, so it doesn't count as „saved“.
     pub extracted: bool,
+    /// A recording written down: doesn't count as „saved“ either.
+    pub transcript: bool,
     /// `Err` holds a user-facing message.
     pub outcome: std::result::Result<Done, String>,
 }
@@ -79,6 +82,8 @@ pub struct Report {
     pub notes: Vec<(PathBuf, Note)>,
     /// Pictures pulled out of PDFs (not part of `bytes_in`/`bytes_out`).
     pub pdf_pictures: usize,
+    /// Recordings written down (not part of `bytes_in`/`bytes_out`).
+    pub transcripts: usize,
     pub bytes_in: u64,
     pub bytes_out: u64,
     pub duration: Duration,
@@ -135,7 +140,8 @@ pub fn execute(plan: &Plan, on_event: &(dyn Fn(Event) + Sync), cancel: &AtomicBo
                 }
             }
             let extracted = matches!(job.task, Task::Pdf);
-            let result = FileResult { rel: job.rel.clone(), target: job.target.clone(), bytes_in: job.size, extracted, outcome };
+            let transcript = matches!(job.task, Task::Transcript(_));
+            let result = FileResult { rel: job.rel.clone(), target: job.target.clone(), bytes_in: job.size, extracted, transcript, outcome };
             on_event(Event::FileDone(result.clone()));
             results.lock().unwrap().push(result);
         });
@@ -152,6 +158,8 @@ pub fn execute(plan: &Plan, on_event: &(dyn Fn(Event) + Sync), cancel: &AtomicBo
                 report.converted += 1;
                 if r.extracted {
                     report.pdf_pictures += done.outputs.len();
+                } else if r.transcript {
+                    report.transcripts += 1;
                 } else {
                     report.bytes_in += r.bytes_in;
                     report.bytes_out += done.bytes_out;
@@ -194,6 +202,7 @@ fn convert_job(job: &Job, output_root: &Path, progress: &(dyn Fn(f64) + Sync), c
             media::convert_audio(&job.source, settings, &tmp, progress, cancel)?;
             return Ok(Done { bytes_out: finish(&tmp, &target)?, note: None, outputs: outputs() });
         }
+        Task::Transcript(settings) => (transcribe::transcribe(&job.source, settings, progress, cancel)?.into_bytes(), None),
         Task::Image(task) => (image::convert(&job.source, task)?, None),
         Task::Font => {
             let data = std::fs::read(&job.source).map_err(io_err(&job.source))?;

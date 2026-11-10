@@ -109,18 +109,21 @@ impl UserStore {
     /// Remembers a run as „letztes Mal“ **per pile**: a run with only videos
     /// doesn't forget how the photos were done last time.
     pub fn remember_run(&mut self, s: &RunSettings) {
-        if s.images.is_none() && s.videos.is_none() && s.audio.is_none() {
+        if s.images.is_none() && s.videos.is_none() && s.audio.is_none() && s.video_transcript.is_none() && s.audio_transcript.is_none() {
             return;
         }
         let last = self.last_run.get_or_insert_with(RunSettings::default);
         if s.images.is_some() {
             last.images = s.images.clone();
         }
-        if s.videos.is_some() {
+        // Converted or written down: whichever it was this time replaces the other.
+        if s.videos.is_some() || s.video_transcript.is_some() {
             last.videos = s.videos.clone();
+            last.video_transcript = s.video_transcript;
         }
-        if s.audio.is_some() {
+        if s.audio.is_some() || s.audio_transcript.is_some() {
             last.audio = s.audio;
+            last.audio_transcript = s.audio_transcript;
         }
         last.fonts = None;
     }
@@ -189,9 +192,15 @@ mod tests {
         s.remember_run(&RunSettings { images: photos.clone(), fonts: Some(Default::default()), ..Default::default() });
         s.remember_run(&RunSettings { videos: Some(VideoSettings::default()), ..Default::default() });
         s.remember_run(&RunSettings { audio: Some(AudioSettings::default()), ..Default::default() });
-        let last = s.last_run.unwrap();
+        let last = s.last_run.clone().unwrap();
         assert_eq!(last.images, photos, "videos and audio didn't erase the photos");
         assert!(last.videos.is_some() && last.audio.is_some() && last.fonts.is_none());
+
+        use crate::settings::TranscriptSettings;
+        s.remember_run(&RunSettings { audio_transcript: Some(TranscriptSettings::default()), ..Default::default() });
+        let last = s.last_run.clone().unwrap();
+        assert!(last.audio.is_none() && last.audio_transcript.is_some(), "the meeting replaces the music");
+        assert!(last.videos.is_some() && last.images.is_some());
     }
 
     #[test]

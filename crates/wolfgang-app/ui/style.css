@@ -5,6 +5,18 @@
   src: url("fonts/pixelify-sans-variable.woff2") format("woff2");
   font-weight: 400 700;
 }
+/* Pixelify's digits are hard to read (5 looks like S, 7 like a hook): digits come from
+   VT323, scaled to Pixelify's cap height (700 vs 560 per 1000) with Pixelify's line metrics
+   (92 % / 28 %, divided by that scale), so lines with numbers are exactly as tall. */
+@font-face {
+  font-family: "Wolfgang Digits";
+  src: url("fonts/vt323-digits.woff2") format("woff2");
+  unicode-range: U+0030-0039;
+  size-adjust: 125%;
+  ascent-override: 73.6%;
+  descent-override: 22.4%;
+  line-gap-override: 0%;
+}
 
 :root {
   --scale: 4;
@@ -23,7 +35,7 @@ html, body {
   overflow: hidden;
   background: #2a211c;
   color: var(--ink);
-  font-family: "Pixelify Sans", ui-monospace, monospace;
+  font-family: "Wolfgang Digits", "Pixelify Sans", ui-monospace, monospace;
   user-select: none;
   -webkit-user-select: none;
   cursor: default;
@@ -158,10 +170,10 @@ body { display: grid; place-items: center; }
   display: flex;
   flex-direction: column;
 }
-#panel h2 { margin: 0 0 calc(3 * var(--u)); font-size: calc(6.5 * var(--u)); font-weight: 600; }
+#panel h2 { margin: 0 0 calc(2 * var(--u)); font-size: calc(6.5 * var(--u)); font-weight: 600; }
 #panel-body { overflow-y: auto; flex: 1; }
-#panel-close { align-self: flex-end; margin-top: calc(3 * var(--u)); font-size: calc(5.5 * var(--u)); padding: calc(1 * var(--u)) calc(6 * var(--u)); }
-.row { display: flex; align-items: center; justify-content: space-between; gap: calc(3 * var(--u)); margin-bottom: calc(2.5 * var(--u)); }
+#panel-close { align-self: flex-end; margin-top: calc(2 * var(--u)); font-size: calc(5.5 * var(--u)); padding: calc(1 * var(--u)) calc(6 * var(--u)); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: calc(3 * var(--u)); margin-bottom: calc(1.5 * var(--u)); }
 .row .label { flex: 1; }
 .seg { display: flex; gap: var(--u); flex-wrap: wrap; justify-content: flex-end; }
 .btn {

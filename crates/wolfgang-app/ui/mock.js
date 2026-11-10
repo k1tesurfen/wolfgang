@@ -6,6 +6,8 @@
 //   ?panel=settings|presets|about    open a panel
 //   ?update                          pretend a newer Wolfgang is on GitHub
 //   ?update=install                  … and say yes to it
+//   ?addon                           the add-on for „Nur aufschreiben“ is installed
+//   ?addon=installing                … or is being downloaded
 'use strict';
 
 if (!window.__TAURI__) {
@@ -32,6 +34,9 @@ if (!window.__TAURI__) {
     let node = 'mode', history = [];
     let settings = { web_format: 'webp', max_side: 1600, quality: 80, hq_format: 'jpg', separator: 'dash', video_format: 'mp4', video_size: 1080, video_quality: 'balanced', audio_format: 'mp3', sound: true };
     let presets = [{ name: 'Blog-Bilder', description: 'fürs Web als WebP, 1600 px, Qualität 80' }];
+    const addonParam = new URLSearchParams(location.search).get('addon');
+    let addon = { installed: addonParam === '', installing: false, size: 574_926_293 };
+    let addonTimer = null;
 
     const work = () => {
       const total = 42;
@@ -72,6 +77,21 @@ if (!window.__TAURI__) {
       reveal: () => {},
       pick_files: () => ['/demo/mode'],
       take_pending: () => [],
+      transcription: () => addon,
+      install_transcription: () => {
+        // Pretends to download the add-on in about 8 seconds.
+        if (addon.installing) return addon;
+        addon = { ...addon, installing: true };
+        let done = 0;
+        addonTimer = setInterval(() => {
+          done = Math.min(addon.size, done + 30_000_000);
+          emit('transcription-progress', { done, total: addon.size });
+          if (done === addon.size) { clearInterval(addonTimer); addon = { ...addon, installing: false, installed: true }; emit('transcription-done', { Ok: addon }); }
+        }, 400);
+        return addon;
+      },
+      cancel_transcription_install: () => { clearInterval(addonTimer); addon = { ...addon, installing: false }; emit('transcription-done', { Ok: addon }); },
+      remove_transcription: () => (addon = { ...addon, installed: false }),
       check_update: () => (new URLSearchParams(location.search).has('update') ? { version: '2.2.0' } : null),
       install_update: () => new Promise(() => {
         // Pretends to download 18 MB; in the real app Wolfgang restarts at the end.
@@ -80,6 +100,8 @@ if (!window.__TAURI__) {
         const t = setInterval(() => { done = Math.min(total, done + 900_000); emit('update-progress', { done, total }); if (done === total) clearInterval(t); }, 100);
       }),
     };
+
+    if (addonParam === 'installing') setTimeout(() => commands.install_transcription(), 200);
 
     return {
       invoke: (cmd, args = {}) => new Promise((ok, err) => setTimeout(() => { try { ok(commands[cmd](args)); } catch (e) { err(e); } }, 30)),
