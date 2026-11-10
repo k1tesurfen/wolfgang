@@ -6,8 +6,8 @@
 # Side views face right; the app mirrors them when she walks left.
 # Her daily routine (sleeping, waking, wandering, washing …) is in app.js (`Wilma`).
 #
-# Sleeping, sitting and walking are taken from the character study in pixel-art/
-# (2026-11-09); the other frames are derived from them.
+# Sleeping, sitting and walking are taken from the character study in
+# assets/reference/wilma-study.jpeg (2026-11-09); the other frames are derived from them.
 
 size 18 9
 # Bottom centre of her cushion, under the desk between the drawers.
