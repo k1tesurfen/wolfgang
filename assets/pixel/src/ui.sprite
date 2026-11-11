@@ -1,4 +1,4 @@
-# UI pieces for the app scene (same format as wolfgang.sprite).
+# UI pieces for the app scene (same format as characters/wolfgang/desk.sprite).
 #
 # frame NAME W H [slice N]   N = 9-slice inset: corners stay, edges/centre stretch.
 

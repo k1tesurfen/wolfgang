@@ -40,13 +40,16 @@ const load = src => new Promise((ok, err) => { const i = new Image(); i.onload =
 
 async function init() {
   SCENE = await (await fetch('pixel/scene.json')).json();
-  const files = [SCENE.background, SCENE.wolfgang.sheet, SCENE.ui.sheet, SCENE.wilma.sheet, ...Object.values(SCENE.portraits)];
+  try { CHARACTER = await api.invoke('character'); } catch { /* keep Wolfgang */ }
+  document.title = CHARACTER.name;
+  // This character's office, desk sprite and portraits (Wolfgang's stand in for what's missing).
+  const art = SCENE.characters[CHARACTER.key] || SCENE.characters.wolfgang;
+  Object.assign(SCENE, { background: art.background, wolfgang: art.desk, portraits: art.portraits });
+  const files = [...new Set([SCENE.background, SCENE.wolfgang.sheet, SCENE.ui.sheet, SCENE.wilma.sheet, ...Object.values(SCENE.portraits)])];
   for (const f of files) IMG[f] = await load('pixel/' + f);
   UI = SCENE.ui.frames;
 
   try { Sound.enabled = (await api.invoke('settings')).sound; } catch { /* keep default */ }
-  try { CHARACTER = await api.invoke('character'); } catch { /* keep Wolfgang */ }
-  document.title = CHARACTER.name;
 
   // Preview in a browser: `?wilma` makes her wake up right away.
   Wilma.init(SCENE, performance.now(), !T && new URLSearchParams(location.search).has('wilma') ? 300 : null);

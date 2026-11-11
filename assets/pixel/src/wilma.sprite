@@ -1,6 +1,6 @@
 # Wilma, the orange office cat. She lives under Wolfgang's desk in her round cushion.
 #
-# Same format as wolfgang.sprite (`.` is transparent). Every frame has its own size;
+# Same format as characters/wolfgang/desk.sprite (`.` is transparent). Every frame has its own size;
 # the app draws frames with their bottom centre on Wilma's spot on the floor. In her
 # cushion she lies one row above the top of `bedfront`, which is drawn over her.
 # Side views face right; the app mirrors them when she walks left.

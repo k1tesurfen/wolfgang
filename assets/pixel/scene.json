@@ -1,168 +1,534 @@
 {
   "width": 320,
   "height": 180,
-  "background": "src/office.png",
-  "wolfgang": {
-    "sheet": "wolfgang.png",
-    "origin": [
-      140,
-      52
-    ],
-    "frames": {
-      "blink": {
-        "x": 47,
-        "y": 0,
-        "w": 46,
-        "h": 56
+  "characters": {
+    "burgunde": {
+      "background": "src/office.png",
+      "desk": {
+        "sheet": "characters/burgunde/desk.png",
+        "origin": [
+          140,
+          52
+        ],
+        "frames": {
+          "blink": {
+            "x": 47,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "hand": {
+            "x": 329,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "idle": {
+            "x": 0,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "sip": {
+            "x": 282,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "smile": {
+            "x": 141,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "talk": {
+            "x": 94,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "typeA": {
+            "x": 188,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "typeB": {
+            "x": 235,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          }
+        },
+        "animations": {
+          "hand": [
+            [
+              "hand",
+              0
+            ]
+          ],
+          "happy": [
+            [
+              "smile",
+              0
+            ]
+          ],
+          "idle": [
+            [
+              "idle",
+              2600
+            ],
+            [
+              "blink",
+              130
+            ],
+            [
+              "idle",
+              4200
+            ],
+            [
+              "blink",
+              110
+            ],
+            [
+              "idle",
+              180
+            ],
+            [
+              "blink",
+              110
+            ]
+          ],
+          "sip": [
+            [
+              "idle",
+              300
+            ],
+            [
+              "sip",
+              1600
+            ],
+            [
+              "idle",
+              0
+            ]
+          ],
+          "talk": [
+            [
+              "talk",
+              150
+            ],
+            [
+              "idle",
+              110
+            ],
+            [
+              "talk",
+              170
+            ],
+            [
+              "smile",
+              140
+            ],
+            [
+              "talk",
+              120
+            ],
+            [
+              "idle",
+              150
+            ]
+          ],
+          "type": [
+            [
+              "typeA",
+              120
+            ],
+            [
+              "typeB",
+              120
+            ],
+            [
+              "typeA",
+              140
+            ],
+            [
+              "idle",
+              90
+            ],
+            [
+              "typeB",
+              110
+            ],
+            [
+              "typeA",
+              120
+            ]
+          ]
+        }
       },
-      "hand": {
-        "x": 329,
-        "y": 0,
-        "w": 46,
-        "h": 56
-      },
-      "idle": {
-        "x": 0,
-        "y": 0,
-        "w": 46,
-        "h": 56
-      },
-      "sip": {
-        "x": 282,
-        "y": 0,
-        "w": 46,
-        "h": 56
-      },
-      "smile": {
-        "x": 141,
-        "y": 0,
-        "w": 46,
-        "h": 56
-      },
-      "talk": {
-        "x": 94,
-        "y": 0,
-        "w": 46,
-        "h": 56
-      },
-      "typeA": {
-        "x": 188,
-        "y": 0,
-        "w": 46,
-        "h": 56
-      },
-      "typeB": {
-        "x": 235,
-        "y": 0,
-        "w": 46,
-        "h": 56
+      "portraits": {
+        "content": "characters/burgunde/portraits/content.png",
+        "dreamy": "characters/burgunde/portraits/thinking.png",
+        "happy": "characters/burgunde/portraits/happy.png",
+        "laughing": "characters/burgunde/portraits/happy.png",
+        "sideeye": "characters/burgunde/portraits/content.png",
+        "sorry": "characters/burgunde/portraits/sorry.png",
+        "surprised": "characters/burgunde/portraits/surprised.png",
+        "thinking": "characters/burgunde/portraits/thinking.png"
       }
     },
-    "animations": {
-      "hand": [
-        [
-          "hand",
-          0
-        ]
-      ],
-      "happy": [
-        [
-          "smile",
-          0
-        ]
-      ],
-      "idle": [
-        [
-          "idle",
-          2600
+    "ully": {
+      "background": "src/office.png",
+      "desk": {
+        "sheet": "characters/ully/desk.png",
+        "origin": [
+          140,
+          52
         ],
-        [
-          "blink",
-          130
+        "frames": {
+          "blink": {
+            "x": 47,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "hand": {
+            "x": 329,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "idle": {
+            "x": 0,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "sip": {
+            "x": 282,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "smile": {
+            "x": 141,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "talk": {
+            "x": 94,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "typeA": {
+            "x": 188,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "typeB": {
+            "x": 235,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          }
+        },
+        "animations": {
+          "hand": [
+            [
+              "hand",
+              0
+            ]
+          ],
+          "happy": [
+            [
+              "smile",
+              0
+            ]
+          ],
+          "idle": [
+            [
+              "idle",
+              2600
+            ],
+            [
+              "blink",
+              130
+            ],
+            [
+              "idle",
+              4200
+            ],
+            [
+              "blink",
+              110
+            ],
+            [
+              "idle",
+              180
+            ],
+            [
+              "blink",
+              110
+            ]
+          ],
+          "sip": [
+            [
+              "idle",
+              300
+            ],
+            [
+              "sip",
+              1600
+            ],
+            [
+              "idle",
+              0
+            ]
+          ],
+          "talk": [
+            [
+              "talk",
+              150
+            ],
+            [
+              "idle",
+              110
+            ],
+            [
+              "talk",
+              170
+            ],
+            [
+              "smile",
+              140
+            ],
+            [
+              "talk",
+              120
+            ],
+            [
+              "idle",
+              150
+            ]
+          ],
+          "type": [
+            [
+              "typeA",
+              120
+            ],
+            [
+              "typeB",
+              120
+            ],
+            [
+              "typeA",
+              140
+            ],
+            [
+              "idle",
+              90
+            ],
+            [
+              "typeB",
+              110
+            ],
+            [
+              "typeA",
+              120
+            ]
+          ]
+        }
+      },
+      "portraits": {
+        "content": "characters/ully/portraits/happy.png",
+        "dreamy": "characters/ully/portraits/happy.png",
+        "happy": "characters/ully/portraits/happy.png",
+        "laughing": "characters/ully/portraits/happy.png",
+        "sideeye": "characters/ully/portraits/happy.png",
+        "sorry": "characters/ully/portraits/happy.png",
+        "surprised": "characters/ully/portraits/happy.png",
+        "thinking": "characters/ully/portraits/happy.png"
+      }
+    },
+    "wolfgang": {
+      "background": "src/office.png",
+      "desk": {
+        "sheet": "characters/wolfgang/desk.png",
+        "origin": [
+          140,
+          52
         ],
-        [
-          "idle",
-          4200
-        ],
-        [
-          "blink",
-          110
-        ],
-        [
-          "idle",
-          180
-        ],
-        [
-          "blink",
-          110
-        ]
-      ],
-      "sip": [
-        [
-          "idle",
-          300
-        ],
-        [
-          "sip",
-          1600
-        ],
-        [
-          "idle",
-          0
-        ]
-      ],
-      "talk": [
-        [
-          "talk",
-          150
-        ],
-        [
-          "idle",
-          110
-        ],
-        [
-          "talk",
-          170
-        ],
-        [
-          "smile",
-          140
-        ],
-        [
-          "talk",
-          120
-        ],
-        [
-          "idle",
-          150
-        ]
-      ],
-      "type": [
-        [
-          "typeA",
-          120
-        ],
-        [
-          "typeB",
-          120
-        ],
-        [
-          "typeA",
-          140
-        ],
-        [
-          "idle",
-          90
-        ],
-        [
-          "typeB",
-          110
-        ],
-        [
-          "typeA",
-          120
-        ]
-      ]
+        "frames": {
+          "blink": {
+            "x": 47,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "hand": {
+            "x": 329,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "idle": {
+            "x": 0,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "sip": {
+            "x": 282,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "smile": {
+            "x": 141,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "talk": {
+            "x": 94,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "typeA": {
+            "x": 188,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          },
+          "typeB": {
+            "x": 235,
+            "y": 0,
+            "w": 46,
+            "h": 56
+          }
+        },
+        "animations": {
+          "hand": [
+            [
+              "hand",
+              0
+            ]
+          ],
+          "happy": [
+            [
+              "smile",
+              0
+            ]
+          ],
+          "idle": [
+            [
+              "idle",
+              2600
+            ],
+            [
+              "blink",
+              130
+            ],
+            [
+              "idle",
+              4200
+            ],
+            [
+              "blink",
+              110
+            ],
+            [
+              "idle",
+              180
+            ],
+            [
+              "blink",
+              110
+            ]
+          ],
+          "sip": [
+            [
+              "idle",
+              300
+            ],
+            [
+              "sip",
+              1600
+            ],
+            [
+              "idle",
+              0
+            ]
+          ],
+          "talk": [
+            [
+              "talk",
+              150
+            ],
+            [
+              "idle",
+              110
+            ],
+            [
+              "talk",
+              170
+            ],
+            [
+              "smile",
+              140
+            ],
+            [
+              "talk",
+              120
+            ],
+            [
+              "idle",
+              150
+            ]
+          ],
+          "type": [
+            [
+              "typeA",
+              120
+            ],
+            [
+              "typeB",
+              120
+            ],
+            [
+              "typeA",
+              140
+            ],
+            [
+              "idle",
+              90
+            ],
+            [
+              "typeB",
+              110
+            ],
+            [
+              "typeA",
+              120
+            ]
+          ]
+        }
+      },
+      "portraits": {
+        "content": "characters/wolfgang/portraits/content.png",
+        "dreamy": "characters/wolfgang/portraits/dreamy.png",
+        "happy": "characters/wolfgang/portraits/happy.png",
+        "laughing": "characters/wolfgang/portraits/laughing.png",
+        "sideeye": "characters/wolfgang/portraits/sideeye.png",
+        "sorry": "characters/wolfgang/portraits/sorry.png",
+        "surprised": "characters/wolfgang/portraits/surprised.png",
+        "thinking": "characters/wolfgang/portraits/thinking.png"
+      }
     }
   },
   "ui": {
@@ -483,16 +849,6 @@
     232,
     178
   ],
-  "portraits": {
-    "content": "src/portraits/content.png",
-    "dreamy": "src/portraits/dreamy.png",
-    "happy": "src/portraits/happy.png",
-    "laughing": "src/portraits/laughing.png",
-    "sideeye": "src/portraits/sideeye.png",
-    "sorry": "src/portraits/sorry.png",
-    "surprised": "src/portraits/surprised.png",
-    "thinking": "src/portraits/thinking.png"
-  },
   "moods": {
     "happy": [
       "happy"

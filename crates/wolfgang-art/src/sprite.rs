@@ -1,4 +1,4 @@
-//! The `.sprite` text format (see `assets/pixel/src/wolfgang.sprite`) and
+//! The `.sprite` text format (see `assets/pixel/characters/wolfgang/desk.sprite`) and
 //! rendering it into a sprite sheet.
 
 use serde::Serialize;
@@ -149,9 +149,175 @@ pub fn sheet(f: &SpriteFile) -> (Pixels, BTreeMap<String, SheetFrame>) {
     (Pixels { width: w, height: h, rgba, icc: None }, map)
 }
 
+/// Characters handed out to colours that appear in an edited sheet for the first time.
+const FREE_CHARS: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!$%&*+-/:;<=>?@^_~";
+
+/// The result of writing an edited sheet back into a `.sprite` text.
+#[derive(Debug)]
+pub struct Applied {
+    pub text: String,
+    pub changed: usize,
+    pub new_colors: Vec<(char, [u8; 3])>,
+    pub warnings: Vec<String>,
+}
+
+/// Writes an edited sheet (laid out exactly like [`sheet`]) back into the `.sprite`
+/// text: frame rows are replaced, colours seen for the first time get a free
+/// character. Comments, palette, frame names and animations stay as they are.
+pub fn apply_sheet(text: &str, img: &Pixels) -> Result<Applied, String> {
+    let f = parse(text)?;
+    let (expected, map) = sheet(&f);
+    if (img.width, img.height) != (expected.width, expected.height) {
+        return Err(format!("the PNG is {}×{}, the sprite sheet is {}×{}: frames can't be found", img.width, img.height, expected.width, expected.height));
+    }
+    let mut by_color: BTreeMap<[u8; 3], char> = BTreeMap::new();
+    for (ch, c) in f.palette.iter().rev() {
+        by_color.insert(*c, *ch);
+    }
+    let mut free = FREE_CHARS.chars().filter(|c| !f.palette.contains_key(c));
+    let mut new_colors = Vec::new();
+    let (mut changed, mut half, mut in_gaps) = (0, 0, 0);
+    let mut inside = vec![false; (img.width * img.height) as usize];
+    let mut rows: Vec<Vec<String>> = Vec::new();
+    for fr in &f.frames {
+        let at = &map[&fr.name];
+        let mut out = Vec::with_capacity(fr.h as usize);
+        for y in 0..fr.h {
+            let old: Vec<char> = fr.rows[y as usize].chars().collect();
+            let mut row = String::with_capacity(fr.w as usize);
+            for x in 0..fr.w {
+                let o = (y * img.width + at.x + x) as usize;
+                inside[o] = true;
+                let p = &img.rgba[o * 4..o * 4 + 4];
+                if p[3] != 0 && p[3] != 255 {
+                    half += 1;
+                }
+                let ch = if p[3] < 128 {
+                    '.'
+                } else {
+                    let c = [p[0], p[1], p[2]];
+                    // Two letters may share a colour (lanyard red = skin shadow): an unchanged pixel keeps its letter.
+                    match by_color.get(&c) {
+                        _ if f.palette.get(&old[x as usize]) == Some(&c) => old[x as usize],
+                        Some(ch) => *ch,
+                        None => {
+                            let ch = free.next().ok_or("too many new colours: no free characters left")?;
+                            by_color.insert(c, ch);
+                            new_colors.push((ch, c));
+                            ch
+                        }
+                    }
+                };
+                changed += usize::from(ch != old[x as usize]);
+                row.push(ch);
+            }
+            out.push(row);
+        }
+        rows.push(out);
+    }
+    for (o, inside) in inside.iter().enumerate() {
+        in_gaps += usize::from(!inside && img.rgba[o * 4 + 3] >= 128);
+    }
+    let mut warnings = Vec::new();
+    if half > 0 {
+        warnings.push(format!("{half} half-transparent pixels (smoothing brush?): taken as opaque or transparent"));
+    }
+    if in_gaps > 0 {
+        warnings.push(format!("{in_gaps} pixels painted between frames: ignored"));
+    }
+
+    // Same walk as `parse`: rows are taken literally, the rest is copied. New colours go
+    // after the last `color` line, or (no palette yet) before the first frame or anim.
+    let mut lines = Vec::new();
+    let (mut skip, mut frame, mut after_colors, mut first_block) = (0u32, 0, None, None);
+    for raw in text.lines() {
+        if skip > 0 {
+            skip -= 1;
+            continue;
+        }
+        let kw = keyword(raw);
+        if first_block.is_none() && matches!(kw, Some("frame" | "anim")) {
+            first_block = Some(lines.len());
+        }
+        lines.push(raw.to_owned());
+        match kw {
+            Some("color") => after_colors = Some(lines.len()),
+            Some("frame") => {
+                lines.extend(rows[frame].iter().cloned());
+                skip = f.frames[frame].h;
+                frame += 1;
+            }
+            _ => {}
+        }
+    }
+    let at = after_colors.or(first_block).unwrap_or(lines.len());
+    lines.splice(at..at, new_colors.iter().map(|(ch, [r, g, b])| format!("color {ch} {r:02x}{g:02x}{b:02x}  # new (painted)")));
+    let mut out = lines.join("\n");
+    if text.ends_with('\n') {
+        out.push('\n');
+    }
+    parse(&out).map_err(|e| format!("internal: the written sprite doesn't parse: {e}"))?;
+    Ok(Applied { text: out, changed, new_colors, warnings })
+}
+
+/// The first word of a line outside a frame (`size`, `color`, `frame`, …), comments ignored.
+fn keyword(line: &str) -> Option<&str> {
+    line.split('#').next().unwrap_or("").split_whitespace().next()
+}
+
+/// A sprite's layout (size, origin, frames, animations) with no palette and empty
+/// frames: what a sheet painted from scratch is read into, with [`apply_sheet`].
+pub fn blank(text: &str) -> Result<String, String> {
+    let f = parse(text)?;
+    let mut lines = Vec::new();
+    let (mut skip, mut frame) = (0u32, 0);
+    for raw in text.lines() {
+        if skip > 0 {
+            skip -= 1;
+            continue;
+        }
+        let kw = keyword(raw);
+        if kw == Some("color") {
+            continue;
+        }
+        lines.push(raw.to_owned());
+        if kw == Some("frame") {
+            let fr = &f.frames[frame];
+            lines.extend((0..fr.h).map(|_| ".".repeat(fr.w as usize)));
+            skip = fr.h;
+            frame += 1;
+        }
+    }
+    Ok(lines.join("\n") + "\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn edited_sheet_goes_back_into_the_text() {
+        let text = "# test\nsize 2 1\ncolor X ff0000  # red\nframe a\nX.\nframe b\n.X\nanim x a:10 b:10\n";
+        let (mut img, _) = sheet(&parse(text).unwrap());
+        // Untouched: the text comes back byte for byte.
+        let same = apply_sheet(text, &img).unwrap();
+        assert_eq!((same.text.as_str(), same.changed), (text, 0));
+        // Frame b, pixel 0 painted in a new colour; frame a, pixel 0 erased.
+        img.rgba[12..16].copy_from_slice(&[0, 0, 255, 255]);
+        img.rgba[0..4].copy_from_slice(&[0, 0, 0, 0]);
+        let a = apply_sheet(text, &img).unwrap();
+        assert_eq!(a.changed, 2);
+        assert_eq!(a.new_colors, vec![('A', [0, 0, 255])]);
+        assert_eq!(a.text, "# test\nsize 2 1\ncolor X ff0000  # red\ncolor A 0000ff  # new (painted)\nframe a\n..\nframe b\nAX\nanim x a:10 b:10\n");
+        // Wrong size is refused.
+        let small = Pixels { width: 1, height: 1, rgba: vec![0; 4], icc: None };
+        assert!(apply_sheet(text, &small).unwrap_err().contains("frames can't be found"));
+        // Painted from scratch on the blank layout: the palette is created before the frames.
+        let empty = blank(text).unwrap();
+        assert_eq!(empty, "# test\nsize 2 1\nframe a\n..\nframe b\n..\nanim x a:10 b:10\n");
+        let fresh = apply_sheet(&empty, &img).unwrap();
+        assert_eq!(fresh.text, "# test\nsize 2 1\ncolor A 0000ff  # new (painted)\ncolor B ff0000  # new (painted)\nframe a\n..\nframe b\nAB\nanim x a:10 b:10\n");
+    }
 
     #[test]
     fn parses_and_validates() {
@@ -172,10 +338,11 @@ mod tests {
 
     #[test]
     fn repo_sources_are_valid() {
-        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/pixel/src");
-        for name in ["wolfgang.sprite", "ui.sprite", "wilma.sprite"] {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../assets/pixel");
+        for name in ["characters/wolfgang/desk.sprite", "characters/ully/desk.sprite", "characters/burgunde/desk.sprite", "src/ui.sprite", "src/wilma.sprite"] {
             let text = std::fs::read_to_string(root.join(name)).unwrap();
-            parse(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
+            let f = parse(&text).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert_eq!(apply_sheet(&text, &sheet(&f).0).unwrap().text, text, "{name}: PNG round trip changes the text");
         }
     }
 }

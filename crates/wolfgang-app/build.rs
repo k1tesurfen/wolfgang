@@ -10,7 +10,10 @@ fn copy_dir(from: &Path, to: &Path) {
         let path = entry.path();
         let name = entry.file_name();
         if path.is_dir() {
-            copy_dir(&path, &to.join(&name));
+            // edit/: local working copies for painting (wolfgang-art to-png), not app art.
+            if name != "edit" {
+                copy_dir(&path, &to.join(&name));
+            }
         } else if path.extension().is_some_and(|e| e == "png" || e == "json") {
             std::fs::copy(&path, to.join(&name)).unwrap();
         }

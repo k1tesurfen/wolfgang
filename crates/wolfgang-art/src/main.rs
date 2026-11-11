@@ -1,8 +1,17 @@
 //! `wolfgang-art`: builds the app's pixel art from `assets/`.
 //!
-//!   cargo run --release -p wolfgang-art -- build            hand-made sources → sheets, scene.json, preview
-//!   cargo run --release -p wolfgang-art -- import [--force] references → src/ PNGs (once!)
-//!   cargo run --release -p wolfgang-art -- analyze IMAGE... pixel grid detection
+//!   cargo run --release -p wolfgang-art -- build                 sources → sheets, scene.json, previews
+//!   cargo run --release -p wolfgang-art -- import [--force]      Wolfgang's references → office + his portraits (once!)
+//!   cargo run --release -p wolfgang-art -- import-character KEY [--force]
+//!                                                                 assets/reference/KEY/<mood>.jpeg → KEY's portraits
+//!   cargo run --release -p wolfgang-art -- keep-png KEY / keep-text KEY
+//!                                                                 desk.png and desk.sprite both changed: keep one
+//!   cargo run --release -p wolfgang-art -- to-png NAME           src/NAME.sprite (ui, wilma) → edit/NAME.png for painting
+//!   cargo run --release -p wolfgang-art -- from-png NAME         edit/NAME.png → back into src/NAME.sprite
+//!   cargo run --release -p wolfgang-art -- compare DIR IMAGE...  old vs cell-based portrait conversion, side by side
+//!   cargo run --release -p wolfgang-art -- downscale IMAGE OUT.png PIXEL [COLOURS]
+//!                                                                 a reference at another pixel size (sprite drawing aid)
+//!   cargo run --release -p wolfgang-art -- analyze IMAGE...      pixel grid detection
 
 mod build;
 mod grid;
@@ -42,7 +51,7 @@ fn main() {
             }
         }
         Some("import") => {
-            // import [--force]: references → src/office.png + src/portraits/*.png, once.
+            // import [--force]: Wolfgang's references → src/office.png + his portraits, once.
             let paths = build::Paths { reference: "assets/reference".into(), out: "assets/pixel".into(), preview: None };
             if let Err(e) = build::import(&paths, args.iter().any(|a| a == "--force")) {
                 eprintln!("{e}");
@@ -50,23 +59,84 @@ fn main() {
             }
         }
         Some("icon") => {
-            // icon OUT.png: 1024 px app icon from the happy portrait.
+            // icon OUT.png [KEY]: 1024 px app icon from the character's happy portrait.
             let paths = build::Paths { reference: "assets/reference".into(), out: "assets/pixel".into(), preview: None };
-            build::icon(&paths, Path::new(args.get(1).map(String::as_str).unwrap_or("icon.png")));
+            build::icon(&paths, args.get(2).map(String::as_str).unwrap_or("wolfgang"), Path::new(args.get(1).map(String::as_str).unwrap_or("icon.png")));
+        }
+        Some("import-character") => {
+            // import-character KEY [--force]: references → the character's portraits.
+            let paths = build::Paths { reference: "assets/reference".into(), out: "assets/pixel".into(), preview: None };
+            let key = args.get(1).filter(|a| !a.starts_with("--")).unwrap_or_else(|| usage());
+            build::import_character(&paths, key, args.iter().any(|a| a == "--force")).unwrap_or_else(|e| fail(&e));
+        }
+        Some(cmd @ ("keep-png" | "keep-text")) => {
+            let paths = build::Paths { reference: "assets/reference".into(), out: "assets/pixel".into(), preview: None };
+            let key = args.get(1).unwrap_or_else(|| usage());
+            build::keep_desk(&paths, key, cmd == "keep-png").unwrap_or_else(|e| fail(&e));
+        }
+        Some("to-png") => {
+            // to-png NAME [--force]: src/NAME.sprite → edit/NAME.png for a pixel editor.
+            let paths = build::Paths { reference: "assets/reference".into(), out: "assets/pixel".into(), preview: None };
+            let name = args.get(1).filter(|a| !a.starts_with("--")).unwrap_or_else(|| usage());
+            match build::sprite_to_png(&paths, name, args.iter().any(|a| a == "--force")) {
+                Ok(out) => println!("  {}  (paint, save, then: from-png {name})", out.display()),
+                Err(e) => fail(&e),
+            }
+        }
+        Some("from-png") => {
+            // from-png NAME: edit/NAME.png → src/NAME.sprite.
+            let paths = build::Paths { reference: "assets/reference".into(), out: "assets/pixel".into(), preview: None };
+            let name = args.get(1).unwrap_or_else(|| usage());
+            match build::sprite_from_png(&paths, name) {
+                Ok(a) => {
+                    println!("  {name}.sprite: {} pixels changed", a.changed);
+                    for (ch, [r, g, b]) in &a.new_colors {
+                        println!("  new colour '{ch}' {r:02x}{g:02x}{b:02x}");
+                    }
+                    for w in &a.warnings {
+                        println!("  warning: {w}");
+                    }
+                }
+                Err(e) => fail(&e),
+            }
+        }
+        Some("compare") => {
+            // compare OUT_DIR IMAGE...: current portrait conversion next to the cell-based one.
+            let out = Path::new(args.get(1).unwrap_or_else(|| usage()));
+            for path in &args[2..] {
+                build::compare(Path::new(path), out).unwrap_or_else(|e| fail(&e));
+            }
+        }
+        Some("downscale") => {
+            // downscale IMAGE OUT.png PIXEL [COLOURS]: a reference at sprite scale, as a drawing aid.
+            let (img, out) = (args.get(1).unwrap_or_else(|| usage()), args.get(2).unwrap_or_else(|| usage()));
+            let pixel: f64 = args.get(3).and_then(|s| s.parse().ok()).unwrap_or_else(|| usage());
+            let colors = args.get(4).and_then(|s| s.parse().ok()).unwrap_or(32);
+            build::downscale(Path::new(img), pixel, colors, Path::new(out)).unwrap_or_else(|e| fail(&e));
         }
         Some("build") => {
             // build [--preview DIR]
             let preview = args.iter().position(|a| a == "--preview").map(|i| std::path::PathBuf::from(&args[i + 1]));
             let paths = build::Paths { reference: "assets/reference".into(), out: "assets/pixel".into(), preview };
             println!("assets/pixel/");
+            build::clean_portraits(&paths);
             build::check_sources(&paths);
-            let wolfgang = build::sprites(&paths, "wolfgang");
+            let characters = build::characters(&paths);
             let ui = build::sprites(&paths, "ui");
             let wilma = build::sprites(&paths, "wilma");
-            build::manifest(&paths, wolfgang, ui, wilma);
+            build::manifest(&paths, characters, ui, wilma);
         }
-        _ => eprintln!("usage: wolfgang-art build [--preview DIR] | import [--force] | icon OUT.png | analyze IMAGE..."),
+        _ => usage(),
     }
+}
+
+fn usage() -> ! {
+    fail("usage: wolfgang-art build [--preview DIR] | import [--force] | import-character KEY [--force] | keep-png KEY | keep-text KEY | to-png NAME [--force] | from-png NAME | compare DIR IMAGE... | downscale IMAGE OUT.png PIXEL [COLOURS] | icon OUT.png [KEY] | analyze IMAGE...")
+}
+
+fn fail(msg: &str) -> ! {
+    eprintln!("{msg}");
+    std::process::exit(1)
 }
 
 /// Nearest-neighbour upscale for looking at results.

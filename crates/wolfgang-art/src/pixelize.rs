@@ -2,6 +2,7 @@
 //! a fixed palette (k-means in OKLab), then each target pixel takes the most
 //! frequent palette colour of its source block (no blurry in-between colours).
 
+use std::collections::BTreeMap;
 use wolfgang_core::image::Pixels;
 
 pub type Rgb = [u8; 3];
@@ -184,6 +185,138 @@ fn close_outline_gaps(index: &mut [u16], w: u32, h: u32, lab: &[[f32; 3]]) {
             }
         }
     }
+}
+
+/// The pixels Gemini drew: `period` image pixels each, the first border at `phase` (per axis).
+pub struct Cells {
+    pub period: (f64, f64),
+    pub phase: (f64, f64),
+}
+
+/// The colour of every cell in `first .. first + n` (cell coordinates): the OKLab mean
+/// of its middle half. Cell borders are where JPEG halos and soft edges sit.
+pub fn cell_colors(img: &Pixels, cells: &Cells, first: (i64, i64), n: (u32, u32)) -> Vec<Rgb> {
+    let span = |i: i64, phase: f64, period: f64, max: u32| {
+        let a = (phase + (i as f64 + 0.25) * period).round().clamp(0.0, max as f64 - 1.0) as u32;
+        let b = (phase + (i as f64 + 0.75) * period).round().clamp(0.0, max as f64 - 1.0) as u32;
+        a..=b.max(a)
+    };
+    let mut out = Vec::with_capacity((n.0 * n.1) as usize);
+    for cy in 0..n.1 as i64 {
+        for cx in 0..n.0 as i64 {
+            let (mut sum, mut k) = ([0f32; 3], 0f32);
+            for y in span(first.1 + cy, cells.phase.1, cells.period.1, img.height) {
+                for x in span(first.0 + cx, cells.phase.0, cells.period.0, img.width) {
+                    let o = ((y * img.width + x) * 4) as usize;
+                    let l = oklab([img.rgba[o], img.rgba[o + 1], img.rgba[o + 2]]);
+                    (0..3).for_each(|c| sum[c] += l[c]);
+                    k += 1.0;
+                }
+            }
+            out.push(from_oklab(sum.map(|s| s / k)));
+        }
+    }
+    out
+}
+
+/// A small feature must differ this much (OKLab) from what surrounds it to be rescued.
+const RESCUE_CONTRAST: f32 = 0.12;
+
+/// `f`×`f` cells → one pixel. The majority wins; on a tie the colour that stands out
+/// more against the surrounding cells (a line through the block survives). Then small,
+/// distinct features that lost every pixel (a pupil straddling four blocks) get back
+/// exactly one, the block they cover most. Nothing ever grows past its own cells.
+/// Features touching `background` are never rescued: those are blended edge cells.
+pub fn reduce(native: &[u16], nw: u32, nh: u32, f: u32, lab: &[[f32; 3]], background: Option<u16>) -> Vec<u16> {
+    if f == 1 {
+        return native.to_vec();
+    }
+    let (w, h) = (nw / f, nh / f);
+    let at = |x: u32, y: u32| native[(y * nw + x) as usize] as usize;
+    let mut out = vec![0u16; (w * h) as usize];
+    let mut counts = vec![0u32; lab.len()];
+    for by in 0..h {
+        for bx in 0..w {
+            counts.iter_mut().for_each(|c| *c = 0);
+            for y in by * f..(by + 1) * f {
+                for x in bx * f..(bx + 1) * f {
+                    counts[at(x, y)] += 1;
+                }
+            }
+            let best = *counts.iter().max().unwrap();
+            let tied: Vec<usize> = (0..lab.len()).filter(|&i| counts[i] == best).collect();
+            out[(by * w + bx) as usize] = if tied.len() == 1 {
+                tied[0]
+            } else {
+                // Mean of the ring of cells around the block.
+                let (mut sum, mut k) = ([0f32; 3], 0f32);
+                for y in (by * f).saturating_sub(f)..((by + 2) * f).min(nh) {
+                    for x in (bx * f).saturating_sub(f)..((bx + 2) * f).min(nw) {
+                        if x / f != bx || y / f != by {
+                            (0..3).for_each(|c| sum[c] += lab[at(x, y)][c]);
+                            k += 1.0;
+                        }
+                    }
+                }
+                let ring = sum.map(|s| s / k.max(1.0));
+                *tied.iter().max_by(|a, b| dist(&lab[**a], &ring).total_cmp(&dist(&lab[**b], &ring))).unwrap()
+            } as u16;
+        }
+    }
+
+    // Rescue: connected same-colour features of at most two blocks' worth of cells.
+    let mut seen = vec![false; native.len()];
+    let mut rescued = vec![false; out.len()];
+    for start in 0..native.len() {
+        if seen[start] {
+            continue;
+        }
+        let color = native[start];
+        let (mut comp, mut todo, mut border, mut on_background) = (vec![start], vec![start], ([0f32; 3], 0f32), false);
+        seen[start] = true;
+        while let Some(o) = todo.pop() {
+            let (x, y) = ((o as u32 % nw) as i64, (o as u32 / nw) as i64);
+            for (nx, ny) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
+                if nx < 0 || ny < 0 || nx >= nw as i64 || ny >= nh as i64 {
+                    continue;
+                }
+                let n = (ny * nw as i64 + nx) as usize;
+                if native[n] == color {
+                    if !seen[n] {
+                        seen[n] = true;
+                        comp.push(n);
+                        todo.push(n);
+                    }
+                } else {
+                    on_background |= Some(native[n]) == background;
+                    (0..3).for_each(|c| border.0[c] += lab[native[n] as usize][c]);
+                    border.1 += 1.0;
+                }
+            }
+        }
+        if comp.len() > (2 * f * f) as usize || border.1 == 0.0 || on_background {
+            continue;
+        }
+        let around = border.0.map(|s| s / border.1);
+        if dist(&lab[color as usize], &around) < RESCUE_CONTRAST * RESCUE_CONTRAST {
+            continue;
+        }
+        let mut cover: BTreeMap<usize, usize> = BTreeMap::new();
+        for &o in &comp {
+            let (x, y) = (o as u32 % nw / f, o as u32 / nw / f);
+            if x < w && y < h {
+                *cover.entry((y * w + x) as usize).or_default() += 1;
+            }
+        }
+        if cover.keys().any(|b| out[*b] == color) {
+            continue;
+        }
+        if let Some((&b, _)) = cover.iter().filter(|(b, _)| !rescued[**b]).max_by_key(|(_, n)| **n) {
+            out[b] = color;
+            rescued[b] = true;
+        }
+    }
+    out
 }
 
 pub fn colors(img: &Pixels, region: (u32, u32, u32, u32)) -> Vec<Rgb> {
