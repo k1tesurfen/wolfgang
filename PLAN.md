@@ -3,7 +3,7 @@
 > Wolfgang is the personification of conversion: a cozy, bearded guy in a cardigan who sits behind his desk with a coffee and converts whatever you put in front of him.
 > Usability for non-technical colleagues is the top priority.
 
-Status: **approved**. Milestones 1–10 are done and released (v2.2 video and audio, v2.3 the polish of milestone 10; current release 2.3.4). Milestone 11 (transcription) is implemented and waiting for the next release. Open points: section 9.
+Status: **approved**. Milestones 1–10 are done and released (v2.2 video and audio, v2.3 the polish of milestone 10; current release 2.3.4). Milestone 11 (transcription) was released in v2.3.5. Next: milestone 12 (tidy settings panel, „Bürogröße“); milestone 13 (character selection) is a work-in-progress vision. See section 10. Open points: section 9.
 
 ---
 
@@ -458,7 +458,9 @@ Picking it writes the transcript only: the video/audio isn't converted and the p
 8. ✅ **Self-update** (v2.1). See *v2.1: self-update*.
 9. ✅ **Video + audio** (v2.2): MP4/WebM for the web, poster frames, MP3/AAC, on a bundled LGPL ffmpeg. See *Milestone 9* and *Milestone 9 result*.
 10. ✅ **Polish** (v2.3): video/audio settings, time estimates, well-packed videos, animated GIFs → videos, pictures from PDFs, releases from the Mac. See *Milestone 10*.
-11. ✅ **Transcription** (next release): meeting recordings (video/audio) → German `.txt`, locally with whisper.cpp; add-on installed in the settings, „Nur aufschreiben“ always the last answer. See *Milestone 11* and *Milestone 11 result*.
+11. ✅ **Transcription** (v2.3.5): meeting recordings (video/audio) → German `.txt`, locally with whisper.cpp; add-on installed in the settings, „Nur aufschreiben“ always the last answer. See *Milestone 11* and *Milestone 11 result*.
+12. **Settings panel tidy-up + „Bürogröße“** (planned): grouped settings, the defaults folded away, the window size as a setting. See section 10.
+13. 🚧 **Character selection: Wolfgang, Ulli or Burgunde** (future, **work in progress** — a vision, nothing decided): see section 10.
 
 ---
 
@@ -471,4 +473,21 @@ Still open — mostly checks that need real files from colleagues:
 - **RAW:** confirm RAW files are really developed, not the embedded preview, across several camera brands (see *Spike result*).
 - **iPhone video:** real HDR/Dolby Vision/rotated footage to confirm the tone mapping beyond the synthetic clip; whether CI's virtual Macs take the software H.264 fallback (see *Milestone 9 result*).
 - **WOFF2:** an actual browser render test (the glyph-by-glyph round trip exists).
-- **Real app window:** click through the app by hand before the next release (see *Milestone 10*, App check), now including the add-on install and a „Nur aufschreiben“ drop (*Milestone 11 result*).
+- ~~**Real app window:**~~ checked by the user in the 2.3.5 preview (2026-11-10), including the add-on install and a „Nur aufschreiben“ drop. Keep doing a short manual check before each release.
+
+---
+
+## 10. Next (from the user's to-do list, 2026-11-11)
+
+### Now: milestone 12
+
+1. **Settings grouped, defaults folded away.** The panel has 11 rows and is full (milestone 11 already tightened the spacing to fit the last one). Proposal: groups with a small heading each — *Bilder* (web format, size, quality, high-quality format, separator), *Videos & Audio* (video format, size, quality, audio format), *Büro* (sounds, Bürogröße), *Besprechungen aufschreiben* (the add-on). The default answers (everything in *Bilder* and *Videos & Audio*) start folded as an accordion („Meine Standards ▸“); *Büro* and the add-on stay visible. Keyboard: j/k walk the visible rows, Enter on a group heading opens/closes it. To decide with the user: which groups start open, and whether the open/closed state is remembered.
+2. **⌘+ / ⌘− visible as „Bürogröße“.** Checked 2026-11-11: works with what's there. `zoom` (app `main.rs`) already changes the window in whole steps and stores `defaults.window_scale`; `max_scale` knows the largest size that fits the screen (75 % of it). Needed: a command that returns `{ current, max, default }` and one that sets an absolute scale (or `zoom` with a target), and a row in the *Büro* group: e.g. `−` / `4×` / `+` or the sizes that fit as buttons (*Klein* = 3, *Normal* = 4, *Groß* = 5, more only if the screen allows; „Normal“ marked as the default). The panel scales with the window, so it stays readable while you click. ⌘0 stays „back to default“. Depends on item 1 for space.
+
+### Milestone 13 (future): character selection — 🚧 WORK IN PROGRESS
+
+> **Status: work in progress.** The user's vision (2026-11-11); not scheduled, nothing decided yet. The notes below are first thoughts to discuss, not a plan.
+
+- **Character selection: Wolfgang, Ulli or Burgunde.** The user picks one of three characters. Purely personal: not everyone wants a male office buddy. All three share the office, the dialogue logic and the settings; each needs their own desk sprite (idle/talk/type/sip/handover), eight mood portraits, an app icon, and their own voice in a dialogue file (`dialogue/de-ulli.yaml`, … — the voice differs, the questions don't). Wilma stays.
+  - *App name from a setting:* the Dock and Finder name come from the app bundle (`CFBundleName` in `Info.plist`, read by macOS at launch). Changing it at runtime would break the ad-hoc signature, and with it the self-update. What works: the window title, everything inside the office, the speech bubbles and the CLI greeting follow the chosen character. Alternatively the app gets one neutral name for all three — a naming decision for the user. Three separate app builds would also work but triple the releases.
+  - Biggest cost is the art: reference studies per character (like the eight Wolfgang portraits and Wilma's study), then the same pixelize pipeline (milestone 5).
