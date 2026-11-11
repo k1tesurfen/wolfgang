@@ -1,0 +1,23 @@
+[
+  {
+    "key": "wolfgang",
+    "name": "Wolfgang",
+    "identifier": "de.artismedia.wolfgang",
+    "feed": "latest.json",
+    "release": true
+  },
+  {
+    "key": "ully",
+    "name": "Ully",
+    "identifier": "de.artismedia.ully",
+    "feed": "latest-ully.json",
+    "release": false
+  },
+  {
+    "key": "burgunde",
+    "name": "Burgunde",
+    "identifier": "de.artismedia.burgunde",
+    "feed": "latest-burgunde.json",
+    "release": false
+  }
+]

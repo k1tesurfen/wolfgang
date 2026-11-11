@@ -561,7 +561,7 @@
     },
     "mug": {
       "action": "sip",
-      "label": "Wolfgangs Kaffee",
+      "label": "{name}s Kaffee",
       "rects": [
         {
           "x": 100,
@@ -573,7 +573,7 @@
     },
     "wolfgang": {
       "action": "about",
-      "label": "Wolfgang: Über Wolfgang",
+      "label": "{name}: Über {name}",
       "rects": [
         {
           "x": 145,

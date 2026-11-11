@@ -34,7 +34,7 @@ impl Ui {
     pub fn error(&self, text: &str) {
         let colored = std::io::stderr().is_terminal() && std::env::var_os("NO_COLOR").is_none();
         if !colored {
-            eprintln!("Wolfgang: {text}");
+            eprintln!("{}: {text}", name());
             return;
         }
         let lines: Vec<String> = text.lines().map(str::to_owned).collect();
@@ -45,7 +45,7 @@ impl Ui {
 
     fn render(&self, lines: &[String], portrait: Option<Mood>, frame: Color) -> Vec<String> {
         if !self.color {
-            return lines.iter().filter(|l| !l.trim().is_empty()).map(|l| format!("Wolfgang: {l}")).collect();
+            return lines.iter().filter(|l| !l.trim().is_empty()).map(|l| format!("{}: {l}", name())).collect();
         }
         self.render_colored(lines, portrait, frame)
     }
@@ -59,7 +59,7 @@ impl Ui {
             Some(mood) if self.width >= 50 => (art::portrait(mood, self.truecolor), 19),
             _ => (Vec::new(), 2),
         };
-        let mut rows = vec![format!("{}", "Wolfgang".bold().with(Color::DarkYellow))];
+        let mut rows = vec![format!("{}", name().bold().with(Color::DarkYellow))];
         rows.extend(self.bubble(&lines, indent, frame));
         let height = rows.len().max(face.len());
         (0..height)
@@ -96,4 +96,9 @@ impl Ui {
         }
     }
 
+}
+
+/// Wolfgang, Ully or Burgunde: the character of the app this `wolfgang` came with.
+fn name() -> &'static str {
+    &wolfgang_core::character::current().name
 }

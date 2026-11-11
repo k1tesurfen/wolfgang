@@ -286,7 +286,8 @@ cargo test --workspace                           # alle Tests
 cargo run --release -p wolfgang-cli -- ~/Bilder  # Kommandozeile
 cargo run --release -p wolfgang-app              # App
 cargo install tauri-cli --version "^2" --locked  # einmalig, für das Paket:
-scripts/build-app.sh                             # → target/release/bundle/dmg/*.dmg
+scripts/build-app.sh                             # → target/release/bundle/dmg/*.dmg (Wolfgang)
+scripts/build-app.sh ully                        # dasselbe als Ully (oder burgunde)
 ./install.sh                                     # nur die Kommandozeile nach /usr/local/bin
 ```
 
@@ -298,6 +299,16 @@ scripts/build-app.sh                             # → target/release/bundle/dmg
 | `crates/wolfgang-cli` | der Befehl `wolfgang` |
 | `crates/wolfgang-app` | die App (Tauri 2, Oberfläche in `ui/` als schlichtes HTML/CSS/JS) |
 | `crates/wolfgang-art` | baut die Pixel-Art, siehe [`assets/pixel/README.md`](assets/pixel/README.md) |
+| `characters.json` | die drei Figuren – Wolfgang, Ully, Burgunde: Name, App-Kennung, Update-Datei, ob sie schon mit veröffentlicht werden |
+
+**Drei Apps aus einem Quelltext:** Wolfgang, Ully und Burgunde sind dieselbe App mit anderem
+Namen (und bald eigener Pixel-Art). Welche Figur gebaut wird, entscheidet `WOLFGANG_CHARACTER`
+(Standard `wolfgang`): `WOLFGANG_CHARACTER=ully cargo run -p wolfgang-app`, oder fürs Paket
+`scripts/build-app.sh ully`. Name, App-Kennung (`de.artismedia.ully`) und Update-Datei
+(`latest-ully.json`) kommen aus `characters.json`. Einstellungen, Vorlagen und das Zusatzmodul
+fürs Aufschreiben teilen sich alle drei, ebenso den Befehl `wolfgang` (der sich mit dem Namen der
+App meldet, aus der er installiert wurde). In Texten steht der Name als `{name}`, und sie sind so
+formuliert, dass sie für alle drei passen (kein „er“).
 | `assets/pixel/src` | Büro, Porträts und Sprites – von Hand gezeichnet, direkt bearbeiten |
 | `scripts/build-ffmpeg.sh` | baut ffmpeg + ffprobe nach `target/ffmpeg/bin` (siehe unten) |
 | `PLAN.md` | der Plan und alle Entscheidungen |
@@ -329,10 +340,11 @@ Apple-Silicon-Rechner frei, meldet GitHub den Lauf als fehlgeschlagen, obwohl am
 **Eine neue Version veröffentlichen** – gebaut auf einem Mac wie denen der Kolleg:innen:
 Version in `Cargo.toml` (workspace) und `crates/wolfgang-app/tauri.conf.json` anheben, committen,
 dann `scripts/release.sh` (legt einen Entwurf an) oder `scripts/release.sh --publish`. Das Skript
-prüft, ob alles committet ist, testet, baut die App, schiebt Commit und Tag `vX.Y.Z` zu GitHub und
-lädt die `.dmg` (zweimal: mit Versionsnummer und als `Wolfgang.dmg` für den Download-Knopf), die
-signierten Update-Dateien (`Wolfgang.app.tar.gz`, `latest.json`) und den Text aus
-`.github/release-body.md` hoch. Sobald das Release veröffentlicht ist, bieten alle installierten
+prüft, ob alles committet ist, testet, baut jede Figur, die in `characters.json` mit
+`"release": true` markiert ist (bis Ully und Burgunde eigene Bilder haben: nur Wolfgang), schiebt
+Commit und Tag `vX.Y.Z` zu GitHub und lädt pro Figur die `.dmg` (zweimal: mit Versionsnummer und
+als `Wolfgang.dmg` für den Download-Knopf), die signierten Update-Dateien (`Wolfgang.app.tar.gz`,
+`latest.json` bzw. `latest-ully.json` …) und den Text aus `.github/release-body.md` hoch. Sobald das Release veröffentlicht ist, bieten alle installierten
 Wolfgangs das Update an. Ist kein passender Mac da: GitHub → Actions → „Release (fallback)“ →
 Run workflow mit dem Tag; das baut dort und legt einen Entwurf an.
 

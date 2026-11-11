@@ -25,6 +25,8 @@ const TYPE_MIN_MS = 6;
 const TYPE_BUDGET_MS = 1800;
 
 let SCENE, IMG = {}, UI;
+let CHARACTER = { key: 'wolfgang', name: 'Wolfgang' }; // who this app is: Wolfgang, Ully or Burgunde
+const named = text => text.replaceAll('{name}', CHARACTER.name);
 let scale = 4;
 let mode = 'idle';          // idle | talk | work | panel
 let token = 0;              // bumps on every new view; stale async work checks it
@@ -43,6 +45,8 @@ async function init() {
   UI = SCENE.ui.frames;
 
   try { Sound.enabled = (await api.invoke('settings')).sound; } catch { /* keep default */ }
+  try { CHARACTER = await api.invoke('character'); } catch { /* keep Wolfgang */ }
+  document.title = CHARACTER.name;
 
   // Preview in a browser: `?wilma` makes her wake up right away.
   Wilma.init(SCENE, performance.now(), !T && new URLSearchParams(location.search).has('wilma') ? 300 : null);
@@ -605,7 +609,7 @@ async function offerUpdate() {
   token++;
   mode = 'talk';
   play('happy', 900);
-  const talking = say([`Psst – es gibt 'nen neuen Wolfgang: Version ${update.version}.`, 'Soll ich mich mal eben auffrischen? Dauert nur kurz, dann bin ich gleich wieder da.'], { mood: 'happy' });
+  const talking = say([`Psst – es gibt eine neue Version von mir: ${update.version}.`, 'Soll ich mich mal eben auffrischen? Dauert nur kurz, dann bin ich gleich wieder da.'], { mood: 'happy' });
   setChoices([{ label: 'Ja, mach mal!', run: installUpdate }, { label: 'Später', run: goIdle }]);
   await talking;
 }
@@ -622,7 +626,7 @@ function installUpdate() {
   $('say-text').innerHTML = `<p>Ich mach mich mal eben frisch …</p>`;
   $('progress').hidden = false;
   $('fill').style.width = '0%';
-  $('progress-label').textContent = 'Hole den neuen Wolfgang …';
+  $('progress-label').textContent = 'Hole die neue Version …';
   placeTail();
   // On success the app restarts as the new version; we only come back here on errors.
   api.invoke('install_update').catch(e => { update = null; mode = 'talk'; play('idle'); oops(e); });
@@ -675,7 +679,7 @@ function setupStage() {
     tip.style.display = clickable ? 'block' : 'none';
     if (clickable) {
       const r = stage.getBoundingClientRect();
-      tip.textContent = h[1].label;
+      tip.textContent = named(h[1].label);
       tip.style.left = `${e.clientX - r.left + 12}px`;
       tip.style.top = `${e.clientY - r.top + 12}px`;
     }
@@ -936,13 +940,13 @@ async function presetsPanel() {
 }
 
 async function aboutPanel() {
-  $('panel-title').textContent = 'Über Wolfgang';
+  $('panel-title').textContent = `Über ${CHARACTER.name}`;
   const body = $('panel-body');
   const draw = (a, note = '') => {
     body.innerHTML = `
-      <p>Wolfgang ${escapeHtml(a.version)}<br><span class="muted">Wandelt Bilder, Videos, Audio und Schriften um, damit du's nicht musst.</span></p>
+      <p>${escapeHtml(CHARACTER.name)} ${escapeHtml(a.version)}<br><span class="muted">Wandelt Bilder, Videos, Audio und Schriften um, damit du's nicht musst.</span></p>
       ${update ? `<div class="row update"><div class="label">Neu: Version ${escapeHtml(update.version)}</div></div>` : ''}
-      <div class="row cli"><div class="label">Wolfgang im Terminal (<code>wolfgang</code>)</div></div>
+      <div class="row cli"><div class="label">${escapeHtml(CHARACTER.name)} im Terminal (<code>wolfgang</code>)</div></div>
       <p class="muted">${escapeHtml(note)}</p>
       <p class="muted">Tastenkürzel: <b>?</b> zeigt alle, auch für Vim-Leute.</p>
       <p class="muted">Schrift: Pixelify Sans, Ziffern aus VT323 (beide SIL Open Font License)<br>Videos und Audio: FFmpeg (LGPL 2.1, ffmpeg.org)<br>Aufschreiben: whisper.cpp und Whisper von OpenAI (MIT)</p>`;

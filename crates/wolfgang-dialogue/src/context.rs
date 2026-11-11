@@ -89,6 +89,7 @@ pub const NUMBER_VARS: &[&str] = &[
 
 /// Placeholders holding text.
 pub const TEXT_VARS: &[&str] = &[
+    "name",
     "last_run",
     "pile_list",
     "estimate",

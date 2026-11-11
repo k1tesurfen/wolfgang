@@ -52,7 +52,7 @@ fn find_tools() -> Option<Tools> {
 }
 
 fn missing_tools() -> Error {
-    Error::Media("Mein Werkzeug für Videos und Audio (ffmpeg) fehlt. Installier Wolfgang bitte neu.".into())
+    Error::Media(format!("Mein Werkzeug für Videos und Audio (ffmpeg) fehlt. Installier {} bitte neu.", crate::character::current().name))
 }
 
 // ── Looking at a file ────────────────────────────────────────────────────────

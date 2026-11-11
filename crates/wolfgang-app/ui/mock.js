@@ -8,6 +8,7 @@
 //   ?update=install                  … and say yes to it
 //   ?addon                           the add-on for „Nur aufschreiben“ is installed
 //   ?addon=installing                … or is being downloaded
+//   ?character=ully|burgunde         look at the office as Ully or Burgunde
 'use strict';
 
 if (!window.__TAURI__) {
@@ -16,6 +17,8 @@ if (!window.__TAURI__) {
     const emit = (ev, payload) => (listeners[ev] || []).forEach(f => f(payload));
     const ask = (node, mood, lines, answers, extra = {}) => ({ type: 'ask', node, mood, lines, answers: answers.map(a => (typeof a === 'string' ? { label: a, current: false } : a)), input: null, can_go_back: true, output: null, ...extra });
 
+    const characterKey = new URLSearchParams(location.search).get('character') || 'wolfgang';
+    const character = { key: characterKey, name: characterKey[0].toUpperCase() + characterKey.slice(1) };
     const views = {
       mode: ask('mode', 'thinking', ['Moin! Zeig mal her, was du da hast.', 'Ich seh 42 Fotos und 6 Schriften.', 'Mit einer Datei kann ich nix anfangen, die lass ich einfach liegen.', 'Wofür brauchst du die Bilder?'],
         ['Fürs Web vorbereiten – klein und schnell', 'Hochwertig behalten – nur ein anderes Format'], { can_go_back: false }),
@@ -26,7 +29,7 @@ if (!window.__TAURI__) {
         ["Los geht's!", 'Nochmal ändern', 'Lass mal, doch nicht']),
       start: { type: 'start', mood: 'happy', lines: [], output: null },
       done: ask('done', 'proud', ['So, erledigt. 41,7 MB rein, 1,2 MB raus – 98 Prozent gespart.', 'Liegt alles in „Kunde/wolfgang_output“.'],
-        ['Als Vorlage merken', 'Danke, Wolfgang!'], { can_go_back: false, output: '/Users/du/Kunde/wolfgang_output' }),
+        ['Als Vorlage merken', `Danke, ${character.name}!`], { can_go_back: false, output: '/Users/du/Kunde/wolfgang_output' }),
       end: { type: 'end', mood: 'happy', lines: ['Bis bald!'], output: '/Users/du/Kunde/wolfgang_output' },
       cancelled: { type: 'cancelled', mood: 'neutral', lines: ['Kein Ding. Wenn du’s dir anders überlegst, ich bin hier.'], output: null },
     };
@@ -77,6 +80,7 @@ if (!window.__TAURI__) {
       reveal: () => {},
       pick_files: () => ['/demo/mode'],
       take_pending: () => [],
+      character: () => character,
       transcription: () => addon,
       install_transcription: () => {
         // Pretends to download the add-on in about 8 seconds.

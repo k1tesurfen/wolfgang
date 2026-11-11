@@ -8,6 +8,7 @@
 //! 3. the conversation produces [`RunSettings`]
 //! 4. [`Workspace::plan`] → [`run::execute`] → [`run::Report`]
 
+pub mod character;
 pub mod error;
 pub mod font;
 pub mod gif;

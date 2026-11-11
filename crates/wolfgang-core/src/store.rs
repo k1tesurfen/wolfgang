@@ -67,7 +67,8 @@ pub struct Loaded {
 }
 
 impl UserStore {
-    /// `$WOLFGANG_HOME/settings.json`, else `~/Library/Application Support/Wolfgang/settings.json`.
+    /// `$WOLFGANG_HOME/settings.json`, else `~/Library/Application Support/Wolfgang/settings.json`
+    /// (the same for Wolfgang, Ully and Burgunde: they share settings, presets and the add-on).
     pub fn default_path() -> PathBuf {
         let dir = std::env::var_os(HOME_ENV)
             .map(PathBuf::from)

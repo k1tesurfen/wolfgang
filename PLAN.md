@@ -486,7 +486,7 @@ Still open — mostly checks that need real files from colleagues:
 
 ### Milestone 13: three characters — 🚧 WORK IN PROGRESS
 
-> **Status: work in progress.** Direction and the main questions decided by the user on 2026-11-11 (below). Waiting for the art from the user. Nothing is built yet.
+> **Status: work in progress.** Direction and the main questions decided by the user on 2026-11-11 (below). The split is built (step 1, below); Ully and Burgunde use Wolfgang's art until the user's art arrives, and they're not part of releases yet.
 
 **Decided (user, 2026-11-11)**
 - **Three apps from one source: Wolfgang, Ully and Burgunde.** Not a setting inside one app: each character is its own app with its own name in the Dock and Finder (that also avoids the bundle-name problem: macOS reads the name from the app bundle, so a runtime switch would have broken the signature and the self-update). Purely personal: not everyone wants a male office buddy.
@@ -513,6 +513,14 @@ Then the same pipeline as milestone 5: `wolfgang-art import` → hand-editable s
 - **Settings and the add-on are shared** between the apps on one Mac: one settings file (presets, „letztes Mal“, favourite formats) and the 575 MB transcription add-on downloaded once.
 - **Voice: same lines, only the name swapped** (plus grammar that depends on it), one dialogue file. Own personalities per character can come later in the dialogue files without touching code.
 - **Releases: one version, one tag, one GitHub release** with three dmgs and three update feeds; the README gets three download buttons.
+
+**Step 1: the split (2026-11-11) ✅** — one source, any character, Wolfgang's art for all three for now.
+- `characters.json` (repo root) is the one list: key, name, bundle identifier, update feed, `release` (Ully and Burgunde `false` until their art exists, so a release never ships a Wolfgang look-alike). `wolfgang_core::character::{all, current}` reads it; `WOLFGANG_CHARACTER` (default `wolfgang`) picks the character at build time — `wolfgang-core/build.rs` checks the key and passes it on, so the app and the `wolfgang` command inside it know who they are.
+- Words: `{name}` in the dialogue („Danke, {name}!“) and in hotspot labels (scene.json: „{name}: Über {name}“, „{name}s Kaffee“, filled in by the UI); the window title, the About panel, the Finder dialog, the CLI's name prefix, spinner and `--help` use the name. Texts that depended on the character's gender are rewritten without it („Psst – es gibt eine neue Version von mir“, „Hole die neue Version …“, `--help` without „er“). Rule for new texts: `{name}`, no „er/sie“.
+- `scripts/build-app.sh [key]` builds `<Name>.app`, `<Name>.dmg`, `<Name>.app.tar.gz` and the character's feed, with Tauri's config overridden for name, identifier and updater endpoint; it checks the bundle identifier and that the CLI inside answers with the right name. Wolfgang keeps `de.artismedia.wolfgang` and `latest.json`, so installed Wolfgangs update as before. `scripts/release.sh` builds every character with `"release": true` and uploads all of them in one release.
+- Checked: Ully.app (name, identifier, `latest-ully.json` built into the binary and written with the right URL, self-test, CLI says „Ully:“), Burgunde in the browser mock (`?character=burgunde`), Wolfgang rebuilt with `latest.json`. 130 tests, clippy clean.
+
+**Step 2, when the art arrives:** per-character art (office, desk sprite, portraits) in the art pipeline — `wolfgang-art` builds one set per character and the app's `build.rs` copies the right one (today: one shared `assets/pixel`); the CLI's terminal portrait from the same set; an icon per character (`bundle.icon` override in `build-app.sh`); importing the user's 368×56 desk-pose strip into a `.sprite`. Then `"release": true`, the release text (`.github/release-body.md`) and three download buttons in the README. The GitHub fallback workflow (`release.yml`) still builds only Wolfgang.
 
 **Still open**
 - **Name of the whole thing** (repo, README title, „Wolfgangs Büro“?) once there are three.

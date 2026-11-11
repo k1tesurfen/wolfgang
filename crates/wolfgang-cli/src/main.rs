@@ -10,7 +10,7 @@ mod run;
 mod tui;
 mod ui;
 
-use clap::Parser;
+use clap::{CommandFactory, FromArgMatches};
 use flags::{Cli, Command, OnlyArg};
 use std::io::IsTerminal;
 use std::path::Path;
@@ -19,7 +19,7 @@ use ui::Ui;
 use wolfgang_core::{FileKind, UserStore, Workspace};
 
 fn main() -> ExitCode {
-    let cli = Cli::parse();
+    let cli = parse_args();
     let ui = Ui::new();
     run::install_ctrlc();
 
@@ -48,6 +48,20 @@ fn main() -> ExitCode {
         }
         None => convert(&ui, &mut store, &store_path, cli.run),
     }
+}
+
+/// The arguments, with the help texts naming this build's character (Ully, Burgunde, …).
+fn parse_args() -> Cli {
+    let name = &wolfgang_core::character::current().name;
+    let mut cmd = Cli::command();
+    let named = |t: Option<&clap::builder::StyledStr>| t.map(|t| t.to_string().replace("Wolfgang", name));
+    if let Some(about) = named(cmd.get_about()) {
+        cmd = cmd.about(about);
+    }
+    if let Some(long) = named(cmd.get_long_about()) {
+        cmd = cmd.long_about(long);
+    }
+    Cli::from_arg_matches(&cmd.get_matches()).unwrap_or_else(|e| e.exit())
 }
 
 fn convert(ui: &Ui, store: &mut UserStore, store_path: &Path, mut args: flags::RunArgs) -> ExitCode {
@@ -89,7 +103,7 @@ fn convert(ui: &Ui, store: &mut UserStore, store_path: &Path, mut args: flags::R
         let pb = indicatif::ProgressBar::new_spinner().with_style(
             indicatif::ProgressStyle::with_template("  {spinner:.yellow} {msg}").expect("valid template").tick_chars("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏ "),
         );
-        pb.set_message("Wolfgang guckt sich das an …");
+        pb.set_message(format!("{} guckt sich das an …", wolfgang_core::character::current().name));
         pb.enable_steady_tick(std::time::Duration::from_millis(100));
         pb
     });

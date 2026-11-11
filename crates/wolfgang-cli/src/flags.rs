@@ -11,11 +11,13 @@ use wolfgang_dialogue::script::Value;
 #[command(
     name = "wolfgang",
     version,
-    about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs, Schriften zu WOFF2. Und er schreibt Besprechungen auf.",
+    // No pronouns for the character: the same text is used for Ully and Burgunde
+    // (main.rs swaps the name).
+    about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs, Schriften zu WOFF2. Und schreibt Besprechungen auf.",
     long_about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs, Schriften zu WOFF2. \
-        Und er schreibt auf, was in Besprechungen gesagt wird (--video-format/--audio-format transcript).\n\n\
-        Im Terminal fragt er dich, was du willst. Optionen beantworten seine Fragen vorab; \
-        mit --yes (oder ohne Terminal) fragt er gar nicht und nimmt deine Standards.",
+        Und schreibt auf, was in Besprechungen gesagt wird (--video-format/--audio-format transcript).\n\n\
+        Im Terminal gibt's ein kurzes Gespräch: Wolfgang fragt, was du willst. Optionen beantworten die Fragen vorab; \
+        mit --yes (oder ohne Terminal) wird nichts gefragt, dann gelten deine Standards.",
     args_conflicts_with_subcommands = true
 )]
 pub struct Cli {

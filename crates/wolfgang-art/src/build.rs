@@ -352,10 +352,10 @@ pub fn manifest(paths: &Paths, wolfgang: SpriteManifest, ui: SpriteManifest, wil
         // rect is the back edge of the green desk mat (a trapezoid), where the sparkle shows
         // while hovering the desk.
         ("desk", Hotspot { action: "pick", label: "Dateien auswählen … (⌘O)", rects: vec![r(132, 101, 65, 19), r(73, 98, 180, 75)] }),
-        ("wolfgang", Hotspot { action: "about", label: "Wolfgang: Über Wolfgang", rects: vec![r(145, 52, 36, 46)] }),
+        ("wolfgang", Hotspot { action: "about", label: "{name}: Über {name}", rects: vec![r(145, 52, 36, 46)] }),
         ("computer", Hotspot { action: "settings", label: "Computer: Einstellungen", rects: vec![r(207, 76, 38, 43)] }),
         ("clipboard", Hotspot { action: "presets", label: "Klemmbrett: Vorlagen", rects: vec![r(110, 106, 23, 15)] }),
-        ("mug", Hotspot { action: "sip", label: "Wolfgangs Kaffee", rects: vec![r(100, 110, 9, 11)] }),
+        ("mug", Hotspot { action: "sip", label: "{name}s Kaffee", rects: vec![r(100, 110, 9, 11)] }),
     ]
     .into_iter()
     .map(|(k, v)| (k.to_string(), v))

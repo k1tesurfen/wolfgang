@@ -4,6 +4,10 @@
 # Datei. Format und alle erlaubten Bedingungen/Platzhalter: siehe
 # crates/wolfgang-dialogue/src/script.rs und context.rs.
 #
+# Dieselben Sätze gelten für Wolfgang, Ully und Burgunde. Wo der Name vorkommt,
+# steht {name}; Sätze, deren Grammatik am Namen hängt („den neuen Wolfgang“),
+# lieber so formulieren, dass sie für alle drei passen.
+#
 # Zum Ausprobieren ohne neu zu bauen:
 #   WOLFGANG_DIALOGUE=dialogue/de.yaml wolfgang ~/Bilder
 #
@@ -723,7 +727,7 @@ nodes:
           when: [has_media, "!from_template", converted_any],
           to: preset_name,
         }
-      - { label: "Danke, Wolfgang!", to: bye }
+      - { label: "Danke, {name}!", to: bye }
 
   bye:
     mood: happy

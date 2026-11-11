@@ -543,6 +543,7 @@ impl Conversation {
             "converted" => num(run.converted),
             "failed" => num(run.failed),
             "saved_percent" => num((run.bytes_out * 100).checked_div(run.bytes_in).map_or(0, |kept| 100usize.saturating_sub(kept as usize))),
+            "name" => text(wolfgang_core::character::current().name.clone()),
             "last_run" => text(self.ctx.describe_last_run()),
             "pile_list" => text(pile_list(s)),
             "summary" => text(self.summary_text()),

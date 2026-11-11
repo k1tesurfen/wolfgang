@@ -143,7 +143,8 @@ fn open_panel() -> Vec<String> {
     panel.setCanChooseDirectories(true);
     panel.setAllowsMultipleSelection(true);
     panel.setPrompt(Some(&NSString::from_str("Auf den Tisch")));
-    panel.setMessage(Some(&NSString::from_str("Was soll Wolfgang sich angucken? Dateien oder ganze Ordner, gern mehrere.")));
+    let ask = format!("Was soll {} sich angucken? Dateien oder ganze Ordner, gern mehrere.", wolfgang_core::character::current().name);
+    panel.setMessage(Some(&NSString::from_str(&ask)));
     if panel.runModal() != NSModalResponseOK {
         return Vec::new();
     }
@@ -194,6 +195,12 @@ fn presets(state: State<AppState>) -> Vec<PresetView> {
 #[tauri::command]
 fn remove_preset(state: State<AppState>, name: String) -> Res<Vec<PresetView>> {
     lock(&state).remove_preset(&name)
+}
+
+/// Wolfgang, Ully or Burgunde: who this app is (the UI uses the name in its texts).
+#[tauri::command]
+fn character() -> &'static wolfgang_core::character::Character {
+    wolfgang_core::character::current()
 }
 
 #[tauri::command]
@@ -266,7 +273,7 @@ struct Download {
 /// events), swaps the app and starts the new one.
 #[tauri::command]
 async fn install_update(app: AppHandle, state: State<'_, AppState>) -> Res<()> {
-    let update = state.update.lock().unwrap_or_else(|e| e.into_inner()).take().ok_or("Da ist gerade kein neuer Wolfgang.")?;
+    let update = state.update.lock().unwrap_or_else(|e| e.into_inner()).take().ok_or("Da ist gerade keine neue Version.")?;
     let mut done = 0;
     update
         .download_and_install(
@@ -451,11 +458,13 @@ fn main() {
             transcription,
             install_transcription,
             cancel_transcription_install,
-            remove_transcription
+            remove_transcription,
+            character
         ])
         .setup(|app| {
             // Exactly the office, at the largest whole scale that fits this screen.
             if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_title(&wolfgang_core::character::current().name);
                 let saved = app.state::<AppState>().office.lock().map(|o| o.store.defaults.window_scale).unwrap_or(None);
                 set_scale(&window, start_scale(&window, saved));
                 let _ = window.center();
