@@ -10,7 +10,8 @@ use crate::media::{self, MediaInfo, VideoTask};
 use crate::naming;
 use crate::runlog::{self, RunLog};
 use crate::scan::{self, Scan, ScannedFile, OUTPUT_DIR};
-use crate::settings::{self, AudioSettings, ImageSettings, Naming, RunSettings, TranscriptSettings};
+use crate::settings::{self, AudioSettings, ImageSettings, Naming, PdfMode, RunSettings, TranscriptSettings};
+use crate::table::{self, TableTask};
 use crate::transcribe;
 use rayon::prelude::*;
 use std::collections::{HashMap, HashSet};
@@ -77,15 +78,16 @@ pub struct Piles {
     pub videos: bool,
     pub audio: bool,
     pub pdfs: bool,
+    pub tables: bool,
     pub fonts: bool,
 }
 
 impl Piles {
-    pub const ALL: Piles = Piles { images: true, videos: true, audio: true, pdfs: true, fonts: true };
+    pub const ALL: Piles = Piles { images: true, videos: true, audio: true, pdfs: true, tables: true, fonts: true };
 
-    /// Images, videos or audio: everything that has questions.
+    /// Images, videos, audio or PDFs: everything that has questions.
     pub fn media(self) -> bool {
-        self.images || self.videos || self.audio
+        self.images || self.videos || self.audio || self.pdfs
     }
 }
 
@@ -98,14 +100,21 @@ impl Summary {
             videos: tools && self.videos.total > 0,
             audio: tools && self.audio.total > 0,
             pdfs: self.pdfs.total > 0,
+            tables: self.tables.total > 0,
             fonts: self.fonts.total > 0,
         }
+    }
+
+    /// The Excel files among the tables.
+    pub fn excel_tables(&self) -> PileSummary {
+        let (t, c) = (&self.tables, &self.csv_tables);
+        PileSummary { total: t.total - c.total, known: t.known - c.known, bytes: t.bytes - c.bytes }
     }
 
     /// All piles that get converted, for totals.
     pub fn convertible(&self) -> Vec<&PileSummary> {
         let p = self.piles();
-        [(p.images, &self.images), (p.videos, &self.videos), (p.audio, &self.audio), (p.pdfs, &self.pdfs), (p.fonts, &self.fonts)]
+        [(p.images, &self.images), (p.videos, &self.videos), (p.audio, &self.audio), (p.pdfs, &self.pdfs), (p.tables, &self.tables), (p.fonts, &self.fonts)]
             .into_iter()
             .filter(|(on, _)| *on)
             .map(|(_, s)| s)
@@ -119,6 +128,9 @@ pub struct Summary {
     pub videos: PileSummary,
     pub audio: PileSummary,
     pub pdfs: PileSummary,
+    pub tables: PileSummary,
+    /// The CSV files among the tables (they become Excel; the rest become CSV).
+    pub csv_tables: PileSummary,
     pub fonts: PileSummary,
     /// Videos with a sound track (or that couldn't be checked).
     pub videos_with_sound: usize,
@@ -163,6 +175,10 @@ pub enum Task {
     Transcript(TranscriptSettings),
     /// `target` is the folder the pictures go into.
     Pdf,
+    /// The whole PDF, smaller.
+    PdfSmaller,
+    /// `target` is a folder when a workbook has several sheets.
+    Table(TableTask),
 }
 
 #[derive(Debug, Clone)]
@@ -293,6 +309,15 @@ impl Workspace {
                     &mut s.audio
                 }
                 FileKind::Pdf => &mut s.pdfs,
+                FileKind::Table => {
+                    if is_csv(&f.path) {
+                        let csv = &mut s.csv_tables;
+                        csv.total += 1;
+                        csv.bytes += f.size;
+                        csv.known += usize::from(self.log.files.contains_key(hash));
+                    }
+                    &mut s.tables
+                }
                 _ => &mut s.fonts,
             };
             pile.total += 1;
@@ -335,6 +360,7 @@ impl Workspace {
                 FileKind::Video => settings.videos.is_some() || settings.video_transcript.is_some(),
                 FileKind::Audio => settings.audio.is_some() || settings.audio_transcript.is_some(),
                 FileKind::Pdf => settings.pdfs.is_some(),
+                FileKind::Table => settings.tables.is_some(),
                 _ => false,
             };
             if !wanted {
@@ -398,9 +424,30 @@ impl Workspace {
                     web_safe_stem(&f.rel, "audio")
                 }
                 (FileKind::Pdf, _) => {
-                    job.task = Task::Pdf;
+                    job.task = match settings.pdfs.expect("wanted").mode {
+                        PdfMode::Pictures => Task::Pdf,
+                        PdfMode::Smaller => Task::PdfSmaller,
+                    };
                     pdf_name(&f.rel)
                 }
+                (FileKind::Table, _) if is_csv(&f.path) => {
+                    job.task = Task::Table(TableTask::ToXlsx);
+                    web_safe_stem(&f.rel, "tabelle")
+                }
+                (FileKind::Table, _) => match table::sheets(&f.path) {
+                    Ok(sheets) if sheets.is_empty() => {
+                        plan.problems.push((f.rel.clone(), "Da steht nix drin".into()));
+                        continue;
+                    }
+                    Ok(sheets) => {
+                        job.task = Task::Table(TableTask::ToCsv { sheets });
+                        web_safe_stem(&f.rel, "tabelle")
+                    }
+                    Err(e) => {
+                        plan.problems.push((f.rel.clone(), e.to_string()));
+                        continue;
+                    }
+                },
                 (FileKind::Font, _) => match std::fs::read(&f.path).map_err(io_err(&f.path)).and_then(|d| font::to_sfnt(&d)) {
                     Ok(sfnt) => font::web_name(&sfnt).unwrap_or_else(|| naming::join(&naming::words(&file_stem(&f.rel)), naming::Separator::Dash)),
                     Err(e) => {
@@ -418,6 +465,10 @@ impl Workspace {
                 Task::Audio(a) => (PathBuf::from(&job.dir), a.format.ext()),
                 Task::Transcript(_) => (PathBuf::from(&job.dir), TRANSCRIPT_EXT),
                 Task::Pdf => (PathBuf::from(&job.dir), ""), // a folder
+                Task::PdfSmaller => (PathBuf::from(&job.dir), "pdf"),
+                Task::Table(TableTask::ToCsv { sheets }) if sheets.len() > 1 => (PathBuf::from(&job.dir), ""), // a folder
+                Task::Table(TableTask::ToCsv { .. }) => (PathBuf::from(&job.dir), "csv"),
+                Task::Table(TableTask::ToXlsx) => (PathBuf::from(&job.dir), "xlsx"),
             };
             let poster = matches!(&job.task, Task::Video(t) if t.settings.poster);
             let exts: &[&str] = if poster { &[ext, POSTER_EXT] } else { &[ext] };
@@ -495,6 +546,10 @@ fn web_safe_stem(p: &Path, fallback: &str) -> String {
     } else {
         name
     }
+}
+
+fn is_csv(p: &Path) -> bool {
+    p.extension().is_some_and(|e| e.eq_ignore_ascii_case("csv"))
 }
 
 fn file_stem(p: &Path) -> String {

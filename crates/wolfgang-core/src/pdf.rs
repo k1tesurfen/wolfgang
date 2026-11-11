@@ -1,13 +1,18 @@
-//! Pulling the pictures out of a PDF, as they are: JPEGs stay JPEGs (copied
-//! byte for byte), everything else becomes PNG. Nothing is rendered.
+//! PDFs, two ways:
+//! - pulling the pictures out, as they are: JPEGs stay JPEGs (copied byte for
+//!   byte), everything else becomes PNG. Nothing is rendered.
+//! - making the whole PDF smaller for downloads: oversized pictures are scaled
+//!   down and packed as JPEG, editor leftovers (Illustrator's private data, page
+//!   thumbnails) go. Text, vectors and fonts stay untouched.
 
-use crate::error::{Error, Result};
+use crate::error::{io_err, Error, Result};
 use crate::image::{self, ColorTarget, Pixels};
 use crate::settings::ImageFormat;
 use lopdf::{Dictionary, Document, Object, ObjectId, Stream};
+use rayon::prelude::*;
 use std::collections::HashSet;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 /// Smaller than this (either side) is a line, a bullet or an icon, not a picture.
 const MIN_SIDE: i64 = 48;
@@ -32,12 +37,20 @@ pub struct Extraction {
     pub unsupported: usize,
 }
 
-pub fn extract(path: &Path, progress: &(dyn Fn(f64) + Sync), cancel: &AtomicBool) -> Result<Extraction> {
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let doc = Document::load(path).map_err(|e| match e {
+fn file_name(path: &Path) -> String {
+    path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default()
+}
+
+fn load_err(name: &str) -> impl FnOnce(lopdf::Error) -> Error + '_ {
+    move |e| match e {
         lopdf::Error::Decryption(_) | lopdf::Error::InvalidPassword => Error::Pdf(format!("{name} ist mit einem Passwort geschützt")),
         other => Error::Pdf(format!("Kann {name} nicht als PDF lesen ({other})")),
-    })?;
+    }
+}
+
+pub fn extract(path: &Path, progress: &(dyn Fn(f64) + Sync), cancel: &AtomicBool) -> Result<Extraction> {
+    let name = file_name(path);
+    let doc = Document::load(path).map_err(load_err(&name))?;
     let pages = doc.get_pages();
     let mut out = Extraction { pages: pages.len() as u32, ..Default::default() };
     let mut seen_objects = HashSet::new();
@@ -134,9 +147,9 @@ fn picture(doc: &Document, stream: &Stream) -> std::result::Result<Option<(Vec<u
             if alpha.is_none() && !matches!(space.base(), Space::Cmyk) {
                 return Ok(Some((stream.content.clone(), "jpg")));
             }
-            decode_with_imageio(&stream.content, "jpg")?
+            decode_with_imageio(&stream.content, "jpg", ColorTarget::KeepSource)?
         }
-        Some(b"JPXDecode") if single_filter => decode_with_imageio(&stream.content, "jp2")?,
+        Some(b"JPXDecode") if single_filter => decode_with_imageio(&stream.content, "jp2", ColorTarget::KeepSource)?,
         Some(b"DCTDecode" | b"JPXDecode" | b"JBIG2Decode" | b"CCITTFaxDecode") => return Err("Format nicht unterstützt".into()),
         _ => {
             let bpc = int(doc, d, b"BitsPerComponent").unwrap_or(8) as u32;
@@ -309,14 +322,184 @@ fn soft_mask(doc: &Document, d: &Dictionary, w: u32, h: u32) -> Option<Vec<u8>> 
 }
 
 /// JPEG 2000, CMYK JPEGs and JPEGs with masks are decoded by macOS (ImageIO).
-fn decode_with_imageio(data: &[u8], ext: &str) -> std::result::Result<Pixels, String> {
+fn decode_with_imageio(data: &[u8], ext: &str, color: ColorTarget) -> std::result::Result<Pixels, String> {
     static COUNTER: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
     let n = COUNTER.fetch_add(1, Ordering::Relaxed);
     let tmp = std::env::temp_dir().join(format!("wolfgang-pdf-{}-{n}.{ext}", std::process::id()));
     std::fs::write(&tmp, data).map_err(|e| e.to_string())?;
-    let px = image::decode(&tmp, None, ColorTarget::KeepSource).map_err(|e| e.to_string());
+    let px = image::decode(&tmp, None, color).map_err(|e| e.to_string());
     let _ = std::fs::remove_file(&tmp);
     px
+}
+
+// ── Smaller for downloads ────────────────────────────────────────────────────
+
+/// Longest side of a picture in a smaller PDF: a full A4 page at about 170 dpi.
+const SHRINK_SIDE: u32 = 2000;
+/// JPEG quality of re-packed pictures (mozjpeg).
+const SHRINK_QUALITY: f32 = 75.0;
+/// A picture is only replaced if that saves at least this much …
+const PICTURE_SAVING: f64 = 0.1;
+/// … and the PDF only if the whole file shrinks by this much.
+const FILE_SAVING: f64 = 0.05;
+
+pub struct Shrunk {
+    pub data: Vec<u8>,
+    /// `false`: not worth it, `data` is the original.
+    pub smaller: bool,
+}
+
+/// The PDF, smaller. Every page is still there (checked by reading the result back).
+pub fn shrink(path: &Path, progress: &(dyn Fn(f64) + Sync), cancel: &AtomicBool) -> Result<Shrunk> {
+    let name = file_name(path);
+    let original = std::fs::read(path).map_err(io_err(path))?;
+    let mut doc = Document::load_mem(&original).map_err(load_err(&name))?;
+    if doc.is_encrypted() {
+        return Err(Error::Pdf(format!("{name} ist geschützt – da fass ich nichts an")));
+    }
+    if signed(&doc) {
+        return Err(Error::Pdf(format!("{name} ist digital unterschrieben – kleiner gemacht wäre die Unterschrift ungültig")));
+    }
+    let pages = doc.get_pages().len();
+
+    // Transparency masks stay as they are; they belong to their picture.
+    let masks: HashSet<ObjectId> = doc
+        .objects
+        .values()
+        .filter_map(|o| o.as_stream().ok())
+        .flat_map(|s| [b"SMask".as_slice(), b"Mask"].into_iter().filter_map(|k| s.dict.get(k).ok()?.as_reference().ok()))
+        .collect();
+    let pictures: Vec<ObjectId> = doc
+        .objects
+        .iter()
+        .filter(|(id, o)| !masks.contains(id) && o.as_stream().is_ok_and(|s| s.dict.get(b"Subtype").and_then(Object::as_name).is_ok_and(|n| n == b"Image")))
+        .map(|(id, _)| *id)
+        .collect();
+    let done = AtomicUsize::new(0);
+    let replaced = pictures
+        .par_iter()
+        .map(|id| {
+            if cancel.load(Ordering::Relaxed) {
+                return Err(Error::Cancelled);
+            }
+            // A picture Wolfgang can't read is simply left as it is.
+            let smaller = doc.get_object(*id).and_then(Object::as_stream).ok().and_then(|s| smaller_picture(&doc, s).ok().flatten());
+            progress(0.9 * (done.fetch_add(1, Ordering::Relaxed) + 1) as f64 / pictures.len() as f64);
+            Ok(smaller.map(|s| (*id, s)))
+        })
+        .collect::<Result<Vec<_>>>()?;
+    for (id, s) in replaced.into_iter().flatten() {
+        doc.objects.insert(id, Object::Stream(s));
+    }
+    strip_leftovers(&mut doc);
+    doc.prune_objects();
+    doc.compress();
+    let mut out = Vec::new();
+    doc.save_modern(&mut out).map_err(|e| Error::Pdf(format!("Beim Speichern von {name} ging was schief ({e})")))?;
+    let check = Document::load_mem(&out).map_err(|e| Error::Pdf(format!("Das kleinere {name} wäre kaputt ({e}) – lass ich lieber")))?;
+    if check.get_pages().len() != pages {
+        return Err(Error::Pdf(format!("Beim kleineren {name} fehlen Seiten – lass ich lieber")));
+    }
+    progress(1.0);
+    if out.len() as f64 > original.len() as f64 * (1.0 - FILE_SAVING) {
+        return Ok(Shrunk { data: original, smaller: false });
+    }
+    Ok(Shrunk { data: out, smaller: true })
+}
+
+/// No `/Decode`, or one that changes nothing (`[0 1 0 1 …]`, which layout programs like to write).
+fn plain_decode(doc: &Document, d: &Dictionary) -> bool {
+    let Ok(obj) = d.get(b"Decode") else { return true };
+    let Ok(arr) = doc.dereference(obj).map(|(_, o)| o).and_then(Object::as_array) else { return false };
+    arr.iter().enumerate().all(|(i, v)| v.as_float().is_ok_and(|v| v == (i % 2) as f32))
+}
+
+/// A digital signature breaks as soon as anything in the file changes.
+fn signed(doc: &Document) -> bool {
+    let form = doc.catalog().ok().and_then(|c| c.get(b"AcroForm").ok()).and_then(|f| doc.dereference(f).ok()).and_then(|(_, f)| f.as_dict().ok());
+    form.and_then(|f| int(doc, f, b"SigFlags")).is_some_and(|flags| flags & 1 != 0)
+}
+
+/// The picture scaled down to [`SHRINK_SIDE`] and packed as JPEG; `None` if
+/// that's not clearly smaller or the picture is better left alone (line art,
+/// palettes, masks, unusual encodings).
+fn smaller_picture(doc: &Document, stream: &Stream) -> std::result::Result<Option<Stream>, String> {
+    let d = &stream.dict;
+    if d.get(b"ImageMask").and_then(Object::as_bool).unwrap_or(false) || d.has(b"Mask") {
+        return Ok(None);
+    }
+    let (w, h) = (int(doc, d, b"Width").ok_or("ohne Breite")?, int(doc, d, b"Height").ok_or("ohne Höhe")?);
+    if w < MIN_SIDE || h < MIN_SIDE || w * h > MAX_PIXELS {
+        return Ok(None);
+    }
+    let space = color_space(doc, d.get(b"ColorSpace").ok())?;
+    if matches!(space, Space::Indexed(..)) {
+        return Ok(None); // logos and diagrams: JPEG would smear them
+    }
+    let single_filter = stream.filters().map(|f| f.len() == 1).unwrap_or(false);
+    let decode_array = !plain_decode(doc, d);
+    // RGB pictures keep their colour space (and its profile); everything else becomes sRGB.
+    let mut keep_space = matches!(space, Space::Rgb(_)) && d.has(b"ColorSpace");
+    let px = match last_filter(stream).as_deref() {
+        Some(b"DCTDecode") if single_filter && !decode_array => {
+            decode_with_imageio(&stream.content, "jpg", if keep_space { ColorTarget::KeepSource } else { ColorTarget::Srgb })?
+        }
+        Some(b"JPXDecode") if single_filter && !decode_array => {
+            keep_space = false; // JPEG 2000 brings its own colours
+            decode_with_imageio(&stream.content, "jp2", ColorTarget::Srgb)?
+        }
+        Some(b"DCTDecode" | b"JPXDecode" | b"JBIG2Decode" | b"CCITTFaxDecode") => return Ok(None),
+        _ => {
+            if int(doc, d, b"BitsPerComponent").unwrap_or(8) != 8 || decode_array {
+                return Ok(None); // 1-bit scans and the like stay sharp
+            }
+            let raw = stream.decompressed_content_with_limit((w * h * 4 + 4096) as usize).map_err(|e| e.to_string())?;
+            Pixels { width: w as u32, height: h as u32, rgba: to_rgba(&raw, w as u32, h as u32, 8, &space, false)?, icc: None }
+        }
+    };
+    let (width, height, rgba) = if px.width.max(px.height) > SHRINK_SIDE {
+        image::resize_premultiplied(px.width, px.height, px.rgba, SHRINK_SIDE).map_err(|e| e.to_string())?
+    } else {
+        (px.width, px.height, px.rgba)
+    };
+    let jpeg = image::encode(&Pixels { width, height, rgba, icc: None }, ImageFormat::Jpg, SHRINK_QUALITY).map_err(|e| e.to_string())?;
+    if jpeg.len() as f64 > stream.content.len() as f64 * (1.0 - PICTURE_SAVING) {
+        return Ok(None);
+    }
+    let mut dict = d.clone();
+    for key in [b"DecodeParms".as_slice(), b"Decode", b"SMaskInData", b"Length", b"Metadata"] {
+        dict.remove(key);
+    }
+    dict.set("Filter", "DCTDecode");
+    dict.set("Width", width as i64);
+    dict.set("Height", height as i64);
+    dict.set("BitsPerComponent", 8);
+    if !keep_space {
+        dict.set("ColorSpace", "DeviceRGB");
+    }
+    // A soft mask keeps working at another size: both are stretched over the same area.
+    let mut s = Stream::new(dict, jpeg);
+    s.allows_compression = false;
+    Ok(Some(s))
+}
+
+/// Data no viewer needs: Illustrator's and InDesign's private copies of the
+/// document (`PieceInfo`, often most of the file), page thumbnails and XMP on pictures.
+fn strip_leftovers(doc: &mut Document) {
+    for obj in doc.objects.values_mut() {
+        let dict = match obj {
+            Object::Dictionary(d) => d,
+            Object::Stream(s) => &mut s.dict,
+            _ => continue,
+        };
+        dict.remove(b"PieceInfo");
+        if dict.get(b"Type").and_then(Object::as_name).is_ok_and(|t| t == b"Page") {
+            dict.remove(b"Thumb");
+        }
+        if dict.get(b"Subtype").and_then(Object::as_name).is_ok_and(|t| t == b"Image" || t == b"Form") {
+            dict.remove(b"Metadata");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -334,5 +517,15 @@ mod tests {
         assert_eq!(to_rgba(&[0, 0, 0, 255], 1, 1, 8, &Space::Cmyk, false).unwrap(), [0, 0, 0, 255]);
         assert_eq!(cmyk(0, 0, 0, 0), [255, 255, 255]);
         assert!(to_rgba(&[1], 4, 4, 8, &Space::Gray, false).is_err(), "too little data");
+    }
+
+    #[test]
+    fn a_decode_that_changes_nothing_is_ignored() {
+        let doc = Document::new();
+        let with = |arr: Vec<Object>| lopdf::dictionary! { "Decode" => arr };
+        assert!(plain_decode(&doc, &Dictionary::new()));
+        assert!(plain_decode(&doc, &with(vec![0.into(), 1.into(), 0.into(), 1.into()])));
+        assert!(plain_decode(&doc, &with(vec![Object::Real(0.0), Object::Real(1.0)])));
+        assert!(!plain_decode(&doc, &with(vec![1.into(), 0.into(), 1.into(), 0.into()])), "inverted CMYK");
     }
 }

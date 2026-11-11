@@ -1,6 +1,6 @@
 [package]
 name = "wolfgang-core"
-description = "Wolfgang's conversion engine: images, videos, audio, fonts and transcripts, shared by CLI and app"
+description = "Wolfgang's conversion engine: images, videos, audio, tables, fonts and transcripts, shared by CLI and app"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -29,6 +29,10 @@ webp = "0.3"
 libwebp-sys = "0.9"
 woofwoof = "1"
 lopdf = { version = "0.47", default-features = false }
+calamine = "0.35"
+rust_xlsxwriter = "0.96"
+csv = "1"
+encoding_rs = "0.8"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-core-foundation = "0.3"
@@ -39,3 +43,5 @@ whisper-rs = { version = "0.16", features = ["metal"] }
 
 [dev-dependencies]
 tempfile = "3"
+# Building a LibreOffice table in the tests.
+zip = { version = "7", default-features = false }

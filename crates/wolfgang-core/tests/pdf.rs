@@ -5,8 +5,9 @@ use lopdf::{dictionary, Document, Object, Stream};
 use std::path::Path;
 use std::sync::atomic::AtomicBool;
 use wolfgang_core::image::{self, ColorTarget, Pixels};
+use wolfgang_core::run::Event;
 use wolfgang_core::runlog::RunLog;
-use wolfgang_core::settings::PdfSettings;
+use wolfgang_core::settings::{PdfMode, PdfSettings};
 use wolfgang_core::*;
 
 fn gradient(w: u32, h: u32) -> Pixels {
@@ -86,7 +87,62 @@ fn empty_pdf(path: &Path) {
 }
 
 fn pdfs() -> RunSettings {
-    RunSettings { pdfs: Some(PdfSettings {}), ..Default::default() }
+    RunSettings { pdfs: Some(PdfSettings::default()), ..Default::default() }
+}
+
+fn smaller() -> RunSettings {
+    RunSettings { pdfs: Some(PdfSettings { mode: PdfMode::Smaller }), ..Default::default() }
+}
+
+/// A photo-like picture: a gradient with grain (so it doesn't pack down to nothing).
+fn photo(w: u32, h: u32) -> Pixels {
+    let mut px = gradient(w, h);
+    let mut seed = 7u32;
+    for v in px.rgba.chunks_exact_mut(4) {
+        seed = seed.wrapping_mul(1_103_515_245).wrapping_add(12_345);
+        let grain = (seed >> 16) as u8 % 24;
+        v[0] = v[0].saturating_add(grain);
+        v[2] = v[2].saturating_sub(grain);
+    }
+    px
+}
+
+/// A print PDF straight out of InDesign: a huge raw photo, a JPEG at print quality
+/// with a soft mask, the editor's private copy (`PieceInfo`) and a page thumbnail;
+/// page 2 is only text.
+fn print_pdf(path: &Path) {
+    let mut doc = Document::with_version("1.6");
+    let big = photo(3000, 2000);
+    let rgb: Vec<u8> = big.rgba.chunks(4).flat_map(|p| [p[0], p[1], p[2]]).collect();
+    let mut raw = Stream::new(image_dict(3000, 2000, "DeviceRGB".into(), 8), rgb);
+    raw.compress().unwrap();
+    let raw = doc.add_object(raw);
+
+    let jpeg = image::encode(&photo(2400, 1600), ImageFormat::Jpg, 98.0).unwrap();
+    let mask = doc.add_object(Stream::new(image_dict(240, 160, "DeviceGray".into(), 8), vec![200; 240 * 160]));
+    let mut d = image_dict(2400, 1600, "DeviceRGB".into(), 8);
+    d.set("Filter", "DCTDecode");
+    d.set("SMask", mask);
+    let masked = doc.add_object(Stream::new(d, jpeg));
+
+    let private = doc.add_object(Stream::new(dictionary! {}, vec![b'x'; 2_000_000]));
+    let thumb = doc.add_object(Stream::new(image_dict(60, 85, "DeviceRGB".into(), 8), vec![90; 60 * 85 * 3]));
+    let pages_id = doc.new_object_id();
+    let content = doc.add_object(Stream::new(dictionary! {}, b"q 595 0 0 400 0 400 cm /Im1 Do Q q 300 0 0 200 0 0 cm /Im2 Do Q".to_vec()));
+    let p1 = doc.add_object(dictionary! { "Type" => "Page", "Parent" => pages_id, "Contents" => content, "Thumb" => thumb,
+                                          "PieceInfo" => dictionary! { "Illustrator" => dictionary! { "Private" => private } },
+                                          "Resources" => dictionary! { "XObject" => dictionary! { "Im1" => raw, "Im2" => masked } } });
+    let text = doc.add_object(Stream::new(dictionary! {}, b"BT ET".to_vec()));
+    let p2 = doc.add_object(dictionary! { "Type" => "Page", "Parent" => pages_id, "Contents" => text });
+    doc.objects.insert(
+        pages_id,
+        Object::Dictionary(dictionary! { "Type" => "Pages", "Kids" => vec![p1.into(), p2.into()], "Count" => 2,
+                                          "MediaBox" => vec![0.into(), 0.into(), 595.into(), 842.into()] }),
+    );
+    let catalog = doc.add_object(dictionary! { "Type" => "Catalog", "Pages" => pages_id });
+    doc.trailer.set("Root", catalog);
+    std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+    doc.save(path).unwrap();
 }
 
 #[test]
@@ -144,4 +200,71 @@ fn broken_pdf_fails_politely() {
     let report = execute(&plan, &|_| {}, &AtomicBool::new(false)).unwrap();
     assert_eq!(report.failed.len(), 1);
     assert!(report.failed[0].1.contains("kaputt.pdf"), "{:?}", report.failed);
+}
+
+#[test]
+fn smaller_for_downloads() {
+    let t = tempfile::tempdir().unwrap();
+    let dir = t.path().join("Druck");
+    print_pdf(&dir.join("Broschüre Druck.pdf"));
+    empty_pdf(&dir.join("Nur Text.pdf"));
+
+    let plan = Workspace::open(std::slice::from_ref(&dir)).unwrap().plan(&smaller(), RerunPolicy::OnlyNew).unwrap();
+    let progress = std::sync::Mutex::new(Vec::new());
+    let report = execute(
+        &plan,
+        &|e| {
+            if let Event::FileProgress { fraction, .. } = e {
+                progress.lock().unwrap().push(fraction);
+            }
+        },
+        &AtomicBool::new(false),
+    )
+    .unwrap();
+    assert!(report.failed.is_empty(), "{:?}", report.failed);
+    assert!(!progress.into_inner().unwrap().is_empty());
+    let before = std::fs::metadata(dir.join("Broschüre Druck.pdf")).unwrap().len();
+    let out = plan.output_root.join("broschuere-druck.pdf");
+    let after = std::fs::metadata(&out).unwrap().len();
+    assert!(after * 10 < before, "{before} → {after}");
+    assert!(report.bytes_in > report.bytes_out, "smaller PDFs count as „gespart“");
+
+    let doc = Document::load(&out).unwrap();
+    assert_eq!(doc.get_pages().len(), 2);
+    let mut sizes = Vec::new();
+    for obj in doc.objects.values() {
+        let Ok(s) = obj.as_stream() else { continue };
+        assert!(!s.dict.has(b"PieceInfo") && !s.dict.has(b"Thumb"));
+        if s.dict.get(b"Subtype").and_then(Object::as_name).is_ok_and(|n| n == b"Image") && s.dict.has(b"Filter") {
+            let w = s.dict.get(b"Width").unwrap().as_i64().unwrap();
+            let h = s.dict.get(b"Height").unwrap().as_i64().unwrap();
+            if let Ok(mask) = s.dict.get(b"SMask").and_then(Object::as_reference) {
+                assert!(doc.get_object(mask).is_ok(), "the soft mask is still there");
+            }
+            sizes.push((w, h));
+        }
+    }
+    sizes.sort();
+    assert_eq!(sizes, [(240, 160), (2000, 1333), (2000, 1333)], "both photos scaled down to 2000 px, the mask as it was");
+    for obj in doc.objects.values().filter_map(|o| o.as_dict().ok()) {
+        assert!(!obj.has(b"PieceInfo") && !obj.has(b"Thumb"), "editor leftovers are gone");
+    }
+
+    assert_eq!(std::fs::read(plan.output_root.join("nur-text.pdf")).unwrap(), std::fs::read(dir.join("Nur Text.pdf")).unwrap());
+    assert_eq!(report.notes, vec![(std::path::PathBuf::from("Nur Text.pdf"), Note::PdfAlreadySmall)]);
+}
+
+#[test]
+fn signed_pdfs_are_left_alone() {
+    let t = tempfile::tempdir().unwrap();
+    let dir = t.path().join("Vertrag");
+    let path = dir.join("Vertrag.pdf");
+    print_pdf(&path);
+    let mut doc = Document::load(&path).unwrap();
+    let form = doc.add_object(dictionary! { "Fields" => vec![], "SigFlags" => 3 });
+    doc.catalog_mut().unwrap().set("AcroForm", form);
+    doc.save(&path).unwrap();
+    let plan = Workspace::open(&[dir]).unwrap().plan(&smaller(), RerunPolicy::OnlyNew).unwrap();
+    let report = execute(&plan, &|_| {}, &AtomicBool::new(false)).unwrap();
+    assert!(report.failed[0].1.contains("unterschrieben"), "{:?}", report.failed);
 }

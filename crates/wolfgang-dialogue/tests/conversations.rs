@@ -391,7 +391,7 @@ fn an_audio_pile() {
     pick(&mut c, "AAC");
     assert_eq!(node(&c), "audio_content");
     pick(&mut c, "Sprache");
-    assert!(said(&c).contains("Also: eine Audiodatei als AAC (Sprache)."), "{}", said(&c));
+    assert!(said(&c).contains("Also: eine Audiodatei als AAC (Sprache, gleich laut)."), "{}", said(&c));
 }
 
 #[test]
@@ -457,7 +457,7 @@ fn a_mixed_pile_goes_photos_videos_audio_and_is_remembered_per_pile() {
     // And a drop with photos + audio picks up both remembered piles.
     let (_, c) = talk(&[root], &store);
     let (_, _, labels) = ask(c.step());
-    assert!(labels[0].contains("Fotos hochwertig als PNG") && labels[0].contains("Audio als MP3 (Sprache)"), "{labels:?}");
+    assert!(labels[0].contains("Fotos hochwertig als PNG") && labels[0].contains("Audio als MP3 (Sprache, gleich laut)"), "{labels:?}");
 }
 
 #[test]
@@ -522,7 +522,7 @@ fn flags_override_a_preset() {
 }
 
 #[test]
-fn pdfs_need_no_questions() {
+fn pdfs_ask_pictures_or_smaller() {
     let t = tempfile::tempdir().unwrap();
     let root = t.path().join("Kunde");
     std::fs::create_dir_all(&root).unwrap();
@@ -530,11 +530,30 @@ fn pdfs_need_no_questions() {
     if Path::new(ARIAL).exists() {
         std::fs::copy(ARIAL, root.join("Arial.ttf")).unwrap();
     }
+    let (_, mut c) = talk(&[root], &UserStore::default());
+    assert_eq!(node(&c), "pdfs", "{}", said(&c));
+    assert!(said(&c).contains("Ich seh ein PDF"), "{}", said(&c));
+    pick(&mut c, "Kleiner machen");
+    assert_eq!(node(&c), "confirm");
+    assert!(said(&c).contains("Also: das PDF kleiner für den Download und eine Schrift als WOFF2") || !Path::new(ARIAL).exists(), "{}", said(&c));
+    c.back();
+    pick(&mut c, "Bilder rausholen");
+    assert!(said(&c).contains("Also: die Bilder aus dem PDF"), "{}", said(&c));
+}
+
+#[test]
+fn tables_need_no_questions() {
+    let t = tempfile::tempdir().unwrap();
+    let root = t.path().join("Daten");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(root.join("Bestellung.csv"), "PLZ;Menge\n01067;3\n").unwrap();
+    std::fs::write(root.join("Export.csv"), "a,b\n").unwrap();
     let (_, c) = talk(&[root], &UserStore::default());
     assert_eq!(node(&c), "confirm", "straight to the summary");
     let text = said(&c);
-    assert!(text.contains("Ich seh ein PDF") && text.contains("Bilder raus"), "{text}");
-    assert!(text.contains("Also: die Bilder aus dem PDF"), "{text}");
+    assert!(text.contains("2 Tabellen"), "{text}");
+    assert!(!text.contains("Excel-Tabelle mach ich") && !text.contains("Wird CSV"), "no Excel files on the desk: {text}");
+    assert!(text.contains("Also: 2 CSV-Dateien als Excel."), "{text}");
 }
 
 #[test]
@@ -597,6 +616,7 @@ fn thanks_get_a_last_word_and_the_conversation_ends() {
     std::fs::create_dir_all(&root).unwrap();
     std::fs::write(root.join("Broschüre.pdf"), "%PDF").unwrap();
     let (_, mut c) = talk(&[root], &UserStore::default());
+    pick(&mut c, "Bilder rausholen");
     pick(&mut c, "Los");
     c.finished(&wolfgang_core::Report { converted: 1, pdf_pictures: 3, ..Default::default() });
     assert!(said(&c).contains("3 Bilder rausgeholt"), "{}", said(&c));

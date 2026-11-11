@@ -4,7 +4,7 @@
 use crate::script::Value;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use wolfgang_core::settings::{AudioSettings, FontSettings, ImageFormat, ImageSettings, PdfSettings, RunSettings, TranscriptSettings, VideoSettings, WebSettings};
+use wolfgang_core::settings::{AudioSettings, FontSettings, ImageFormat, ImageSettings, PdfSettings, RunSettings, TableSettings, TranscriptSettings, VideoSettings, WebSettings};
 use wolfgang_core::workspace::Piles;
 use wolfgang_core::store::{Defaults, UserStore};
 use wolfgang_core::RerunPolicy;
@@ -36,6 +36,8 @@ pub const KEYS: &[&str] = &[
     "transcript.timestamps",
     "transcript.asked",
     "transcript.explained",
+    "pdf.mode",
+    "pdf.asked",
     "restart",
     "rerun",
     "use_last",
@@ -78,6 +80,8 @@ pub struct Draft {
     pub transcript_asked: bool,
     /// Wolfgang has said that the add-on is missing (he says it once).
     pub transcript_explained: bool,
+    pub pdf: PdfSettings,
+    pub pdfs_asked: bool,
     pub rerun: RerunPolicy,
     pub template: Option<Template>,
     pub save_preset: Option<String>,
@@ -103,6 +107,8 @@ impl Draft {
             transcript: TranscriptSettings::default(),
             transcript_asked: false,
             transcript_explained: false,
+            pdf: PdfSettings::default(),
+            pdfs_asked: false,
             rerun: RerunPolicy::OnlyNew,
             template: None,
             save_preset: None,
@@ -153,6 +159,8 @@ impl Draft {
             "transcript.timestamps" => self.transcript.timestamps = typed(value)?,
             "transcript.asked" => self.transcript_asked = typed(value)?,
             "transcript.explained" => self.transcript_explained = typed(value)?,
+            "pdf.mode" => self.pdf.mode = typed(value)?,
+            "pdf.asked" => self.pdfs_asked = typed(value)?,
             // „Nochmal ändern“: every pile is asked again, current answers stay marked.
             "restart" => {
                 if typed::<bool>(value)? {
@@ -161,6 +169,7 @@ impl Draft {
                     self.videos_asked = false;
                     self.audio_asked = false;
                     self.transcript_asked = false;
+                    self.pdfs_asked = false;
                     self.template = None;
                 }
             }
@@ -212,6 +221,7 @@ impl Draft {
             "audio.format" => serde_norway::to_value(self.audio.format),
             "transcript.timestamps" => serde_norway::to_value(self.transcript.timestamps),
             "audio.content" => serde_norway::to_value(self.audio.content),
+            "pdf.mode" => serde_norway::to_value(self.pdf.mode),
             "rerun" => serde_norway::to_value(self.rerun),
             _ => return None,
         };
@@ -244,6 +254,10 @@ impl Draft {
             self.audio_transcript = false;
             self.audio_asked = true;
         }
+        if let Some(p) = s.pdfs {
+            self.pdf = p;
+            self.pdfs_asked = true;
+        }
         for (written, on, asked) in [(s.video_transcript, &mut self.video_transcript, &mut self.videos_asked), (s.audio_transcript, &mut self.audio_transcript, &mut self.audio_asked)] {
             if let Some(t) = written {
                 (*on, *asked) = (true, true);
@@ -268,7 +282,8 @@ impl Draft {
             audio: (audio && !self.audio_transcript).then_some(self.audio),
             video_transcript: (videos && self.video_transcript).then_some(self.transcript),
             audio_transcript: (audio && self.audio_transcript).then_some(self.transcript),
-            pdfs: piles.pdfs.then(PdfSettings::default),
+            pdfs: (piles.pdfs && self.pdfs_asked).then_some(self.pdf),
+            tables: piles.tables.then(TableSettings::default),
             fonts: piles.fonts.then(FontSettings::default),
         }
     }

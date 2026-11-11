@@ -19,7 +19,7 @@ after_run: done
 after_cancel: stopped
 
 idle:
-  - "Leg mir einfach was auf den Tisch. Bilder, Videos, Musik, PDFs, Schriften … ich guck's mir an."
+  - "Leg mir einfach was auf den Tisch. Bilder, Videos, Musik, PDFs, Tabellen, Schriften … ich guck's mir an."
   - "Na? Was gibt's heute zu tun?"
   - "Kaffee ist da, Zeit hab ich auch. Her damit."
   - "Einfach rüberziehen und fallen lassen. Ich kümmer mich drum."
@@ -85,13 +85,13 @@ nodes:
       - when: [media_tools_missing]
         text: "Videos und Audio würd ich ja machen, aber mir fehlt mein Werkzeug dafür. Installier mich am besten nochmal neu."
       - when: [has_unknown, "!media_tools_missing"]
-        text: "Hm. Da ist nix bei, was ich umwandeln kann. Fotos, Videos, Musik, PDFs und Schriften, das ist mein Ding."
+        text: "Hm. Da ist nix bei, was ich umwandeln kann. Fotos, Videos, Musik, PDFs, Tabellen und Schriften, das ist mein Ding."
       - when: ["!has_unknown", "!media_tools_missing"]
         text: "Hm, da ist ja gar nix drin. Leer gefegt."
     answers:
       - { label: "Okay, schade", to: "@end" }
 
-  # Schriften und PDFs brauchen keine Fragen.
+  # Schriften und Tabellen brauchen keine Fragen.
   nothing_to_ask:
     say:
       - when: [has_fonts]
@@ -100,11 +100,17 @@ nodes:
             "Die Schriften mach ich dir zu WOFF2. Ganz ohne Rumschnippeln, alle Zeichen bleiben drin.",
             "Schriften? Easy. Gibt's als WOFF2, eins zu eins, nix wird weggelassen.",
           ]
-      - when: [has_pdfs]
+      - when: [has_excel_tables]
         text:
           [
-            "Aus {pdfs:dem PDF:den PDFs} hol ich dir die Bilder raus, so wie sie drin sind.",
-            "PDFs? Da fummel ich die Bilder raus. Eins zu eins, nix wird verändert.",
+            "{excel_tables:Die Excel-Tabelle:Excel-Tabellen} mach ich zu CSV, jedes Blatt in eine eigene Datei.",
+            "Excel? Wird CSV. Ein Blatt, eine Datei – mit Kommas, so wie's Importe mögen.",
+          ]
+      - when: [has_csv_tables]
+        text:
+          [
+            "{csv_tables:Die CSV-Datei:CSV-Dateien} mach ich zu Excel. Ohne dass Excel rumrät: Postleitzahlen behalten ihre Null vorne.",
+            "Aus CSV wird Excel. Und keine Sorge, da wird nix zum Datum, was keins ist.",
           ]
     go:
       - { to: rerun_check }
@@ -139,7 +145,7 @@ nodes:
         }
 
   # ── Welcher Stapel ist dran? ───────────────────────────────────────────────
-  # Erst die Fotos, dann Videos, dann Audio. Was eine Vorlage schon beantwortet
+  # Erst die Fotos, dann Videos, dann Audio, dann PDFs. Was eine Vorlage schon beantwortet
   # hat, wird übersprungen.
 
   piles:
@@ -147,6 +153,7 @@ nodes:
       - { when: [has_images, "!images_asked"], to: mode }
       - { when: [has_videos, "!videos_asked"], to: videos }
       - { when: [has_audio, "!audio_asked"], to: audio }
+      - { when: [has_pdfs, "!pdfs_asked"], to: pdfs }
       - { to: rerun_check }
 
   # ── Bilder: Modus ──────────────────────────────────────────────────────────
@@ -571,7 +578,7 @@ nodes:
       - ["Was ist drauf?", "Und was hört man da?"]
     answers:
       - {
-          label: "Sprache – Podcast, Interview",
+          label: "Sprache – Podcast, Interview (mach ich gleich laut)",
           set: { audio.content: speech },
           to: audio_done,
         }
@@ -584,6 +591,33 @@ nodes:
 
   audio_done:
     set: { audio.asked: true }
+    go:
+      - { to: piles }
+
+  # ── PDFs ───────────────────────────────────────────────────────────────────
+  # Bilder rausholen (eins zu eins) oder das ganze PDF kleiner für den Download.
+
+  pdfs:
+    mood: thinking
+    say:
+      - [
+          "Und was mach ich mit {pdfs:dem PDF:PDFs}?",
+          "{pdfs:Das PDF:PDFs} – was soll ich damit machen?",
+        ]
+    answers:
+      - {
+          label: "Die Bilder rausholen – so wie sie drin sind",
+          set: { pdf.mode: pictures },
+          to: pdfs_done,
+        }
+      - {
+          label: "Kleiner machen – für den Download",
+          set: { pdf.mode: smaller },
+          to: pdfs_done,
+        }
+
+  pdfs_done:
+    set: { pdf.asked: true }
     go:
       - { to: piles }
 
@@ -700,7 +734,7 @@ nodes:
       - when: ["!failed_any", "!saved_bytes"]
         text: ["Fertig! Hat {duration} gedauert.", "So, erledigt."]
       - when: [pictures_from_pdfs]
-        text: "Aus {pdfs:dem PDF:den PDFs} hab ich {pdf_pictures:ein Bild:Bilder} rausgeholt."
+        text: "Aus {pdfs:dem PDF:PDFs} hab ich {pdf_pictures:ein Bild:Bilder} rausgeholt."
       - when: [wrote_transcripts]
         text: "{transcripts:Eine Aufnahme hab ich:Aufnahmen hab ich} aufgeschrieben. Namen und Fachwörter schreib ich nach Gehör – lies da lieber nochmal drüber."
       - when: [failed_any, "!all_failed"]
@@ -715,6 +749,8 @@ nodes:
         text: "{videos_grew:Ein Video ist:Videos sind} etwas größer geworden als vorher – {videos_grew:war:waren} wohl schon gut gepackt."
       - when: [pdfs_without_pictures]
         text: "In {pdfs_without_pictures:einem PDF:PDFs} war gar kein Bild drin."
+      - when: [pdfs_already_small]
+        text: "{pdfs_already_small:Ein PDF war:PDFs waren} schon schlank. Hab ich so übernommen."
       - when: [pdfs_unreadable]
         text: "Ein paar Bilder in den PDFs konnte ich nicht lesen, zum Beispiel eingescannte Fax-Seiten."
       - when: [has_gifs, converted_any]

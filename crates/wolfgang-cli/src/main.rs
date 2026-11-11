@@ -123,6 +123,7 @@ fn convert(ui: &Ui, store: &mut UserStore, store_path: &Path, mut args: flags::R
         Some(OnlyArg::Videos) => ws.keep_only(FileKind::Video),
         Some(OnlyArg::Audio) => ws.keep_only(FileKind::Audio),
         Some(OnlyArg::Pdfs) => ws.keep_only(FileKind::Pdf),
+        Some(OnlyArg::Tables) => ws.keep_only(FileKind::Table),
         Some(OnlyArg::Fonts) => ws.keep_only(FileKind::Font),
         None => {}
     }

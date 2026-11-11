@@ -6,6 +6,7 @@ use crate::font::{self, Woff2Mode};
 use crate::image;
 use crate::media;
 use crate::pdf;
+use crate::table::{self, TableTask};
 use crate::transcribe;
 use crate::runlog::{Entry, FileRecord, LogWriter, LOG_VERSION};
 use crate::workspace::{rel_string, Job, Plan, Task};
@@ -33,6 +34,8 @@ pub struct FileResult {
     pub extracted: bool,
     /// A recording written down: doesn't count as „saved“ either.
     pub transcript: bool,
+    /// Excel ↔ CSV: a different format, not a smaller one; not „saved“ either.
+    pub table: bool,
     /// `Err` holds a user-facing message.
     pub outcome: std::result::Result<Done, String>,
 }
@@ -60,6 +63,8 @@ pub enum Note {
     PdfNoPictures,
     /// Some pictures in a PDF are in formats Wolfgang can't read.
     PdfSomeUnreadable,
+    /// The PDF was already lean; it's in the output as it was.
+    PdfAlreadySmall,
 }
 
 impl std::fmt::Display for Note {
@@ -70,6 +75,7 @@ impl std::fmt::Display for Note {
             Self::VideoGrew => "ist größer geworden als vorher, war wohl schon gut gepackt",
             Self::PdfNoPictures => "da war gar kein Bild drin",
             Self::PdfSomeUnreadable => "ein paar Bilder darin kann ich nicht lesen (z. B. Fax-Scans)",
+            Self::PdfAlreadySmall => "war schon schlank – so übernommen, wie es war",
         })
     }
 }
@@ -84,6 +90,8 @@ pub struct Report {
     pub pdf_pictures: usize,
     /// Recordings written down (not part of `bytes_in`/`bytes_out`).
     pub transcripts: usize,
+    /// Tables turned into CSV or Excel (not part of `bytes_in`/`bytes_out`).
+    pub tables: usize,
     pub bytes_in: u64,
     pub bytes_out: u64,
     pub duration: Duration,
@@ -141,7 +149,8 @@ pub fn execute(plan: &Plan, on_event: &(dyn Fn(Event) + Sync), cancel: &AtomicBo
             }
             let extracted = matches!(job.task, Task::Pdf);
             let transcript = matches!(job.task, Task::Transcript(_));
-            let result = FileResult { rel: job.rel.clone(), target: job.target.clone(), bytes_in: job.size, extracted, transcript, outcome };
+            let table = matches!(job.task, Task::Table(_));
+            let result = FileResult { rel: job.rel.clone(), target: job.target.clone(), bytes_in: job.size, extracted, transcript, table, outcome };
             on_event(Event::FileDone(result.clone()));
             results.lock().unwrap().push(result);
         });
@@ -160,6 +169,8 @@ pub fn execute(plan: &Plan, on_event: &(dyn Fn(Event) + Sync), cancel: &AtomicBo
                     report.pdf_pictures += done.outputs.len();
                 } else if r.transcript {
                     report.transcripts += 1;
+                } else if r.table {
+                    report.tables += 1;
                 } else {
                     report.bytes_in += r.bytes_in;
                     report.bytes_out += done.bytes_out;
@@ -181,6 +192,9 @@ fn convert_job(job: &Job, output_root: &Path, progress: &(dyn Fn(f64) + Sync), c
     let outputs = || job.outputs().into_iter().map(Path::to_path_buf).collect();
     let (bytes, note) = match &job.task {
         Task::Pdf => return extract_pdf(job, output_root, progress, cancel),
+        Task::Table(TableTask::ToCsv { sheets }) if sheets.len() > 1 => return split_sheets(job, sheets, output_root, cancel),
+        Task::Table(TableTask::ToCsv { sheets }) => (table::sheet_to_csv(&job.source, &sheets[0])?, None),
+        Task::Table(TableTask::ToXlsx) => (table::csv_to_xlsx(&job.source)?, None),
         // ffmpeg writes the file itself, to a temp name that's renamed at the end.
         Task::Video(task) => {
             let tmp = temp_path(&target)?;
@@ -204,6 +218,10 @@ fn convert_job(job: &Job, output_root: &Path, progress: &(dyn Fn(f64) + Sync), c
         }
         Task::Transcript(settings) => (transcribe::transcribe(&job.source, settings, progress, cancel)?.into_bytes(), None),
         Task::Image(task) => (image::convert(&job.source, task)?, None),
+        Task::PdfSmaller => {
+            let shrunk = pdf::shrink(&job.source, progress, cancel)?;
+            (shrunk.data, (!shrunk.smaller).then_some(Note::PdfAlreadySmall))
+        }
         Task::Font => {
             let data = std::fs::read(&job.source).map_err(io_err(&job.source))?;
             let w = font::to_woff2(&font::to_sfnt(&data)?)?;
@@ -234,6 +252,29 @@ fn extract_pdf(job: &Job, output_root: &Path, progress: &(dyn Fn(f64) + Sync), c
     } else {
         (found.unsupported > 0).then_some(Note::PdfSomeUnreadable)
     };
+    Ok(done)
+}
+
+/// A workbook with several sheets: `preise/preise-einkauf.csv`, `preise/preise-verkauf.csv`, …
+/// (the workbook's name in every file, like the pictures from a PDF).
+fn split_sheets(job: &Job, sheets: &[String], output_root: &Path, cancel: &AtomicBool) -> Result<Done> {
+    let name = job.target.file_name().unwrap_or_default().to_string_lossy().into_owned();
+    let mut done = Done { bytes_out: 0, note: None, outputs: Vec::new() };
+    let mut taken = std::collections::HashSet::new();
+    for (i, sheet) in sheets.iter().enumerate() {
+        if cancel.load(Ordering::Relaxed) {
+            return Err(Error::Cancelled);
+        }
+        let data = table::sheet_to_csv(&job.source, sheet)?;
+        let words = crate::naming::words(sheet);
+        let base = if words.is_empty() { format!("{name}-tabelle-{}", i + 1) } else { format!("{name}-{}", crate::naming::join(&words, crate::naming::Separator::Dash)) };
+        // „Q1“ and „q1“ are different sheets but the same file name.
+        let file = (1..).map(|n| if n == 1 { base.clone() } else { format!("{base}-{n}") }).find(|f| taken.insert(f.clone())).expect("endless");
+        let rel = job.target.join(format!("{file}.csv"));
+        write_atomic(&output_root.join(&rel), &data)?;
+        done.bytes_out += data.len() as u64;
+        done.outputs.push(rel);
+    }
     Ok(done)
 }
 

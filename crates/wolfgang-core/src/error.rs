@@ -22,6 +22,8 @@ pub enum Error {
     Media(String),
     #[error("{0}")]
     Pdf(String),
+    #[error("{0}")]
+    Table(String),
     #[error("Ungültige Einstellung: {0}")]
     Settings(String),
     #[error("Abgebrochen")]

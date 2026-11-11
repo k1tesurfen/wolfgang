@@ -110,7 +110,7 @@ impl UserStore {
     /// Remembers a run as „letztes Mal“ **per pile**: a run with only videos
     /// doesn't forget how the photos were done last time.
     pub fn remember_run(&mut self, s: &RunSettings) {
-        if s.images.is_none() && s.videos.is_none() && s.audio.is_none() && s.video_transcript.is_none() && s.audio_transcript.is_none() {
+        if s.images.is_none() && s.videos.is_none() && s.audio.is_none() && s.video_transcript.is_none() && s.audio_transcript.is_none() && s.pdfs.is_none() {
             return;
         }
         let last = self.last_run.get_or_insert_with(RunSettings::default);
@@ -125,6 +125,9 @@ impl UserStore {
         if s.audio.is_some() || s.audio_transcript.is_some() {
             last.audio = s.audio;
             last.audio_transcript = s.audio_transcript;
+        }
+        if s.pdfs.is_some() {
+            last.pdfs = s.pdfs;
         }
         last.fonts = None;
     }

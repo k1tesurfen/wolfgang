@@ -15,6 +15,11 @@ pub const FLAGS: &[&str] = &[
     "has_audio",
     "has_fonts",
     "has_pdfs",
+    "pdfs_asked",
+    "pdfs_already_small",
+    "has_tables",
+    "has_excel_tables",
+    "has_csv_tables",
     "has_gifs",
     "transparent_gifs",
     "nothing_to_ask",
@@ -65,10 +70,14 @@ pub const NUMBER_VARS: &[&str] = &[
     "videos",
     "audio_files",
     "pdfs",
+    "tables",
+    "excel_tables",
+    "csv_tables",
     "animated_gifs",
     "videos_kept_original",
     "videos_grew",
     "pdfs_without_pictures",
+    "pdfs_already_small",
     "pdf_pictures",
     "transcripts",
     "fonts",
@@ -151,6 +160,7 @@ impl Context {
         let p = self.piles();
         self.store.last_run.as_ref().filter(|r| {
             (p.images && r.images.is_some()) || (p.videos && (r.videos.is_some() || r.video_transcript.is_some())) || (p.audio && (r.audio.is_some() || r.audio_transcript.is_some()))
+                || (p.pdfs && r.pdfs.is_some())
         })
     }
 
@@ -184,6 +194,9 @@ pub fn pile_list(s: &Summary) -> String {
     if p.pdfs {
         parts.push(n(s.pdfs.total, "ein PDF", "PDFs"));
     }
+    if p.tables {
+        parts.push(n(s.tables.total, "eine Tabelle", "Tabellen"));
+    }
     if p.fonts {
         parts.push(n(s.fonts.total, "eine Schrift", "Schriften"));
     }
@@ -215,7 +228,8 @@ pub fn describe_settings(s: &RunSettings, on: Piles) -> String {
     let mut parts = Vec::new();
     let videos = on.videos && (s.videos.is_some() || s.video_transcript.is_some());
     let audio = on.audio && (s.audio.is_some() || s.audio_transcript.is_some());
-    let several = [on.images && s.images.is_some(), videos, audio].iter().filter(|b| **b).count() > 1;
+    let pdfs = s.pdfs.filter(|_| on.pdfs);
+    let several = [on.images && s.images.is_some(), videos, audio, pdfs.is_some()].iter().filter(|b| **b).count() > 1;
     let label = |what: &str, text: String| if several { format!("{what} {text}") } else { text };
     if let Some(i) = s.images.as_ref().filter(|_| on.images) {
         parts.push(label("Fotos", describe_images(i)));
@@ -231,6 +245,9 @@ pub fn describe_settings(s: &RunSettings, on: Piles) -> String {
     }
     if let Some(t) = s.audio_transcript.as_ref().filter(|_| on.audio) {
         parts.push(label("Audio", describe_transcript(t)));
+    }
+    if let Some(p) = pdfs {
+        parts.push(label("PDFs", p.mode.label().into()));
     }
     parts.join("; ")
 }

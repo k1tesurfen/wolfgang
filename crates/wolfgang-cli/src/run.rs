@@ -86,6 +86,7 @@ pub fn convert(plan: &Plan, out: Output) -> wolfgang_core::Result<Report> {
                     "bytes_in": r.bytes_in,
                     "bytes_out": r.bytes_out,
                     "transcripts": r.transcripts,
+                    "tables": r.tables,
                     "duration_ms": r.duration.as_millis() as u64,
                     "cancelled": r.cancelled,
                 }));
@@ -222,6 +223,9 @@ pub fn non_interactive(ui: &Ui, ws: Workspace, store: &mut UserStore, store_path
         first.push('.');
         if report.pdf_pictures > 0 {
             first.push_str(&format!(" Aus den PDFs: {} Bilder.", report.pdf_pictures));
+        }
+        if report.tables > 0 {
+            first.push_str(&format!(" Tabellen umgewandelt: {}.", report.tables));
         }
         if report.transcripts > 0 {
             first.push_str(&format!(" Aufgeschrieben: {} (Namen nach Gehör – lieber nochmal drüberlesen).", if report.transcripts == 1 { "1 Aufnahme".into() } else { format!("{} Aufnahmen", report.transcripts) }));

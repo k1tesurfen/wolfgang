@@ -9,7 +9,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use wolfgang_core::naming::{self, Separator};
 use wolfgang_core::run::{Note, Report};
-use wolfgang_core::settings::ImageSettings;
+use wolfgang_core::settings::{ImageSettings, PdfMode};
 use wolfgang_core::{ImageFormat, RerunPolicy, RunSettings, UserStore};
 
 /// Safety net against `go` loops in a broken dialogue file.
@@ -78,6 +78,7 @@ struct RunInfo {
     grew: usize,
     pdfs_empty: usize,
     pdfs_unreadable: usize,
+    pdfs_already_small: usize,
     pdf_pictures: usize,
     transcripts: usize,
     bytes_in: u64,
@@ -209,6 +210,7 @@ impl Conversation {
             grew: count(Note::VideoGrew),
             pdfs_empty: count(Note::PdfNoPictures),
             pdfs_unreadable: count(Note::PdfSomeUnreadable),
+            pdfs_already_small: count(Note::PdfAlreadySmall),
             pdf_pictures: report.pdf_pictures,
             transcripts: report.transcripts,
             bytes_in: report.bytes_in,
@@ -465,9 +467,14 @@ impl Conversation {
             "has_audio" => p.audio,
             "has_fonts" => p.fonts,
             "has_pdfs" => p.pdfs,
+            "pdfs_asked" => d.pdfs_asked,
+            "pdfs_already_small" => run.is_some_and(|r| r.pdfs_already_small > 0),
+            "has_tables" => p.tables,
+            "has_excel_tables" => p.tables && s.excel_tables().total > 0,
+            "has_csv_tables" => p.tables && s.csv_tables.total > 0,
             "has_gifs" => p.videos && s.animated_gifs > 0,
             "transparent_gifs" => p.videos && s.transparent_gifs > 0,
-            "nothing_to_ask" => !p.media() && (p.fonts || p.pdfs),
+            "nothing_to_ask" => !p.media() && (p.fonts || p.tables),
             "takes_a_while" => self.estimate().is_some_and(|d| d.as_secs() >= 60),
             "videos_kept_original" => run.is_some_and(|r| r.kept_original > 0),
             "videos_grew" => run.is_some_and(|r| r.grew > 0),
@@ -522,10 +529,14 @@ impl Conversation {
             "videos" => num(s.videos.total),
             "audio_files" => num(s.audio.total),
             "pdfs" => num(s.pdfs.total),
+            "tables" => num(s.tables.total),
+            "excel_tables" => num(s.excel_tables().total),
+            "csv_tables" => num(s.csv_tables.total),
             "animated_gifs" => num(s.animated_gifs),
             "videos_kept_original" => num(run.kept_original),
             "videos_grew" => num(run.grew),
             "pdfs_without_pictures" => num(run.pdfs_empty),
+            "pdfs_already_small" => num(run.pdfs_already_small),
             "pdf_pictures" => num(run.pdf_pictures),
             "transcripts" => num(run.transcripts),
             "estimate" => text(self.estimate().map(format_estimate).unwrap_or_default()),
@@ -657,12 +668,23 @@ impl Conversation {
         let mut text = if parts.len() > 2 { parts.join("; ") } else { join_and(&parts) };
         // Piles without questions come last: „…, dazu die Bilder aus 2 PDFs und eine Schrift als WOFF2“.
         let mut extras = Vec::new();
-        if settings.pdfs.is_some() {
-            extras.push(if (if only_new { s.pdfs.fresh() } else { s.pdfs.total }) == 1 {
+        match settings.pdfs.map(|p| p.mode) {
+            Some(PdfMode::Pictures) => extras.push(if (if only_new { s.pdfs.fresh() } else { s.pdfs.total }) == 1 {
                 "die Bilder aus dem PDF".to_owned()
             } else {
                 format!("die Bilder aus {}", count(&s.pdfs, "einem PDF", "PDFs"))
-            });
+            }),
+            Some(PdfMode::Smaller) => extras.push(format!("{} kleiner für den Download", what(&s.pdfs, "das PDF", "PDFs", "das neue PDF", "neue PDFs"))),
+            None => {}
+        }
+        if settings.tables.is_some() {
+            let excel = s.excel_tables();
+            if excel.total > 0 {
+                extras.push(format!("{} als CSV", what(&excel, "die Excel-Tabelle", "Excel-Tabellen", "die neue Excel-Tabelle", "neue Excel-Tabellen")));
+            }
+            if s.csv_tables.total > 0 {
+                extras.push(format!("{} als Excel", what(&s.csv_tables, "die CSV-Datei", "CSV-Dateien", "die neue CSV-Datei", "neue CSV-Dateien")));
+            }
         }
         if self.ctx.has_fonts() {
             extras.push(format!("{} als WOFF2", count(&s.fonts, "eine Schrift", "Schriften")));

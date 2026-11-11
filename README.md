@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>Wolfgang wandelt um, damit du's nicht musst.</b><br>
-  Bilder, Videos, Audio und Schriften – fürs Web oder fürs Archiv.<br>
+  Bilder, Videos, Audio, Tabellen und Schriften – fürs Web oder fürs Archiv.<br>
   <sub>Für Macs mit Apple-Chip · macOS 13 oder neuer · Deutsch · ganz ohne Zusatzinstallationen</sub>
 </p>
 
@@ -17,7 +17,7 @@
 
 ---
 
-> *„Moin! Leg mir einfach was auf den Tisch. Bilder, Videos, Musik, Schriften … ich guck's mir an.
+> *„Moin! Leg mir einfach was auf den Tisch. Bilder, Videos, Musik, Tabellen, Schriften … ich guck's mir an.
 > Kaffee ist da, Zeit hab ich auch.“*
 > — Wolfgang
 
@@ -34,16 +34,17 @@ daneben. **Deine Originale fasst er dabei nie an.**
 | **Bilder fürs Web** | WebP oder AVIF, auf die richtige Größe gebracht, ohne Metadaten (auch kein GPS), mit Dateinamen, die Google mag: `hotel-seeblick-terrasse-0001.webp` |
 | **Bilder hochwertig behalten** | nur ein anderes Format (JPG, WebP, AVIF, PNG) – Originalgröße, Farbprofil bleibt erhalten |
 | **Videos fürs Web** | MP4 (läuft überall) oder WebM (kleiner), in 720p, 1080p oder Originalgröße, auf Wunsch ohne Ton und mit Vorschaubild. iPhone-Videos in HDR sehen danach nicht flau aus. Animierte GIFs werden auch zu Videos – viel kleiner, gleicher Look. |
-| **Audio** | MP3 oder AAC – passend eingestellt für Sprache (Podcast, Interview) oder Musik |
+| **Audio** | MP3 oder AAC – passend eingestellt für Sprache (Podcast, Interview) oder Musik. Sprache wird dabei gleich laut gemacht: die leise und die laute Aufnahme klingen hinterher gleich |
 | **Besprechungen aufschreiben** | schreibt auf, was in einer Aufnahme gesagt wird (Video oder Audio) – als Textdatei, auf Wunsch mit Zeitangaben. Läuft komplett auf deinem Mac, nichts geht ins Internet. Braucht einmal ein Zusatzmodul aus den Einstellungen |
-| **Bilder aus PDFs** | holt die Fotos und Grafiken aus einem PDF (z. B. der Broschüre vom Kunden) – so, wie sie drin sind, Seite für Seite nummeriert |
+| **PDFs** | holt die Fotos und Grafiken aus einem PDF (z. B. der Broschüre vom Kunden) – so, wie sie drin sind, Seite für Seite nummeriert. Oder macht das ganze PDF kleiner für den Download: aus der 30-MB-Druckdatei wird eine handliche fürs Web |
+| **Tabellen** | Excel (auch alte XLS und LibreOffice-ODS) wird CSV – ein Blatt, eine Datei –, und CSV wird Excel. Dabei rät Excel nichts um: Postleitzahlen behalten ihre Null vorne, und nichts wird zum Datum, was keins ist |
 | **Schriften** | TTF, OTF und WOFF werden zu WOFF2 – eins zu eins, nichts wird weggelassen, und hinterher Glyphe für Glyphe nachgeprüft |
 
 **Er liest fast alles:**
 JPG, PNG, HEIC, AVIF, WebP, GIF, TIFF und Kamera-RAW (CR2, CR3, NEF, ARW, DNG) ·
 MP4, MOV, M4V, MKV, WebM, AVI, MTS, MPG, WMV, 3GP ·
 WAV, AIFF, FLAC, M4A, MP3, AAC, OGG, Opus, CAF, WMA ·
-PDF · TTF, OTF, WOFF
+PDF · XLSX, XLS, ODS, CSV · TTF, OTF, WOFF
 
 Wolfgang gibt es als **App** – ein kleines Pixel-Büro, in dem du mit ihm redest – und als
 **Kommandozeile** `wolfgang` für Skripte und Terminal-Fans. Beide führen dasselbe Gespräch und
@@ -179,6 +180,24 @@ Der PDF-Name steckt in jedem Bild, damit man es auch woanders noch wiederfindet 
 kürzt Wolfgang auf etwa 40 Zeichen).
 Winzige Schnipsel (Linien, Icons) und Logos, die auf jeder Seite wiederkommen, lässt er weg.
 
+**PDFs kleiner machen:** Bei PDFs fragt Wolfgang, was passieren soll: die Bilder rausholen oder
+*„Kleiner machen – für den Download“*. Dann werden zu große Bilder im PDF auf höchstens 2000 Pixel
+verkleinert (eine volle A4-Seite in guter Bildschirmqualität) und als JPEG gepackt, Druckfarben (CMYK)
+werden zu Bildschirmfarben. Was Illustrator und InDesign heimlich mitspeichern (oft der größte Teil
+der Datei) und Seitenvorschaubilder fliegen raus. Text, Schriften und Vektorgrafik bleiben, wie sie
+sind – Text bleibt also auswählbar und durchsuchbar. Strichzeichnungen, Logos und Scans in Schwarzweiß
+bleiben scharf. Bringt das weniger als 5 %, legt Wolfgang das Original unverändert hin. Mit Passwort
+geschützte oder digital unterschriebene PDFs fasst er nicht an (die Unterschrift wäre danach ungültig).
+
+**Tabellen:** Aus einer Excel-Datei wird eine CSV pro Blatt (leere und ausgeblendete Blätter lässt
+Wolfgang weg; das gilt auch für alte XLS- und LibreOffice-ODS-Dateien). Bei nur einem Blatt heißt sie wie die Datei (`Kontakte.xlsx` → `kontakte.csv`), bei
+mehreren gibt's einen Ordner: `Preise 2024.xlsx` → `preise-2024/preise-2024-einkauf.csv`, `preise-2024-verkauf.csv` …
+Die CSV ist so, wie Importe (Shop, CMS, Newsletter) sie erwarten: UTF-8, Kommas, Punkt in Zahlen,
+Datum als `2024-03-01`. Umgekehrt liest Wolfgang CSV mit Komma, Semikolon oder Tab, in UTF-8 oder
+im alten Windows-Format (wie deutsches Excel es speichert), und macht daraus eine Excel-Datei.
+Dabei entscheidet Wolfgang selbst, was eine Zahl ist: nur echte Zahlen (`12`, `3,50` in
+Semikolon-Dateien) werden Zahlen, alles andere bleibt genau so stehen – `01067`, `1-2`, `01.03.2024`.
+
 **Besprechungen aufschreiben:** Leg die Aufnahme auf den Tisch (Video oder Audio) und nimm bei
 der ersten Frage die letzte Antwort, *„Nur aufschreiben, was gesagt wird“*. Wolfgang fragt dann
 noch, ob vor jedem Absatz eine Zeitangabe stehen soll (`[00:12:30]`), und legt eine Textdatei mit
@@ -241,11 +260,12 @@ wolfgang --json --yes ~/Bilder | jq .        # eine JSON-Zeile pro Ereignis
 | `--no-sound` / `--no-poster` | Videos ohne Ton / ohne Vorschaubild |
 | `--gif-background` | was hinter durchsichtige Stellen animierter GIFs kommt: `white` (Standard) oder `black` |
 | `--audio-format` | `mp3` (Standard) oder `aac` |
-| `--audio` | was drauf ist: `speech`, `music` (Standard), `best` |
+| `--audio` | was drauf ist: `speech` (wird gleich laut gemacht), `music` (Standard), `best` |
 | `--video-format transcript`, `--audio-format transcript` | nur aufschreiben, was gesagt wird (braucht das Zusatzmodul) |
+| `--pdf` | bei PDFs `pictures` (Bilder rausholen, Standard) oder `smaller` (kleiner für den Download) |
 | `--timestamps` / `--no-timestamps` | beim Aufschreiben Zeitangaben vor jeden Absatz (Standard) / keine |
 | `-p, --preset` | gespeicherte Vorlage benutzen |
-| `--only images\|videos\|audio\|pdfs\|fonts` | nur einen Stapel bearbeiten |
+| `--only images\|videos\|audio\|pdfs\|tables\|fonts` | nur einen Stapel bearbeiten |
 | `--all` | auch schon Umgewandeltes nochmal machen |
 | `-y, --yes` | nicht fragen |
 | `--json` | maschinenlesbare Ausgabe |
@@ -293,7 +313,7 @@ scripts/build-app.sh ully                        # dasselbe als Ully (oder burgu
 
 | Ordner | Was |
 |---|---|
-| `crates/wolfgang-core` | die Umwandlung: Ordner einlesen, Namen, Bilder (Apple ImageIO + mozjpeg/libwebp/rav1e), Schriften (Google woff2), Videos/Audio (ffmpeg), Aufschreiben (whisper.cpp), Logbuch, Einstellungen |
+| `crates/wolfgang-core` | die Umwandlung: Ordner einlesen, Namen, Bilder (Apple ImageIO + mozjpeg/libwebp/rav1e), Schriften (Google woff2), Tabellen (calamine, rust_xlsxwriter), Videos/Audio (ffmpeg), Aufschreiben (whisper.cpp), Logbuch, Einstellungen |
 | `crates/wolfgang-dialogue` | das Gespräch als Zustandsmaschine |
 | `dialogue/de.yaml` | **alles, was Wolfgang sagt** – zum Ausprobieren ohne neu zu bauen: `WOLFGANG_DIALOGUE=dialogue/de.yaml wolfgang …` |
 | `crates/wolfgang-cli` | der Befehl `wolfgang` |

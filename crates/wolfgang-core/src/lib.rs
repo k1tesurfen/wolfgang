@@ -1,5 +1,5 @@
 //! Wolfgang's conversion engine, shared by the CLI and the desktop app:
-//! images, fonts, and (via the bundled ffmpeg) videos and audio, plus
+//! images, fonts, tables (Excel ↔ CSV), and (via the bundled ffmpeg) videos and audio, plus
 //! transcripts of meeting recordings (whisper.cpp, an add-on installed in the settings).
 //!
 //! Typical flow:
@@ -22,6 +22,7 @@ pub mod runlog;
 pub mod scan;
 pub mod settings;
 pub mod store;
+pub mod table;
 pub mod transcribe;
 pub mod workspace;
 
@@ -29,7 +30,7 @@ pub use error::{Error, Result};
 pub use kind::FileKind;
 pub use run::{execute, Event, Note, Report};
 pub use settings::{
-    AudioContent, AudioFormat, AudioSettings, Background, FontSettings, ImageFormat, ImageSettings, Naming, RunSettings, TranscriptSettings, VideoFormat, VideoQuality,
+    AudioContent, AudioFormat, AudioSettings, Background, FontSettings, ImageFormat, ImageSettings, Naming, PdfMode, PdfSettings, RunSettings, TableSettings, TranscriptSettings, VideoFormat, VideoQuality,
     VideoSettings, WebFormat, WebSettings,
 };
 pub use store::UserStore;

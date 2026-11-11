@@ -13,8 +13,8 @@ use wolfgang_dialogue::script::Value;
     version,
     // No pronouns for the character: the same text is used for Ully and Burgunde
     // (main.rs swaps the name).
-    about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs, Schriften zu WOFF2. Und schreibt Besprechungen auf.",
-    long_about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs, Schriften zu WOFF2. \
+    about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs oder PDFs kleiner, Excel zu CSV und zurück, Schriften zu WOFF2. Und schreibt Besprechungen auf.",
+    long_about = "Wolfgang wandelt um: Bilder fürs Web oder hochwertig, Videos und Audio fürs Web, Bilder aus PDFs oder PDFs kleiner, Excel zu CSV und zurück, Schriften zu WOFF2. \
         Und schreibt auf, was in Besprechungen gesagt wird (--video-format/--audio-format transcript).\n\n\
         Im Terminal gibt's ein kurzes Gespräch: Wolfgang fragt, was du willst. Optionen beantworten die Fragen vorab; \
         mit --yes (oder ohne Terminal) wird nichts gefragt, dann gelten deine Standards.",
@@ -83,6 +83,9 @@ pub struct RunArgs {
     /// Was ist auf den Audiodateien?
     #[arg(long = "audio", value_enum)]
     pub audio_content: Option<AudioContentArg>,
+    /// Was mit PDFs passiert
+    #[arg(long = "pdf", value_enum)]
+    pub pdf_mode: Option<PdfModeArg>,
     /// Beim Aufschreiben Zeitangaben vor jeden Absatz
     #[arg(long, conflicts_with = "no_timestamps")]
     pub timestamps: bool,
@@ -198,6 +201,7 @@ pub enum OnlyArg {
     Videos,
     Audio,
     Pdfs,
+    Tables,
     Fonts,
 }
 
@@ -252,6 +256,14 @@ pub enum AudioContentArg {
     Speech,
     Music,
     Best,
+}
+
+#[derive(ValueEnum, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum PdfModeArg {
+    /// Die Bilder rausholen, so wie sie drin sind
+    Pictures,
+    /// Das ganze PDF kleiner machen, für den Download
+    Smaller,
 }
 
 /// A value-enum's name as written on the command line (`smaller`, `mp3`, …).
@@ -398,6 +410,9 @@ impl RunArgs {
         if let Some(c) = self.audio_content {
             put("audio.content", text(&arg_name(c)));
         }
+        if let Some(m) = self.pdf_mode {
+            put("pdf.mode", text(&arg_name(m)));
+        }
         if self.timestamps || self.no_timestamps {
             put("transcript.timestamps", yaml(if self.timestamps { "true" } else { "false" }));
         }
@@ -427,6 +442,7 @@ impl RunArgs {
         }
         draft.videos_asked = true;
         draft.audio_asked = true;
+        draft.pdfs_asked = true;
         let settings = draft.settings(piles);
         settings.validate().map_err(|e| e.to_string())?;
         Ok((settings, draft.rerun))
@@ -438,7 +454,7 @@ mod tests {
     use super::*;
     use wolfgang_core::{ImageFormat, ImageSettings, WebFormat};
 
-    const IMAGES: Piles = Piles { images: true, videos: false, audio: false, pdfs: false, fonts: false };
+    const IMAGES: Piles = Piles { images: true, videos: false, audio: false, pdfs: false, tables: false, fonts: false };
 
     fn args(v: &[&str]) -> RunArgs {
         Cli::try_parse_from(std::iter::once("wolfgang").chain(v.iter().copied())).unwrap().run

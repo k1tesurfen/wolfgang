@@ -185,6 +185,40 @@ fn audio_to_mp3_and_aac() {
     assert_eq!(codecs(&out).1, "aac");
 }
 
+/// Integrated loudness in LUFS, as ffmpeg's EBU R128 meter measures it.
+fn loudness(p: &Path) -> f64 {
+    let t = media::tools().unwrap();
+    let out = Command::new(&t.ffmpeg).args(["-hide_banner", "-nostats", "-i"]).arg(p).args(["-af", "ebur128", "-f", "null", "-"]).output().unwrap();
+    let log = String::from_utf8_lossy(&out.stderr);
+    let summary = log.rsplit("Integrated loudness:").next().unwrap();
+    summary.split_once("I:").unwrap().1.split_whitespace().next().unwrap().parse().unwrap()
+}
+
+#[test]
+fn speech_comes_out_equally_loud() {
+    if tools().is_none() {
+        return;
+    }
+    let t = tempfile::tempdir().unwrap();
+    let dir = t.path().join("Interviews");
+    std::fs::create_dir_all(&dir).unwrap();
+    for (name, volume) in [("leise.wav", "0.02"), ("laut.wav", "0.9")] {
+        let ok = Command::new(&media::tools().unwrap().ffmpeg)
+            .args(["-v", "error", "-y", "-f", "lavfi", "-i", &format!("sine=f=220:d=8,volume={volume}"), "-c:a", "pcm_s16le"])
+            .arg(dir.join(name))
+            .status()
+            .unwrap();
+        assert!(ok.success());
+    }
+    assert!(loudness(&dir.join("laut.wav")) - loudness(&dir.join("leise.wav")) > 25.0);
+    let speech = RunSettings { audio: Some(AudioSettings { format: AudioFormat::Mp3, content: AudioContent::Speech }), ..Default::default() };
+    let (plan, _) = run(&dir, &speech);
+    for name in ["leise.mp3", "laut.mp3"] {
+        let lufs = loudness(&plan.output_root.join(name));
+        assert!((-18.0..=-14.0).contains(&lufs), "{name}: {lufs} LUFS");
+    }
+}
+
 #[test]
 fn names_dont_collide_with_photos_and_progress_is_reported() {
     if tools().is_none() {

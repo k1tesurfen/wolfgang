@@ -428,12 +428,20 @@ fn poster(src: &Path, info: &MediaInfo, s: &VideoSettings, cancel: &AtomicBool) 
 
 // ── Audio ────────────────────────────────────────────────────────────────────
 
+const SPEECH_LOUDNESS: &str = "loudnorm=I=-16:TP=-1.5:LRA=11";
+
 fn audio_args(info: &MediaInfo, s: &AudioSettings) -> Result<Vec<String>> {
     let a_in = info.audio.as_ref().ok_or_else(|| Error::Media("Da ist gar kein Ton drin.".into()))?;
     let mut a: Vec<String> = ["-map", "0:a:0", "-vn", "-sn", "-dn", "-map_metadata", "0"].map(String::from).to_vec();
     let channels = if s.content == AudioContent::Speech { 1 } else { a_in.channels.clamp(1, 2) };
     a.extend(["-ac".into(), channels.to_string()]);
-    if a_in.sample_rate > 48_000 {
+    if s.content == AudioContent::Speech {
+        // Podcast loudness (−16 LUFS, EBU R128): a quiet interview and a loud one come out
+        // equally loud. loudnorm works at 192 kHz inside, so the rate is always set.
+        a.extend(["-af", SPEECH_LOUDNESS].map(String::from));
+        let rate = if a_in.sample_rate == 0 { 48_000 } else { a_in.sample_rate.min(48_000) };
+        a.extend(["-ar".into(), rate.to_string()]);
+    } else if a_in.sample_rate > 48_000 {
         a.extend(["-ar", "48000"].map(String::from));
     }
     let rate = |r: &str| ["-b:a".to_owned(), r.to_owned()];
@@ -648,9 +656,13 @@ mod tests {
     fn audio_arguments() {
         let info = MediaInfo { audio: Some(AudioStream { channels: 6, sample_rate: 96000, ..Default::default() }), ..Default::default() };
         let speech = audio_args(&info, &AudioSettings { format: AudioFormat::Mp3, content: AudioContent::Speech }).unwrap().join(" ");
-        assert!(speech.contains("-ac 1") && speech.contains("-b:a 64k") && speech.contains("-ar 48000"), "{speech}");
+        assert!(speech.contains("-ac 1") && speech.contains("-b:a 64k") && speech.contains("-ar 48000") && speech.contains("loudnorm"), "{speech}");
+        let low = MediaInfo { audio: Some(AudioStream { channels: 1, sample_rate: 22050, ..Default::default() }), ..Default::default() };
+        let low = audio_args(&low, &AudioSettings { format: AudioFormat::Mp3, content: AudioContent::Speech }).unwrap().join(" ");
+        assert!(low.contains("-ar 22050"), "loudnorm doesn't leave it at 192 kHz: {low}");
         let music = audio_args(&info, &AudioSettings { format: AudioFormat::Aac, content: AudioContent::Music }).unwrap().join(" ");
         assert!(music.contains("-ac 2") && music.contains("aac_at -b:a 192k") && music.contains("-f ipod"), "{music}");
+        assert!(!music.contains("loudnorm"), "music keeps its dynamics");
         assert!(audio_args(&MediaInfo::default(), &AudioSettings::default()).is_err());
     }
 

@@ -233,7 +233,7 @@ impl AudioFormat {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AudioContent {
-    /// Podcast, interview: mono, small.
+    /// Podcast, interview: mono, small, loudness evened out.
     Speech,
     #[default]
     Music,
@@ -244,7 +244,7 @@ pub enum AudioContent {
 impl AudioContent {
     pub fn label(self) -> &'static str {
         match self {
-            Self::Speech => "Sprache",
+            Self::Speech => "Sprache, gleich laut",
             Self::Music => "Musik",
             Self::Best => "Musik in bester Qualität",
         }
@@ -273,9 +273,35 @@ impl Default for TranscriptSettings {
     }
 }
 
-/// Pictures are pulled out of PDFs as they are; nothing to configure.
+/// What happens to PDFs.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PdfMode {
+    /// The pictures are pulled out as they are.
+    #[default]
+    Pictures,
+    /// The whole PDF, smaller for downloads (see [`crate::pdf::shrink`]).
+    Smaller,
+}
+
+impl PdfMode {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Pictures => "Bilder rausholen",
+            Self::Smaller => "kleiner für den Download",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct PdfSettings {
+    pub mode: PdfMode,
+}
+
+/// Excel becomes CSV and CSV becomes Excel; nothing to configure.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
-pub struct PdfSettings {}
+pub struct TableSettings {}
 
 /// Fonts are converted 1:1 to WOFF2; nothing to configure yet.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -293,6 +319,7 @@ pub struct RunSettings {
     /// Audio files are written down instead of converted (never together with `audio`).
     pub audio_transcript: Option<TranscriptSettings>,
     pub pdfs: Option<PdfSettings>,
+    pub tables: Option<TableSettings>,
     pub fonts: Option<FontSettings>,
 }
 
@@ -362,7 +389,8 @@ mod tests {
             audio: Some(AudioSettings { format: AudioFormat::Aac, content: AudioContent::Speech }),
             video_transcript: None,
             audio_transcript: Some(TranscriptSettings { timestamps: false }),
-            pdfs: Some(PdfSettings {}),
+            pdfs: Some(PdfSettings { mode: PdfMode::Smaller }),
+            tables: Some(TableSettings {}),
             fonts: Some(FontSettings {}),
         };
         let json = serde_json::to_string(&s).unwrap();
@@ -373,6 +401,8 @@ mod tests {
         assert_eq!(hq.images, Some(ImageSettings::HighQuality { format: ImageFormat::Png }));
         assert_eq!((hq.videos, hq.audio), (None, None), "settings from 2.1 still load");
         assert_eq!((hq.video_transcript, hq.audio_transcript), (None, None), "settings from 2.3 still load");
+        let old: RunSettings = serde_json::from_str(r#"{"pdfs":{}}"#).unwrap();
+        assert_eq!(old.pdfs, Some(PdfSettings { mode: PdfMode::Pictures }), "PDFs from 2.3 still pull pictures");
     }
 
     #[test]
