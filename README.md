@@ -12,7 +12,6 @@
 
 <p align="center">
   <a href="https://github.com/k1tesurfen/wolfgang/releases/latest/download/Wolfgang.dmg"><img src="https://img.shields.io/badge/Wolfgang_herunterladen-f%C3%BCr_Macs_mit_Apple--Chip-8a5a35?style=for-the-badge" alt="Wolfgang herunterladen (für Macs mit Apple-Chip)" height="40"></a><br>
-  <a href="https://github.com/k1tesurfen/wolfgang/releases/latest"><img src="https://img.shields.io/github/v/release/k1tesurfen/wolfgang?label=neueste%20Version&color=8a5a35" alt="Neueste Version"></a><br>
   <img src="https://img.shields.io/github/v/release/k1tesurfen/wolfgang?label=neueste%20Version&style=flat-square&color=8a5a35" alt="neueste Version">
 </p>
 
