@@ -37,6 +37,10 @@ cargo test --workspace --quiet
 
 DMG_DIR=target/release/bundle/dmg
 MACOS=target/release/bundle/macos
+# Tauri empties the dmg folder on every build, so each character's files are
+# copied here right after its build (else only the last character's dmgs survive).
+UPLOAD=target/release/upload
+rm -rf "$UPLOAD" && mkdir -p "$UPLOAD"
 FILES=()
 NAMES=()
 # key name feed of every character that's part of releases
@@ -46,7 +50,8 @@ while read -r KEY NAME FEED; do
   CHARACTER_FILES=("$DMG_DIR/${NAME}_${VERSION}_aarch64.dmg" "$DMG_DIR/$NAME.dmg" "$MACOS/$NAME.app.tar.gz" "$MACOS/$FEED")
   for f in "${CHARACTER_FILES[@]}"; do [[ -f "$f" ]] || fail "$f fehlt"; done
   grep -q "\"version\": \"$VERSION\"" "$MACOS/$FEED" || fail "$FEED passt nicht zu $VERSION"
-  FILES+=("${CHARACTER_FILES[@]}")
+  cp "${CHARACTER_FILES[@]}" "$UPLOAD/"
+  for f in "${CHARACTER_FILES[@]}"; do FILES+=("$UPLOAD/$(basename "$f")"); done
   NAMES+=("$NAME")
 done < <(python3 -c "import json; [print(c['key'], c['name'], c['feed']) for c in json.load(open('characters.json')) if c['release']]")
 [[ ${#NAMES[@]} -gt 0 ]] || fail "In characters.json ist keine Figur für Releases markiert"

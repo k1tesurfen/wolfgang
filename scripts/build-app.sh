@@ -68,7 +68,10 @@ PY
 )
 
 step "App + DMG bauen"
-(cd crates/wolfgang-app && cargo tauri build --bundles app,dmg --config "$CONFIG")
+# CI=true makes Tauri skip the AppleScript that opens the new disk image in Finder
+# to arrange its icons (a Finder window popping up and pulling you to another
+# Space on every build). The dmg still has the app and the Programme link.
+(cd crates/wolfgang-app && CI=true cargo tauri build --bundles app,dmg --config "$CONFIG")
 
 MACOS="target/release/bundle/macos"
 APP="$MACOS/$NAME.app"
