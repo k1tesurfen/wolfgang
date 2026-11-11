@@ -6241,7 +6241,7 @@ checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
 name = "wolfgang-app"
-version = "2.3.5"
+version = "2.3.6"
 dependencies = [
  "fastrand",
  "objc2",
@@ -6260,7 +6260,7 @@ dependencies = [
 
 [[package]]
 name = "wolfgang-art"
-version = "2.3.5"
+version = "2.3.6"
 dependencies = [
  "png",
  "serde",
@@ -6271,7 +6271,7 @@ dependencies = [
 
 [[package]]
 name = "wolfgang-check"
-version = "2.3.5"
+version = "2.3.6"
 dependencies = [
  "chrono",
  "fastrand",
@@ -6283,7 +6283,7 @@ dependencies = [
 
 [[package]]
 name = "wolfgang-cli"
-version = "2.3.5"
+version = "2.3.6"
 dependencies = [
  "clap",
  "crossterm",
@@ -6302,7 +6302,7 @@ dependencies = [
 
 [[package]]
 name = "wolfgang-core"
-version = "2.3.5"
+version = "2.3.6"
 dependencies = [
  "blake3",
  "calamine",
@@ -6339,7 +6339,7 @@ dependencies = [
 
 [[package]]
 name = "wolfgang-dialogue"
-version = "2.3.5"
+version = "2.3.6"
 dependencies = [
  "fastrand",
  "serde",
