@@ -28,7 +28,7 @@ let SCENE, IMG = {}, UI;
 let CHARACTER = { key: 'wolfgang', name: 'Wolfgang' }; // who this app is: Wolfgang, Ully or Burgunde
 const named = text => text.replaceAll('{name}', CHARACTER.name);
 let scale = 4;
-let mode = 'idle';          // idle | talk | work | panel
+let mode = 'idle';          // idle | talk | work | panel | check (looking at a URL) | report (its printout)
 let token = 0;              // bumps on every new view; stale async work checks it
 let typing = null;          // { finish() } while the typewriter runs
 let choices = [], sel = 0;  // current answers: [{ label, current, small, run }]
@@ -76,6 +76,7 @@ async function init() {
   const q = new URLSearchParams(location.search);
   if (!T && q.has('demo')) dropFiles(['/demo/' + q.get('demo')]);
   if (!T && q.has('panel')) openPanel(q.get('panel'));
+  if (!T && q.has('check')) setTimeout(() => checkUrl('example.com'), 600);
   if (!T && q.get('update') === 'install') setTimeout(installUpdate, 3500);
 }
 
@@ -114,11 +115,12 @@ function restyle() {
   document.querySelectorAll('.cursor').forEach(c => (c.style.backgroundImage = `url(${piece('cursor')})`));
   markPanelFocus();
   placeTail();
+  placePrintout();
 }
 
 function placeTail() {
   const t = $('tail'), say = $('say');
-  t.hidden = say.hidden;
+  t.hidden = say.hidden || mode === 'report'; // the printout lies over Wolfgang
   if (say.hidden) return;
   t.style.backgroundImage = `url(${piece('tail')})`;
   t.style.left = `${(SCENE.speaker[0] - 5) * scale}px`;
@@ -436,11 +438,14 @@ addEventListener('keydown', e => {
     return;
   }
   if (e.target.tagName === 'INPUT') return;
+  if (e.metaKey && e.key === 'v') { e.preventDefault(); pasteUrl(); return; }
+  if (mode === 'report' && e.metaKey && e.key === 'c' && !getSelection().toString()) { e.preventDefault(); copyReport(); return; }
   if (e.metaKey && e.key === 'o') { e.preventDefault(); pickFiles(); return; }
   if (e.metaKey && e.key === ',') { e.preventDefault(); openPanel('settings'); return; }
   const key = e.ctrlKey && e.key === '[' ? 'Escape' : e.key;
   if ((e.metaKey || e.ctrlKey || e.altKey) && key !== 'Escape') return; // leave other shortcuts to macOS
   if (mode === 'panel') return panelKey(e, key);
+  if (mode === 'report') return reportKey(e, key);
   if (typing && key === ' ') { e.preventDefault(); typing.finish(); return; } // Space skips; Enter answers right away
   const first = choices.findIndex(c => !c.small);
   switch (key) {
@@ -499,6 +504,7 @@ async function dropFiles(paths) {
     return;
   }
   closePanel();
+  hideReport();
   Sound.plop();
   token++;
   mode = 'talk';
@@ -547,6 +553,7 @@ function back() { act(api.invoke('back')); }
 async function goIdle() {
   if (update && !update.offered) return offerUpdate();
   const my = ++token;
+  hideReport();
   mode = 'idle';
   setChoices([{ label: 'Dateien auswählen …', small: true, run: pickFiles }]);
   play('idle');
@@ -592,6 +599,121 @@ function onFinished(view) {
   Sound.jingle();
   render(view);
 }
+
+/* ── „Guck mal, die Seite“: a pasted URL, checked and printed ──────────── */
+
+let reportText = '';
+
+/** ⌘V on the empty desk: the clipboard's text, if it's a web address. */
+async function pasteUrl() {
+  if (mode !== 'idle') return; // mid-conversation or at work, pasting would lose that
+  const text = (await api.invoke('clipboard_text').catch(() => null))?.trim();
+  if (text) checkUrl(text);
+}
+
+async function checkUrl(url) {
+  let looking;
+  try {
+    looking = await api.invoke('check_looking', { url });
+  } catch (e) {
+    return oops(e);
+  }
+  const my = ++token;
+  mode = 'check';
+  Sound.plop();
+  play('type');
+  setChoices([{ label: 'Lass mal', small: true, back: true, run: goIdle }]);
+  say([looking], { mood: 'thinking' });
+  let view;
+  try {
+    view = await api.invoke('check_url', { url });
+  } catch (e) {
+    if (my === token) oops(e);
+    return;
+  }
+  if (my !== token) return; // „Lass mal“, or files dropped meanwhile
+  showReport(view);
+}
+
+/** Wolfgang's verdict in the bubble, the printout under it. */
+function showReport(view) {
+  mode = 'report';
+  reportText = view.report;
+  setChoices([]);
+  $('answers').hidden = true;
+  view.verdict === 'fine' ? Sound.jingle() : Sound.sad();
+  say([view.says], { mood: view.mood });
+  $('portrait').hidden = true; // the paper covers that corner
+  $('report').textContent = view.report;
+  $('paper').scrollTop = 0;
+  $('printout').hidden = false;
+  $('printout').classList.add('printing');
+  setTimeout(() => $('printout').classList.remove('printing'), 1200);
+  setTimeout(() => Sound.print(), 150);
+  play('hand', 1800, 'idle');
+  restyle();
+}
+
+/** The paper starts right under the bubble (whatever its height) and reaches down. */
+function placePrintout() {
+  if ($('printout').hidden) return;
+  const say = $('say');
+  $('printout').style.top = `${say.offsetTop + say.offsetHeight + 3 * scale}px`;
+}
+
+function hideReport() {
+  if ($('printout').hidden) return;
+  $('printout').hidden = true;
+  $('answers').hidden = false;
+}
+
+function closeReport() {
+  Sound.confirm();
+  goIdle();
+}
+
+async function copyReport() {
+  const b = $('report-copy');
+  try {
+    if (T) await api.invoke('copy_text', { text: reportText });
+    else await navigator.clipboard.writeText(reportText);
+    Sound.confirm();
+    b.textContent = 'Kopiert ✓';
+  } catch {
+    Sound.sad();
+    b.textContent = 'Ging nicht';
+  }
+  setTimeout(() => (b.textContent = 'Kopieren'), 1600);
+}
+
+/** In the printout: j/k (↑↓) a line, Space/b a page, g/G top/bottom, c copies, Esc/q closes. */
+function reportKey(e, key) {
+  const paper = $('paper'), line = 4.5 * 1.45 * scale, page = paper.clientHeight - 2 * line;
+  switch (key) {
+    case 'Escape': case 'q': closeReport(); break;
+    case 'c': copyReport(); break;
+    case 'ArrowDown': case 'j': paper.scrollBy(0, line); break;
+    case 'ArrowUp': case 'k': paper.scrollBy(0, -line); break;
+    case ' ': case 'PageDown': paper.scrollBy(0, e.shiftKey ? -page : page); break;
+    case 'b': case 'PageUp': paper.scrollBy(0, -page); break;
+    case 'g': case 'Home': paper.scrollTop = 0; break;
+    case 'G': case 'End': paper.scrollTop = paper.scrollHeight; break;
+    default: return;
+  }
+  e.preventDefault();
+}
+
+// If macOS's Edit menu takes ⌘V before the keydown above sees it, the webview gets a paste event instead.
+addEventListener('paste', e => {
+  if (e.target.tagName === 'INPUT' || mode !== 'idle') return;
+  const text = e.clipboardData?.getData('text/plain')?.trim();
+  if (!text) return;
+  e.preventDefault();
+  checkUrl(text);
+});
+
+$('report-close').onclick = closeReport;
+$('report-copy').onclick = copyReport;
 
 /* ── Updates ───────────────────────────────────────────────────────────── */
 
@@ -671,8 +793,9 @@ function setupStage() {
     const overUi = e.target.closest('.bubble, .answer, #panel, #portrait');
     const p = at(e);
     // Wilma can be patted any time (also while Wolfgang works); she's in front of everything.
-    const cat = !overUi && mode !== 'panel' && Wilma.hit(...p);
-    const h = cat ? ['wilma', { label: Wilma.label() }] : overUi || mode === 'work' || mode === 'panel' ? null : hit(p);
+    const covered = mode === 'panel' || mode === 'report';
+    const cat = !overUi && !covered && Wilma.hit(...p);
+    const h = cat ? ['wilma', { label: Wilma.label() }] : overUi || covered || mode === 'work' || mode === 'check' ? null : hit(p);
     const clickable = !!h;
     hover = clickable ? h[0] : null;
     stage.style.cursor = clickable ? 'pointer' : 'default';
@@ -686,9 +809,9 @@ function setupStage() {
   });
   stage.addEventListener('click', e => {
     if (typing && e.target.closest('#say')) return typing.finish();
-    if (e.target.closest('.bubble, .answer, #panel') || mode === 'panel') return;
+    if (e.target.closest('.bubble, .answer, #panel') || mode === 'panel' || mode === 'report') return;
     if (Wilma.hit(...at(e))) return Wilma.pet();
-    if (mode === 'work') return;
+    if (mode === 'work' || mode === 'check') return;
     const h = hit(at(e));
     if (!h) return;
     const action = h[1].action;
@@ -703,7 +826,7 @@ function setupStage() {
 let panelReturn = null;
 
 function openPanel(kind) {
-  if (mode === 'work') return;
+  if (mode === 'work' || mode === 'check' || mode === 'report') return;
   panelReturn = mode;
   mode = 'panel';
   hover = null;
@@ -779,6 +902,7 @@ function keysPanel() {
         ${line('Esc', 'zurück')}
         ${line('Leertaste', 'Text ganz zeigen')}
         ${line('⌘O', 'Dateien auswählen')}
+        ${line('⌘V', 'Webadresse prüfen')}
         ${line('⌘,', 'Einstellungen')}
         ${line('⌘+ ⌘−', 'größer, kleiner')}
         ${line('?', 'diese Übersicht')}

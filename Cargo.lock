@@ -1566,6 +1566,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b1f9e3d69d39e4862ffed03ed071a76f9a13ba1d9109d355b0f0aa6b15e393c4"
 dependencies = [
  "futures-core",
+ "futures-sink",
 ]
 
 [[package]]
@@ -3932,6 +3933,7 @@ checksum = "16a1cfa75cc186dd73d5818e510e042e40927bccc9c236b061cea97e1eb08029"
 dependencies = [
  "base64 0.23.1",
  "bytes",
+ "futures-channel",
  "futures-core",
  "futures-util",
  "http",
@@ -6251,6 +6253,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-updater",
  "tempfile",
+ "wolfgang-check",
  "wolfgang-core",
  "wolfgang-dialogue",
 ]
@@ -6267,6 +6270,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "wolfgang-check"
+version = "2.3.5"
+dependencies = [
+ "chrono",
+ "fastrand",
+ "reqwest",
+ "rustls",
+ "serde",
+ "url",
+]
+
+[[package]]
 name = "wolfgang-cli"
 version = "2.3.5"
 dependencies = [
@@ -6280,6 +6295,7 @@ dependencies = [
  "serde_norway",
  "tempfile",
  "textwrap",
+ "wolfgang-check",
  "wolfgang-core",
  "wolfgang-dialogue",
 ]

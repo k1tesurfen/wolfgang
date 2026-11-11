@@ -11,13 +11,13 @@
     "name": "Ully",
     "identifier": "de.artismedia.ully",
     "feed": "latest-ully.json",
-    "release": false
+    "release": true
   },
   {
     "key": "burgunde",
     "name": "Burgunde",
     "identifier": "de.artismedia.burgunde",
     "feed": "latest-burgunde.json",
-    "release": false
+    "release": true
   }
 ]

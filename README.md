@@ -12,6 +12,7 @@
 
 <p align="center">
   <a href="https://github.com/k1tesurfen/wolfgang/releases/latest/download/Wolfgang.dmg"><img src="https://img.shields.io/badge/Wolfgang_herunterladen-f%C3%BCr_Macs_mit_Apple--Chip-8a5a35?style=for-the-badge" alt="Wolfgang herunterladen (für Macs mit Apple-Chip)" height="40"></a><br>
+  <a href="https://github.com/k1tesurfen/wolfgang/releases/latest"><img src="https://img.shields.io/github/v/release/k1tesurfen/wolfgang?label=neueste%20Version&color=8a5a35" alt="Neueste Version"></a><br>
   <img src="https://img.shields.io/github/v/release/k1tesurfen/wolfgang?label=neueste%20Version&style=flat-square&color=8a5a35" alt="neueste Version">
 </p>
 
@@ -39,6 +40,7 @@ daneben. **Deine Originale fasst er dabei nie an.**
 | **PDFs** | holt die Fotos und Grafiken aus einem PDF (z. B. der Broschüre vom Kunden) – so, wie sie drin sind, Seite für Seite nummeriert. Oder macht das ganze PDF kleiner für den Download: aus der 30-MB-Druckdatei wird eine handliche fürs Web |
 | **Tabellen** | Excel (auch alte XLS und LibreOffice-ODS) wird CSV – ein Blatt, eine Datei –, und CSV wird Excel. Dabei rät Excel nichts um: Postleitzahlen behalten ihre Null vorne, und nichts wird zum Datum, was keins ist |
 | **Schriften** | TTF, OTF und WOFF werden zu WOFF2 – eins zu eins, nichts wird weggelassen, und hinterher Glyphe für Glyphe nachgeprüft |
+| **Webseiten prüfen** | Adresse kopieren, im Büro ⌘V drücken: Wolfgang prüft DNS, Weiterleitungen und jeden Server einzeln und sagt, ob's am DNS, am Server oder an WordPress liegt – mit einem ausgedruckten Bericht zum Kopieren |
 
 **Er liest fast alles:**
 JPG, PNG, HEIC, AVIF, WebP, GIF, TIFF und Kamera-RAW (CR2, CR3, NEF, ARW, DNG) ·
@@ -208,6 +210,18 @@ lies da lieber nochmal drüber. Dafür braucht er einmal ein Zusatzmodul (575 MB
 Einstellungen (**Computer**) bei „Besprechungen aufschreiben“ auf *Installieren*. Alles läuft auf
 deinem Mac, die Aufnahme verlässt ihn nicht.
 
+**Webseiten prüfen („Guck mal, die Seite“):** Eine Adresse kopieren (`kunde.de`, `https://www.kunde.de/kontakt` …)
+und im leeren Büro ⌘V drücken. Wolfgang fragt die eigenen Nameserver der Domain (die Wahrheit),
+Cloudflare, Google, Quad9 und den Mac selbst – sehen die etwas anderes, ist eine DNS-Änderung noch
+nicht überall angekommen, und er sagt, wie lange das noch dauern kann. Dann folgt er der Anfrage
+Schritt für Schritt bis zur Seite und schreibt dazu, wer jeweils umgeleitet hat (WordPress und Yoast
+verraten sich, Cloudflare und der Webserver auch). Jede Adresse der Domain fragt er einzeln, auch
+IPv6 – ein alter AAAA-Eintrag, der noch auf den früheren Server zeigt, fällt so auf. Auf der Seite
+selbst guckt er nach Fehlern, WordPress' Wartungsmodus und `noindex`. Oben sagt er in einem Satz,
+was los ist; darunter kommt der Bericht wie frisch aus dem Nadeldrucker – zum Scrollen, Kopieren
+(etwa für die Mail an den Hoster) und mit × wieder weg. Geprüft wird von deinem Netz aus; Zertifikate
+schaut er sich nicht an (die erneuern sich bei euch von selbst).
+
 **Nochmal ablegen:** Gibst du Wolfgang denselben Ordner noch einmal, erkennt er, was schon fertig
 ist – *„Moment, die kenn ich doch!“* – und macht auf Wunsch nur die neuen Dateien.
 
@@ -270,7 +284,8 @@ wolfgang --json --yes ~/Bilder | jq .        # eine JSON-Zeile pro Ereignis
 | `-y, --yes` | nicht fragen |
 | `--json` | maschinenlesbare Ausgabe |
 
-Weitere Befehle: `wolfgang transcription` (`install`, `remove`: das Zusatzmodul fürs Aufschreiben),
+Weitere Befehle: `wolfgang check kunde.de` (eine Webseite prüfen, `--json` für Skripte; Exit-Code 1,
+wenn er ein Problem findet), `wolfgang transcription` (`install`, `remove`: das Zusatzmodul fürs Aufschreiben),
 `wolfgang presets`, `wolfgang settings`, `wolfgang settings set web-format avif`
 (Schlüssel: `web-format`, `size`, `quality`, `hq-format`, `separator`, `video-format`, `video-size`,
 `video-quality`, `audio-format`, `sound`),
@@ -315,6 +330,7 @@ scripts/build-app.sh ully                        # dasselbe als Ully (oder burgu
 |---|---|
 | `crates/wolfgang-core` | die Umwandlung: Ordner einlesen, Namen, Bilder (Apple ImageIO + mozjpeg/libwebp/rav1e), Schriften (Google woff2), Tabellen (calamine, rust_xlsxwriter), Videos/Audio (ffmpeg), Aufschreiben (whisper.cpp), Logbuch, Einstellungen |
 | `crates/wolfgang-dialogue` | das Gespräch als Zustandsmaschine |
+| `crates/wolfgang-check` | „Guck mal, die Seite“: eigener kleiner DNS-Client, Weiterleitungen, jede Adresse einzeln, der Bericht |
 | `dialogue/de.yaml` | **alles, was Wolfgang sagt** – zum Ausprobieren ohne neu zu bauen: `WOLFGANG_DIALOGUE=dialogue/de.yaml wolfgang …` |
 | `crates/wolfgang-cli` | der Befehl `wolfgang` |
 | `crates/wolfgang-app` | die App (Tauri 2, Oberfläche in `ui/` als schlichtes HTML/CSS/JS) |
@@ -361,7 +377,8 @@ Apple-Silicon-Rechner frei, meldet GitHub den Lauf als fehlgeschlagen, obwohl am
 Version in `Cargo.toml` (workspace) und `crates/wolfgang-app/tauri.conf.json` anheben, committen,
 dann `scripts/release.sh` (legt einen Entwurf an) oder `scripts/release.sh --publish`. Das Skript
 prüft, ob alles committet ist, testet, baut jede Figur, die in `characters.json` mit
-`"release": true` markiert ist (bis Ully und Burgunde eigene Bilder haben: nur Wolfgang), schiebt
+`"release": true` markiert ist (alle drei; Ully und Burgunde vorerst mit Wolfgangs Bildern, der
+Download-Knopf hier im README lädt nur Wolfgang), schiebt
 Commit und Tag `vX.Y.Z` zu GitHub und lädt pro Figur die `.dmg` (zweimal: mit Versionsnummer und
 als `Wolfgang.dmg` für den Download-Knopf), die signierten Update-Dateien (`Wolfgang.app.tar.gz`,
 `latest.json` bzw. `latest-ully.json` …) und den Text aus `.github/release-body.md` hoch. Sobald das Release veröffentlicht ist, bieten alle installierten

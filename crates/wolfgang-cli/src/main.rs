@@ -3,6 +3,7 @@
 //! Exit codes: 0 ok, 1 some files failed (or another error), 2 usage error, 130 aborted.
 
 mod art;
+mod check;
 mod flags;
 mod legacy;
 mod manage;
@@ -41,6 +42,7 @@ fn main() -> ExitCode {
         Some(Command::Presets { action }) => manage::presets(&ui, &mut store, &store_path, action),
         Some(Command::Settings { action }) => manage::settings(&ui, &mut store, &store_path, action),
         Some(Command::Transcription { action }) => manage::transcription(&ui, action),
+        Some(Command::Check { url, json }) => check::run(&ui, &url, json),
         Some(Command::LegacyReset { path, yes }) => legacy_reset(&ui, &path, yes),
         None if cli.run.reset => {
             let dir = cli.run.paths.first().cloned().unwrap_or_else(|| ".".into());

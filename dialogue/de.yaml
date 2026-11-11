@@ -26,6 +26,7 @@ idle:
   - "Ruhiger Tag bisher. Hast du was für mich?"
   - "Wilma schläft schon wieder. Recht hat sie."
   - "Pssst, Wilma macht gerade Mittagsschlaf. Aber leg ruhig was hin."
+  - "Webseite spinnt? Adresse kopieren, hier ⌘V drücken – ich guck sie mir an."
 
 working:
   - "Moment, bin dran …"
@@ -37,6 +38,27 @@ working:
   - "Das hier hin und den da dran. So haben wir's bald."
   - "Läuft und läuft. Wie ein guter Film."
   - "Wilma passt auf, dass nix runterfällt."
+
+# „Guck mal, die Seite“: eine eingefügte Adresse prüfen. Erst „looking“, dann
+# eine Zeile zum Ergebnis; darunter kommt der ausgedruckte Bericht.
+# Platzhalter: {host}, {finding} (das Wichtigste aus dem Bericht), {name}.
+check:
+  looking:
+    - "Moment, ich guck mir {host} mal an …"
+    - "{host}? Ich frag mal rum …"
+    - "Mal sehen, was {host} so treibt …"
+  fine:
+    - "Alles in Ordnung mit {host}. DNS, Weiterleitungen, Server – sauber."
+    - "Kann nix finden. {host} läuft, wie's soll."
+  odd:
+    - "Läuft, aber eine Sache ist komisch: {finding}"
+    - "Geht – aber guck mal: {finding}"
+  dns:
+    - "Das liegt am DNS, nicht an eurem WordPress. {finding}"
+  server:
+    - "Am DNS liegt's nicht, das ist der Server. {finding}"
+  wordpress:
+    - "DNS und Server sind in Ordnung – das ist WordPress. {finding}"
 
 nodes:
   # ── Ankommen ───────────────────────────────────────────────────────────────

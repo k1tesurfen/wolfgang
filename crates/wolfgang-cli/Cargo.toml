@@ -12,6 +12,7 @@ name = "wolfgang"
 path = "src/main.rs"
 
 [dependencies]
+wolfgang-check = { path = "../wolfgang-check" }
 wolfgang-core = { path = "../wolfgang-core" }
 wolfgang-dialogue = { path = "../wolfgang-dialogue" }
 clap = { version = "4", features = ["derive"] }

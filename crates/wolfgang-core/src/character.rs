@@ -19,7 +19,7 @@ pub struct Character {
     pub identifier: String,
     /// The update feed on GitHub (`latest.json` for Wolfgang, as before 2.4).
     pub feed: String,
-    /// Part of releases (false until the character has their own art).
+    /// Part of releases (every app is built and uploaded; the README links only Wolfgang).
     pub release: bool,
 }
 

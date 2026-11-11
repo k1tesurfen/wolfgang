@@ -208,6 +208,73 @@ fn reveal(path: String) -> Res<()> {
     std::process::Command::new("open").arg("-R").arg(&path).status().map(|_| ()).map_err(|e| e.to_string())
 }
 
+// ── „Guck mal, die Seite“: a pasted URL ──────────────────────────────────────
+
+/// What Wolfgang says while he looks; an error if it isn't a web address.
+#[tauri::command]
+fn check_looking(state: State<AppState>, url: String) -> Res<String> {
+    let host = wolfgang_check::parse(&url)?.host_str().unwrap_or_default().to_owned();
+    Ok(lock(&state).script().check.say("looking", &host, ""))
+}
+
+#[derive(Serialize)]
+struct CheckView {
+    verdict: &'static str,
+    mood: wolfgang_dialogue::Mood,
+    says: String,
+    /// The printout (plain text, monospace).
+    report: String,
+}
+
+#[tauri::command]
+async fn check_url(state: State<'_, AppState>, url: String) -> Res<CheckView> {
+    let script = lock(&state).script();
+    eprintln!("wolfgang-app: checking a URL");
+    let c = tauri::async_runtime::spawn_blocking(move || wolfgang_check::check(&url, &|_| {})).await.map_err(|e| e.to_string())??;
+    let finding = c.headline().map(|f| f.text.clone()).unwrap_or_default();
+    let mood = match c.verdict {
+        wolfgang_check::Verdict::Fine => wolfgang_dialogue::Mood::Happy,
+        wolfgang_check::Verdict::Odd => wolfgang_dialogue::Mood::Thinking,
+        _ => wolfgang_dialogue::Mood::Sorry,
+    };
+    Ok(CheckView {
+        verdict: c.verdict.key(),
+        mood,
+        says: script.check.say(c.verdict.key(), &c.host, &finding),
+        report: wolfgang_check::report::text(&c, &wolfgang_core::character::current().name),
+    })
+}
+
+/// Text on the clipboard (for ⌘V; the webview only gets paste events in text fields).
+#[tauri::command]
+fn clipboard_text() -> Option<String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSPasteboard, NSPasteboardTypeString};
+        let text = NSPasteboard::generalPasteboard().stringForType(unsafe { NSPasteboardTypeString });
+        text.map(|t| t.to_string())
+    }
+    #[cfg(not(target_os = "macos"))]
+    None
+}
+
+/// „Kopieren“ on the printout.
+#[tauri::command]
+fn copy_text(text: String) -> Res<()> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_app_kit::{NSPasteboard, NSPasteboardTypeString};
+        use objc2_foundation::NSString;
+        let pb = NSPasteboard::generalPasteboard();
+        pb.clearContents();
+        if pb.setString_forType(&NSString::from_str(&text), unsafe { NSPasteboardTypeString }) {
+            return Ok(());
+        }
+    }
+    let _ = text;
+    Err("Kopieren hat nicht geklappt".into())
+}
+
 /// Where the `wolfgang` command line tool lives inside the app (bundled next to
 /// this executable), and where it gets linked to.
 fn cli_paths() -> (Option<PathBuf>, PathBuf) {
@@ -459,7 +526,11 @@ fn main() {
             install_transcription,
             cancel_transcription_install,
             remove_transcription,
-            character
+            character,
+            check_looking,
+            check_url,
+            clipboard_text,
+            copy_text
         ])
         .setup(|app| {
             // Exactly the office, at the largest whole scale that fits this screen.

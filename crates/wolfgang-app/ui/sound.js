@@ -68,6 +68,8 @@ const Sound = (() => {
     plop() { noise(0.12, { vol: 0.07, cutoff: 1400 }); tone(220, 0.08, { type: 'sine', vol: 0.05, slide: -60 }); },
     jingle() { [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.14, { vol: 0.035, when: i * 0.09 })); },
     sad() { [392, 349, 311].forEach((f, i) => tone(f, 0.18, { type: 'triangle', vol: 0.05, when: i * 0.14 })); },
+    /** A dot-matrix printer: a rattle of short clicks, line after line. */
+    print() { for (let i = 0; i < 22; i++) noise(0.025, { vol: 0.045, cutoff: 2600, when: i * 0.045 + (i % 6 === 5 ? 0.08 : 0) }); },
     sip() { noise(0.25, { vol: 0.03, cutoff: 500 }); tone(180, 0.2, { type: 'sine', vol: 0.03, slide: 40, when: 0.05 }); },
   };
 })();

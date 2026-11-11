@@ -194,6 +194,60 @@ body { display: grid; place-items: center; }
 .key { display: flex; gap: calc(3 * var(--u)); font-size: calc(4.6 * var(--u)); line-height: 1.5; }
 .key .k { min-width: calc(24 * var(--u)); font-weight: 600; }
 
+/* „Guck mal, die Seite“: the printed report, under Wolfgang's bubble. Endless
+   paper from a dot-matrix printer: green bands every three lines, the feed holes
+   left and right, perforation next to them; it all scrolls with the text. */
+#printout {
+  left: calc(36 * var(--u));
+  width: calc(248 * var(--u));
+  bottom: calc(4 * var(--u));
+  top: calc(40 * var(--u)); /* set by app.js to just under the bubble */
+  display: flex;
+}
+#printout.printing #paper { animation: print 1.1s steps(14) both; }
+@keyframes print { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+#paper {
+  --line: calc(4.5 * var(--u) * 1.45);
+  --hole: #3a2e26;
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  --top: calc(11 * var(--u)); /* room for „Kopieren“ and × above the first line */
+  padding: var(--top) calc(15 * var(--u)) calc(8 * var(--u));
+  background-color: #fbf8ef;
+  background-image:
+    radial-gradient(circle at calc(5 * var(--u)) calc(4 * var(--u)), var(--hole) calc(1.5 * var(--u)), transparent calc(1.7 * var(--u))),
+    radial-gradient(circle at calc(100% - 5 * var(--u)) calc(4 * var(--u)), var(--hole) calc(1.5 * var(--u)), transparent calc(1.7 * var(--u))),
+    linear-gradient(to right, transparent calc(10 * var(--u)), #d9d0bd calc(10 * var(--u)), #d9d0bd calc(10.5 * var(--u)), transparent calc(10.5 * var(--u)),
+                    transparent calc(100% - 10.5 * var(--u)), #d9d0bd calc(100% - 10.5 * var(--u)), #d9d0bd calc(100% - 10 * var(--u)), transparent calc(100% - 10 * var(--u))),
+    repeating-linear-gradient(to bottom, #e3eedb 0 calc(3 * var(--line)), transparent calc(3 * var(--line)) calc(6 * var(--line)));
+  background-size: 100% calc(8 * var(--u)), 100% calc(8 * var(--u)), 100% 100%, 100% calc(6 * var(--line));
+  background-position: 0 0, 0 0, 0 0, 0 var(--top); /* the green bands start with the first line */
+  background-repeat: repeat-y;
+  background-attachment: local;
+  box-shadow: 0 calc(1.5 * var(--u)) 0 rgba(0, 0, 0, .35);
+  scrollbar-width: thin;
+}
+#report {
+  margin: 0;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: calc(4.5 * var(--u));
+  line-height: 1.45;
+  white-space: pre;
+  color: #2b2622;
+  user-select: text;
+  -webkit-user-select: text;
+  cursor: text;
+}
+#printout-tools {
+  position: absolute;
+  top: calc(2 * var(--u));
+  right: calc(13 * var(--u));
+  display: flex;
+  gap: var(--u);
+}
+#printout-tools .btn { font-size: calc(5 * var(--u)); padding: 0 calc(2.5 * var(--u)); }
+
 /* Hotspot tooltip */
 #tip {
   position: absolute;

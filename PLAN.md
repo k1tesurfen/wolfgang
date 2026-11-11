@@ -461,6 +461,9 @@ Picking it writes the transcript only: the video/audio isn't converted and the p
 11. ✅ **Transcription** (v2.3.5): meeting recordings (video/audio) → German `.txt`, locally with whisper.cpp; add-on installed in the settings, „Nur aufschreiben“ always the last answer. See *Milestone 11* and *Milestone 11 result*.
 12. **Settings panel tidy-up + „Bürogröße“** (planned): grouped settings, the defaults folded away, the window size as a setting. See section 10.
 13. 🚧 **Three characters: Wolfgang, Ully and Burgunde** (**work in progress**: three apps from one source, decided 2026-11-11; waiting for the art; see section 10).
+14. **„Guck mal, die Seite“: URL check** (step 1 released in 2.3.6, step 2 planned): paste a URL, Wolfgang finds out whether DNS, the server or WordPress is the problem and prints a report. See section 10.
+
+Between 11 and 12 (2026-11-11, released in 2.3.6): **tables** (Excel/XLS/ODS → CSV per sheet, CSV → Excel without Excel's guessing), **PDFs smaller for downloads** (a question for PDFs: pictures out or smaller; oversized pictures → 2000 px JPEG, editor leftovers out, result read back), **speech evenly loud** (loudnorm −16 LUFS). Tested on real PDFs: a print magazine 30.5 → 21.8 MB, a scanned manual 20 → 8.8 MB, web PDFs left as they were.
 
 ---
 
@@ -486,7 +489,7 @@ Still open — mostly checks that need real files from colleagues:
 
 ### Milestone 13: three characters — 🚧 WORK IN PROGRESS
 
-> **Status: work in progress.** Direction and the main questions decided by the user on 2026-11-11 (below). The split is built (step 1, below); Ully and Burgunde use Wolfgang's art until the user's art arrives, and they're not part of releases yet.
+> **Status: work in progress.** Direction and the main questions decided by the user on 2026-11-11 (below). The split is built (step 1, below); Ully and Burgunde use Wolfgang's art until the user's art arrives. Since 2.3.6 all three are built and uploaded with every release (user, 2026-11-11), but the README's download buttons stay Wolfgang only.
 
 **Decided (user, 2026-11-11)**
 - **Three apps from one source: Wolfgang, Ully and Burgunde.** Not a setting inside one app: each character is its own app with its own name in the Dock and Finder (that also avoids the bundle-name problem: macOS reads the name from the app bundle, so a runtime switch would have broken the signature and the self-update). Purely personal: not everyone wants a male office buddy.
@@ -520,8 +523,39 @@ Then the same pipeline as milestone 5: `wolfgang-art import` → hand-editable s
 - `scripts/build-app.sh [key]` builds `<Name>.app`, `<Name>.dmg`, `<Name>.app.tar.gz` and the character's feed, with Tauri's config overridden for name, identifier and updater endpoint; it checks the bundle identifier and that the CLI inside answers with the right name. Wolfgang keeps `de.artismedia.wolfgang` and `latest.json`, so installed Wolfgangs update as before. `scripts/release.sh` builds every character with `"release": true` and uploads all of them in one release.
 - Checked: Ully.app (name, identifier, `latest-ully.json` built into the binary and written with the right URL, self-test, CLI says „Ully:“), Burgunde in the browser mock (`?character=burgunde`), Wolfgang rebuilt with `latest.json`. 130 tests, clippy clean.
 
-**Step 2, when the art arrives:** per-character art (office, desk sprite, portraits) in the art pipeline — `wolfgang-art` builds one set per character and the app's `build.rs` copies the right one (today: one shared `assets/pixel`); the CLI's terminal portrait from the same set; an icon per character (`bundle.icon` override in `build-app.sh`); importing the user's 368×56 desk-pose strip into a `.sprite`. Then `"release": true`, the release text (`.github/release-body.md`) and three download buttons in the README. The GitHub fallback workflow (`release.yml`) still builds only Wolfgang.
+**Step 2, when the art arrives:** per-character art (office, desk sprite, portraits) in the art pipeline — `wolfgang-art` builds one set per character and the app's `build.rs` copies the right one (today: one shared `assets/pixel`); the CLI's terminal portrait from the same set; an icon per character (`bundle.icon` override in `build-app.sh`); importing the user's 368×56 desk-pose strip into a `.sprite`. Then the release text (`.github/release-body.md`) and three download buttons in the README. The GitHub fallback workflow (`release.yml`) still builds only Wolfgang.
 
 **Still open**
 - **Name of the whole thing** (repo, README title, „Wolfgangs Büro“?) once there are three.
 - The art (see above).
+
+### Milestone 14: „Guck mal, die Seite“ — the URL check
+
+**Why (user, 2026-11-11):** the agency looks after many websites, and when one is unreachable or behaves oddly the first question is always: is it our WordPress or the DNS? Wolfgang should answer that from the outside, in a minute, without a terminal.
+
+**Decided (user, 2026-11-11)**
+- **Paste a URL** into Wolfgang (⌘V in the office; `wolfgang check <url>` in the terminal).
+- **Checks:** DNS seen by several public resolvers (1.1.1.1, 8.8.8.8, …) compared with the domain's own nameservers; the path of the request (every redirect until the final page); reachability of every server address.
+- **The result is a printout:** a page Wolfgang just printed, plain monospace text, scrollable, covering the centre of the office. On top a speech bubble with the verdict („Alles in Ordnung“ / „Da ist was komisch“); below it the page. Buttons: copy the report, close with ×.
+- **Left out:** certificate checks (renewed automatically, not a concern) and downloading/converting images from a site (not the agency's workflow). Listing too-large images *is* wanted (step 2).
+
+**Step 1: the basic check**
+- **DNS:** A, AAAA and CNAME (chain) for the host, NS of the zone. Asked: the domain's own nameservers (found by walking up from the host; asked directly, no cache — this is the truth), Cloudflare, Google, Quad9 and the Mac's own resolver. Differences mean a change hasn't arrived everywhere yet; the TTL says how long it can take. If port 53 is blocked on the network, DNS over HTTPS as a fallback.
+- **The path:** start at the URL as pasted (no scheme → `http://`), one request per hop without following automatically, at most 15 hops. Per hop: status, target, time, server, and who redirected — `X-Redirect-By` (WordPress, Yoast …), Cloudflare (`cf-ray`), the web server's own redirects. Loops and http that never becomes https are found here.
+- **Every address:** the final URL asked again at each IPv4 and IPv6 address separately (same name, forced address). Catches the classic stale AAAA record pointing at the old host, and one server of several being out of date (different status or content). If the Mac itself has no IPv6, Wolfgang says he can't check that part.
+- **The final page:** status, title, `noindex` (header or meta tag; the staging setting left on after a relaunch), WordPress's maintenance page (503).
+- **Verdict:** findings with a level (ok / odd / problem), sorted, and one sentence of who's likely to blame: DNS, the server/hosting, or WordPress. The printed report lists everything, also what was fine.
+- **Where it lives:** a new crate `wolfgang-check` (network code apart from the converter), used by the app and the CLI; the report is plain text built there, so the app, the CLI and „Kopieren“ show the same thing. Wolfgang's lines for the bubble live in the dialogue file. `--json` for the CLI.
+- **Only harmless requests:** GET/HEAD like a browser, a few per check, no scanning.
+
+**Step 1 result (2026-11-11) ✅**
+- New crate `wolfgang-check`. DNS is its own small client (`dns.rs`: queries and answers incl. name compression, UDP → TCP when truncated, DNS over HTTPS when port 53 is closed) instead of hickory: no async runtime, and the domain's own nameservers can be asked directly without recursion. The zone comes from the SOA (a bare TLD means the domain isn't registered); CNAMEs into other zones are followed to those zones' nameservers. HTTP is reqwest (blocking, rustls/ring, macOS trust store) — the app's updater already had it.
+- The verdict comes from findings (ok / odd / problem, each with an area: DNS, server, WordPress, page). Calibrated on real sites: different addresses from a domain's nameservers are only a problem if one of those addresses answers differently or not at all (GitHub hands out several on purpose); public resolvers are only „behind“ if they have an address the nameservers don't. Addresses are checked per name: the pasted one and the one the path ends on (`www.…`). Slow first answers (> 3 s) are odd.
+- App: ⌘V on the empty desk (clipboard read via NSPasteboard; a paste-event fallback in case the Edit menu takes ⌘V). Wolfgang types while he looks; then the verdict in the bubble and the printout under it: endless paper with feed holes and green bands every three lines, printed in with a little dot-matrix rattle, monospace text from `report::text` (the same as in the terminal and on the clipboard). „Kopieren“ (also ⌘C or c without a selection), × (also Esc/q), j/k/Space/g/G to scroll; text can be selected. While looking, „Lass mal“ drops it. Mid-conversation, ⌘V does nothing (it would lose the conversation).
+- Lines in `dialogue/de.yaml` under `check:` (looking, fine, odd, dns, server, wordpress) with `{host}` and `{finding}`; an idle line hints at ⌘V. CLI: `wolfgang check <url> [--json]`, exit 0 fine/odd, 1 problem, 2 not a URL.
+- Tests: DNS packets, page parsing, wrapping, and the verdict for a healthy site, a change on its way, a stale IPv6 address, disagreeing nameservers, load balancing, WordPress 500 and redirect loops, noindex, slow pages, an unknown domain; the CLI refusing non-URLs. Tried live on artismedia.de, github.com, example.com, neverssl.com and an unregistered domain. The printout was looked at in the browser mock (`?check`); the real window's ⌘V wasn't tried yet.
+
+**Step 2**
+- **Redirect list after a relaunch:** drop a CSV or Excel list of old URLs (the table import from today) — Wolfgang checks where each one ends and lists 404s, loops and chains.
+- **Mail DNS:** MX, SPF, DMARC, common DKIM selectors — „warum landen die Mails im Spam?“
+- **Too-large images on a page:** the heaviest images of the final page with size and dimensions. Listing only.

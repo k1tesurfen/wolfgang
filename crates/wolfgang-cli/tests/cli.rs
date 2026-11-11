@@ -214,3 +214,13 @@ fn transcripts_need_the_add_on() {
     let written = std::fs::read_to_string(root.join("wolfgang_output/kurze-ansage.txt")).unwrap();
     assert!(written.contains("Projekt") && written.contains("Januar") && !written.contains("[00:"), "{written}");
 }
+
+#[test]
+fn check_refuses_what_isnt_a_web_address() {
+    let t = tempfile::tempdir().unwrap();
+    for bad in ["hallo", "ftp://example.de"] {
+        let o = wolfgang(t.path(), &["check", bad]);
+        assert_eq!(o.status.code(), Some(2), "{}", text(&o));
+        assert!(text(&o).contains(bad.trim_start_matches("ftp://")), "{}", text(&o));
+    }
+}

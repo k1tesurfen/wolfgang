@@ -12,7 +12,7 @@ pub mod template;
 
 pub use context::Context;
 pub use conversation::{AnswerView, Conversation, InputView, Step};
-pub use script::{Mood, Script, ScriptError};
+pub use script::{CheckLines, Mood, Script, ScriptError};
 
 use std::sync::Arc;
 

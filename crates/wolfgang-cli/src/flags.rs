@@ -129,6 +129,14 @@ pub enum Command {
         #[command(subcommand)]
         action: Option<TranscriptionAction>,
     },
+    /// Eine Webseite prüfen: DNS, Weiterleitungen, jeder Server einzeln
+    Check {
+        /// Die Adresse, z. B. example.de oder https://www.example.de/kontakt
+        url: String,
+        /// Maschinenlesbare Ausgabe
+        #[arg(long)]
+        json: bool,
+    },
     /// Umbenennungen des alten Wolfgang (1.x) an Originaldateien rückgängig machen
     LegacyReset {
         /// Ordner, in dem der alte Wolfgang lief

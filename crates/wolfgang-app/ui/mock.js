@@ -9,6 +9,7 @@
 //   ?addon                           the add-on for „Nur aufschreiben“ is installed
 //   ?addon=installing                … or is being downloaded
 //   ?character=ully|burgunde         look at the office as Ully or Burgunde
+//   ?check                           paste example.com (⌘V) and get the printout
 'use strict';
 
 if (!window.__TAURI__) {
@@ -17,6 +18,8 @@ if (!window.__TAURI__) {
     const emit = (ev, payload) => (listeners[ev] || []).forEach(f => f(payload));
     const ask = (node, mood, lines, answers, extra = {}) => ({ type: 'ask', node, mood, lines, answers: answers.map(a => (typeof a === 'string' ? { label: a, current: false } : a)), input: null, can_go_back: true, output: null, ...extra });
 
+    // A real report (wolfgang check example.com), for the printout.
+    const exampleReport = "WOLFGANGS SEITEN-CHECK                                 11.11.2026, 16:52\nexample.com\n────────────────────────────────────────────────────────────────────────\n\nERGEBNIS\n! Die Seite bleibt auf http – es gibt keine Weiterleitung auf https.\n✓ DNS ist überall gleich: example.com 104.20.23.154, 172.66.147.243,\n  2606:4700:10::6814:179a, 2606:4700:10::ac42:93f3.\n✓ Alle 4 Adressen von example.com antworten gleich.\n✓ Die Seite lädt (200) in 31 ms: „Example Domain“.\n\nDNS  example.com\n  Zone example.com, Nameserver: elliott.ns.cloudflare.com,\n  hera.ns.cloudflare.com\n\n  Eigene Nameserver der Domain (die Wahrheit):\n    elliott.ns.cloudflare.com  (gültig 5 Min.)\n      104.20.23.154, 172.66.147.243, 2606:4700:10::6814:179a,\n      2606:4700:10::ac42:93f3\n    hera.ns.cloudflare.com  (gültig 5 Min.)\n      104.20.23.154, 172.66.147.243, 2606:4700:10::6814:179a,\n      2606:4700:10::ac42:93f3\n\n  Öffentliche Resolver (was die Welt sieht):\n    Cloudflare (1.1.1.1)  (noch 2 Min.)\n      104.20.23.154, 172.66.147.243, 2606:4700:10::6814:179a,\n      2606:4700:10::ac42:93f3\n    Google (8.8.8.8)  (noch 5 Min.)\n      104.20.23.154, 172.66.147.243, 2606:4700:10::6814:179a,\n      2606:4700:10::ac42:93f3\n    Quad9 (9.9.9.9)  (noch 2 Min.)\n      104.20.23.154, 172.66.147.243, 2606:4700:10::6814:179a,\n      2606:4700:10::ac42:93f3\n\n  Dieser Mac:\n    104.20.23.154, 172.66.147.243, 2606:4700:10::6814:179a,\n    2606:4700:10::ac42:93f3\n\nWEG DER ANFRAGE\n   1  200   31 ms\n      http://example.com/\n      an 2606:4700:10::6814:179a, Server: cloudflare, über Cloudflare\n\nJEDE ADRESSE EINZELN\n  example.com:\n    104.20.23.154                           200  39 ms  cloudflare\n    172.66.147.243                          200  39 ms  cloudflare\n    2606:4700:10::6814:179a                 200  41 ms  cloudflare\n    2606:4700:10::ac42:93f3                 200  37 ms  cloudflare\n\nDIE SEITE\n  http://example.com/\n  Status:          200\n  Titel:           Example Domain\n  WordPress:       nein\n  Suchmaschinen:   erlaubt\n\n────────────────────────────────────────────────────────────────────────\n";
     const characterKey = new URLSearchParams(location.search).get('character') || 'wolfgang';
     const character = { key: characterKey, name: characterKey[0].toUpperCase() + characterKey.slice(1) };
     const views = {
@@ -81,6 +84,12 @@ if (!window.__TAURI__) {
       pick_files: () => ['/demo/mode'],
       take_pending: () => [],
       character: () => character,
+      clipboard_text: () => 'example.com',
+      check_looking: ({ url }) => {
+        if (!url.includes('.')) throw `„${url}“ ist keine Adresse, mit der ich was anfangen kann`;
+        return `Moment, ich guck mir ${url} mal an …`;
+      },
+      check_url: () => new Promise(ok => setTimeout(() => ok({ verdict: 'odd', mood: 'thinking', says: "Geht – aber guck mal: Die Seite bleibt auf http – es gibt keine Weiterleitung auf https.", report: exampleReport }), 2500)),
       transcription: () => addon,
       install_transcription: () => {
         // Pretends to download the add-on in about 8 seconds.

@@ -6,6 +6,9 @@
 //! after_cancel: stopped     # node after a cancelled run
 //! idle: ["Leg mir was auf den Tisch."]   # lines for an empty desk
 //! working: ["Moment …"]                  # lines while converting
+//! check:                                  # „Guck mal, die Seite“ (a pasted URL)
+//!   looking: ["Moment, ich guck mir {host} an …"]
+//!   fine: […]   odd: […]   dns: […]   server: […]   wordpress: […]   # per verdict, with {finding}
 //! nodes:
 //!   greet:
 //!     mood: happy
@@ -53,7 +56,45 @@ pub struct Script {
     pub idle: Vec<String>,
     #[serde(default)]
     pub working: Vec<String>,
+    #[serde(default)]
+    pub check: CheckLines,
     pub nodes: BTreeMap<String, Node>,
+}
+
+/// What Wolfgang says about a checked URL. `{host}`, `{finding}` (the most
+/// important finding) and `{name}` can be used; one variant is picked at random.
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct CheckLines {
+    pub looking: Vec<String>,
+    pub fine: Vec<String>,
+    pub odd: Vec<String>,
+    pub dns: Vec<String>,
+    pub server: Vec<String>,
+    pub wordpress: Vec<String>,
+}
+
+impl CheckLines {
+    const VARS: &[&str] = &["host", "finding", "name"];
+
+    fn all(&self) -> [(&'static str, &Vec<String>); 6] {
+        [("looking", &self.looking), ("fine", &self.fine), ("odd", &self.odd), ("dns", &self.dns), ("server", &self.server), ("wordpress", &self.wordpress)]
+    }
+
+    /// A line for `key` (`looking` or a verdict), filled in.
+    pub fn say(&self, key: &str, host: &str, finding: &str) -> String {
+        let lines = self.all().into_iter().find(|(k, _)| *k == key).map(|(_, l)| l.as_slice()).unwrap_or_default();
+        let Some(line) = (!lines.is_empty()).then(|| &lines[fastrand::usize(..lines.len())]) else { return String::new() };
+        let name = wolfgang_core::character::current().name.clone();
+        template::render(line, |v| match v {
+            "host" => Some(template::Var::Text(host.to_owned())),
+            "finding" => Some(template::Var::Text(finding.to_owned())),
+            "name" => Some(template::Var::Text(name.clone())),
+            _ => None,
+        })
+        .trim()
+        .to_owned()
+    }
 }
 
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -233,6 +274,18 @@ impl Script {
         }
         for (i, l) in self.idle.iter().chain(&self.working).enumerate() {
             check_text(&mut errors, &format!("idle/working #{i}"), l, &[]);
+        }
+        // Without a `check:` section the URL check has nothing to say; with one, every verdict needs a line.
+        let has_check = self.check.all().iter().any(|(_, l)| !l.is_empty());
+        for (key, lines) in self.check.all() {
+            if has_check && lines.is_empty() {
+                errors.push(format!("check.{key}: keine Zeile"));
+            }
+            for l in lines {
+                if let Err(e) = template::check(l, |n| CheckLines::VARS.contains(&n).then_some(false)) {
+                    errors.push(format!("check.{key}: {e}"));
+                }
+            }
         }
         for (id, n) in &self.nodes {
             let at = |what: &str| format!("Knoten '{id}' {what}");

@@ -109,6 +109,10 @@ impl Office {
         }
     }
 
+    pub fn script(&self) -> Arc<Script> {
+        self.script.clone()
+    }
+
     pub fn idle_line(&mut self) -> String {
         Conversation::idle_line(&self.script, &mut self.rng)
     }
