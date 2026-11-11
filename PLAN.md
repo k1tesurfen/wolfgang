@@ -3,7 +3,7 @@
 > Wolfgang is the personification of conversion: a cozy, bearded guy in a cardigan who sits behind his desk with a coffee and converts whatever you put in front of him.
 > Usability for non-technical colleagues is the top priority.
 
-Status: **approved**. Milestones 1–10 are done and released (v2.2 video and audio, v2.3 the polish of milestone 10; current release 2.3.4). Milestone 11 (transcription) was released in v2.3.5. Next: milestone 12 (tidy settings panel, „Bürogröße“); milestone 13 (character selection) is a work-in-progress vision. See section 10. Open points: section 9.
+Status: **approved**. Milestones 1–10 are done and released (v2.2 video and audio, v2.3 the polish of milestone 10; current release 2.3.4). Milestone 11 (transcription) was released in v2.3.5. Next: milestone 12 (tidy settings panel, „Bürogröße“); milestone 13 (three characters as three apps) is work in progress, waiting for the art. See section 10. Open points: section 9.
 
 ---
 
@@ -460,7 +460,7 @@ Picking it writes the transcript only: the video/audio isn't converted and the p
 10. ✅ **Polish** (v2.3): video/audio settings, time estimates, well-packed videos, animated GIFs → videos, pictures from PDFs, releases from the Mac. See *Milestone 10*.
 11. ✅ **Transcription** (v2.3.5): meeting recordings (video/audio) → German `.txt`, locally with whisper.cpp; add-on installed in the settings, „Nur aufschreiben“ always the last answer. See *Milestone 11* and *Milestone 11 result*.
 12. **Settings panel tidy-up + „Bürogröße“** (planned): grouped settings, the defaults folded away, the window size as a setting. See section 10.
-13. 🚧 **Character selection: Wolfgang, Ulli or Burgunde** (future, **work in progress** — a vision, nothing decided): see section 10.
+13. 🚧 **Three characters: Wolfgang, Ully and Burgunde** (**work in progress**: three apps from one source, decided 2026-11-11; waiting for the art; see section 10).
 
 ---
 
@@ -484,10 +484,36 @@ Still open — mostly checks that need real files from colleagues:
 1. **Settings grouped, defaults folded away.** The panel has 11 rows and is full (milestone 11 already tightened the spacing to fit the last one). Proposal: groups with a small heading each — *Bilder* (web format, size, quality, high-quality format, separator), *Videos & Audio* (video format, size, quality, audio format), *Büro* (sounds, Bürogröße), *Besprechungen aufschreiben* (the add-on). The default answers (everything in *Bilder* and *Videos & Audio*) start folded as an accordion („Meine Standards ▸“); *Büro* and the add-on stay visible. Keyboard: j/k walk the visible rows, Enter on a group heading opens/closes it. To decide with the user: which groups start open, and whether the open/closed state is remembered.
 2. **⌘+ / ⌘− visible as „Bürogröße“.** Checked 2026-11-11: works with what's there. `zoom` (app `main.rs`) already changes the window in whole steps and stores `defaults.window_scale`; `max_scale` knows the largest size that fits the screen (75 % of it). Needed: a command that returns `{ current, max, default }` and one that sets an absolute scale (or `zoom` with a target), and a row in the *Büro* group: e.g. `−` / `4×` / `+` or the sizes that fit as buttons (*Klein* = 3, *Normal* = 4, *Groß* = 5, more only if the screen allows; „Normal“ marked as the default). The panel scales with the window, so it stays readable while you click. ⌘0 stays „back to default“. Depends on item 1 for space.
 
-### Milestone 13 (future): character selection — 🚧 WORK IN PROGRESS
+### Milestone 13: three characters — 🚧 WORK IN PROGRESS
 
-> **Status: work in progress.** The user's vision (2026-11-11); not scheduled, nothing decided yet. The notes below are first thoughts to discuss, not a plan.
+> **Status: work in progress.** Direction and the main questions decided by the user on 2026-11-11 (below). Waiting for the art from the user. Nothing is built yet.
 
-- **Character selection: Wolfgang, Ulli or Burgunde.** The user picks one of three characters. Purely personal: not everyone wants a male office buddy. All three share the office, the dialogue logic and the settings; each needs their own desk sprite (idle/talk/type/sip/handover), eight mood portraits, an app icon, and their own voice in a dialogue file (`dialogue/de-ulli.yaml`, … — the voice differs, the questions don't). Wilma stays.
-  - *App name from a setting:* the Dock and Finder name come from the app bundle (`CFBundleName` in `Info.plist`, read by macOS at launch). Changing it at runtime would break the ad-hoc signature, and with it the self-update. What works: the window title, everything inside the office, the speech bubbles and the CLI greeting follow the chosen character. Alternatively the app gets one neutral name for all three — a naming decision for the user. Three separate app builds would also work but triple the releases.
-  - Biggest cost is the art: reference studies per character (like the eight Wolfgang portraits and Wilma's study), then the same pixelize pipeline (milestone 5).
+**Decided (user, 2026-11-11)**
+- **Three apps from one source: Wolfgang, Ully and Burgunde.** Not a setting inside one app: each character is its own app with its own name in the Dock and Finder (that also avoids the bundle-name problem: macOS reads the name from the app bundle, so a runtime switch would have broken the signature and the self-update). Purely personal: not everyone wants a male office buddy.
+- **Same office, cosmetically different.** Each character gets their own office picture, but only cosmetic changes: same perspective, desk, objects and positions. So `scene.json`'s geometry, every clickable area (computer, clipboard, mug, desk/mat, the character, Wilma) and the speech-bubble layout stay identical for all three.
+- **Wilma stays**, the same cat in all three offices.
+- **The user provides the art:** a character study and an office per character.
+
+**What differs per character (build-time config, one source)**
+- Identity: product name, bundle identifier (e.g. `de.artismedia.wolfgang` / `.ully` / `.burgunde`, so they can sit side by side), window title, app icon (from the happy portrait, like Wolfgang's).
+- Art: office background, desk sprite (idle / talk / type / sip / handover, like `wolfgang.sprite`), eight mood portraits (happy, thinking, surprised, content, laughing, side-eye, dreamy, sorry — the dialogue's moods).
+- Words: the character's name wherever Wolfgang talks about himself or is named (≈ 45 places today across UI, dialogue, CLI, scripts, release text); grammar where it depends on the character („Über Wolfgang“, „auf Wolfgang selbst klicken“).
+- Releases: each app has its own dmg and its own update feed (`latest.json`), so an installed Ully only ever updates to Ully.
+
+**What stays shared:** the engine, the questions, Wilma, the scene geometry and hotspots, the settings panel, the transcription add-on.
+
+**Art the user will deliver (per character)** — like Wolfgang's references in `assets/reference/`:
+- an office picture in the same framing as `office.jpeg` (cosmetic changes only);
+- a character study on a clean grid like `wilma-study.jpeg`, with the desk poses (sitting, talking, typing, sipping, handing over);
+- eight portraits with the same expressions as `portrait-1-happy` … `portrait-8-sorry`.
+Then the same pipeline as milestone 5: `wolfgang-art import` → hand-editable sources → `build`.
+
+**Decided (user, 2026-11-11, second round)**
+- **Command line:** one shared `wolfgang` command; every app installs the same one, and in the terminal it shows the installed character's portrait and name.
+- **Settings and the add-on are shared** between the apps on one Mac: one settings file (presets, „letztes Mal“, favourite formats) and the 575 MB transcription add-on downloaded once.
+- **Voice: same lines, only the name swapped** (plus grammar that depends on it), one dialogue file. Own personalities per character can come later in the dialogue files without touching code.
+- **Releases: one version, one tag, one GitHub release** with three dmgs and three update feeds; the README gets three download buttons.
+
+**Still open**
+- **Name of the whole thing** (repo, README title, „Wolfgangs Büro“?) once there are three.
+- The art (see above).
