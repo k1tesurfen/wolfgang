@@ -643,7 +643,8 @@ const Normal = (() => {
     const pick = (options, key) => seg(options, d[key], v => save({ [key]: v }));
 
     const general = el('section.panel', {}, el('h2', { text: 'Allgemein' }),
-      field('Ansicht', el('button.pill', { text: 'Spiel-Modus', disabled: running, onclick: toGame }), el('span.hint', { text: running ? 'Geht nach dem Konvertieren.' : `Das Büro mit ${character.name}: alles als Gespräch.` })));
+      el('div.control', {}, el('button.pill', { text: 'Spiel-Modus', disabled: running, onclick: toGame }),
+        el('span.hint', { text: running ? 'Geht nach dem Konvertieren.' : `Zurück in das Büro von ${character.name}` })));
 
     const head = el('button.fold-head', { 'aria-expanded': String(standardsOpen), onclick: () => { standardsOpen = !standardsOpen; redraw(); } },
       el('span.arrow', { text: '▸' }), el('span', { text: 'Meine Standards' }));
