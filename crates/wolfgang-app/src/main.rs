@@ -203,6 +203,8 @@ fn set_normal_mode(window: tauri::WebviewWindow, state: State<AppState>, on: boo
 
 /// Normal mode: a plain window that can be resized. Game mode: exactly the office.
 fn shape_window(window: &tauri::WebviewWindow, prefs: &AppPrefs, scale: Option<u32>) {
+    // The page's own background, so nothing flashes before it's drawn.
+    let _ = window.set_background_color(Some(if prefs.normal_mode { tauri::window::Color(23, 23, 23, 255) } else { tauri::window::Color(0x2a, 0x21, 0x1c, 255) }));
     if prefs.normal_mode {
         let (w, h) = prefs.normal_size.unwrap_or(NORMAL_SIZE);
         let _ = window.set_resizable(true);

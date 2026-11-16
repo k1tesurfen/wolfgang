@@ -320,6 +320,27 @@ mod tests {
         assert!(desk.plan(settings, true).is_ok());
     }
 
+    /// Exactly what normal.js's `settings()` sends, so the two can't drift apart.
+    #[test]
+    fn the_cards_json_is_understood() {
+        let web: RunSettings = serde_json::from_str(
+            r#"{"images":{"mode":"web","format":"avif","max_side":1200,"quality":70,
+                "naming":{"prefix":"Kunde","use_keyword_files":true,"folder_keywords":{"Team":"meeting"},"keywords_all":"buero","separator":"caps","append_original":true}},
+               "videos":{"format":"webm","size":null,"quality":"nicer","sound":false,"poster":true,"background":"black"},
+               "audio_transcript":{"timestamps":false},
+               "pdfs":{"mode":"smaller"}}"#,
+        )
+        .unwrap();
+        let Some(ImageSettings::Web(w)) = &web.images else { panic!("{web:?}") };
+        assert_eq!((w.max_side, w.naming.folder_keywords["Team"].as_str()), (1200, "meeting"));
+        assert_eq!(web.videos.as_ref().unwrap().size, None, "Original");
+        assert!(web.audio_transcript.is_some() && web.validate().is_ok());
+        let hq: RunSettings = serde_json::from_str(r#"{"images":{"mode":"high_quality","format":"png"},"audio":{"format":"aac","content":"speech"},"video_transcript":{"timestamps":true}}"#).unwrap();
+        assert_eq!(hq.images, Some(ImageSettings::HighQuality { format: ImageFormat::Png }));
+        // The web settings alone (name preview) too.
+        let _: WebSettings = serde_json::from_value(serde_json::to_value(w).unwrap()).unwrap();
+    }
+
     #[test]
     fn templates_only_set_whats_on_the_desk() {
         let t = tempfile::tempdir().unwrap();
