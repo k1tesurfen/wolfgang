@@ -462,6 +462,7 @@ Picking it writes the transcript only: the video/audio isn't converted and the p
 12. **Settings panel tidy-up + „Bürogröße“** (planned): grouped settings, the defaults folded away, the window size as a setting. See section 10.
 13. 🚧 **Three characters: Wolfgang, Ully and Burgunde** (**work in progress**: three apps from one source, decided 2026-11-11; waiting for the art; see section 10).
 14. **„Guck mal, die Seite“: URL check** (step 1 released in 2.3.6, step 2 planned): paste a URL, Wolfgang finds out whether DNS, the server or WordPress is the problem and prints a report. See section 10.
+15. 🚧 **„Normaler Modus“** (built 2026-11-16, waiting for the user's test): every app can also be a plain, dark conversion tool without the game. Includes milestone 12's „Meine Standards“ accordion and „Bürogröße“. See section 11.
 
 Between 11 and 12 (2026-11-11, released in 2.3.6): **tables** (Excel/XLS/ODS → CSV per sheet, CSV → Excel without Excel's guessing), **PDFs smaller for downloads** (a question for PDFs: pictures out or smaller; oversized pictures → 2000 px JPEG, editor leftovers out, result read back), **speech evenly loud** (loudnorm −16 LUFS). Tested on real PDFs: a print magazine 30.5 → 21.8 MB, a scanned manual 20 → 8.8 MB, web PDFs left as they were.
 
@@ -566,3 +567,26 @@ Then the same pipeline as milestone 5: `wolfgang-art import` → hand-editable s
 - **Redirect list after a relaunch:** drop a CSV or Excel list of old URLs (the table import from today) — Wolfgang checks where each one ends and lists 404s, loops and chains.
 - **Mail DNS:** MX, SPF, DMARC, common DKIM selectors — „warum landen die Mails im Spam?“
 - **Too-large images on a page:** the heaviest images of the final page with size and dimensions. Listing only.
+
+---
+
+## 11. „Normaler Modus“ (milestone 15)
+
+**Why (user, 2026-11-16):** not everyone is in the mood for a game or pixel art. Each app (Wolfgang, Ully, Burgunde) gets a normal mode: the same engine as a plain, professional tool. No character in it at all; the app is just called what it's called.
+
+**Decided (user, 2026-11-16, one question at a time)**
+- **Switch:** a deliberate setting, not a toolbar button. Game settings: „Ansicht → Normaler Modus“; normal settings: „Ansicht → Spiel-Modus“. Switching drops whatever was on the desk and starts fresh (disabled while converting). Remembered **per app** (`UserStore.apps[key]`), a fresh install starts in game mode.
+- **Window:** a normal, freely resizable macOS window (min 620×520, first 900×720, size remembered per app). The title bar stays transparent like in game mode: **no header**, the traffic lights float over an empty strip.
+- **Look:** dark only, after the agency's settings styles (`example-styles.css`, local only, not committed): pill buttons, soft raised panels (two-sided shadow), coral accent for focus and progress. System font (SF Pro).
+- **Empty state:** like AppCleaner: one big drop zone in the middle („Dateien oder Ordner hierher ziehen“, click = Finder dialog), with the hint that ⌘V checks a website. Nothing else.
+- **After a drop:** one card per pile. Each starts with only its first decision (Fotos: Fürs Web / Hochwertig; Videos: MP4 / WebM / Nur aufschreiben; Audio: MP3 / AAC / Nur aufschreiben; PDFs: Bilder rausholen / Kleiner machen), **nothing picked**. Picking unfolds the rest of that pile's options, pre-filled from „letztes Mal“ (not its keywords) or the defaults. Fonts and tables are cards that just say what happens.
+- **Above the cards:** a template drop-down (Keine / Wie letztes Mal / presets), „N Dateien sind schon konvertiert – trotzdem nochmal machen“, unreadable files folded as details, duplicates.
+- **Keywords:** where `.txt` files exist they're used (switchable); one field for the rest, „Je Ordner einzeln“ expands one field per folder; a live example name below.
+- **Toolbar at the bottom:** settings (gear), status/estimate, „Leeren“, „Als Vorlage speichern …“, **„Konvertieren“** (bottom right, enabled once every card has its decision). Converting: the cards lock, a progress bar and „Abbrechen“ in the toolbar, then a result card on top with „Im Finder zeigen“ / „Neue Dateien“. A second drop before converting adds to the piles.
+- **Settings in normal mode** replace the main view (toolbar: „Fertig“): Allgemein (Spiel-Modus), **„Meine Standards ▸“ folded every time**, Vorlagen, Besprechungen aufschreiben (add-on), Kommandozeile, Version/update. „Über“ is the standard macOS menu item.
+- **Game settings (milestone 12, while at it):** Ansicht, Geräusche, Bürogröße (Winzig … Riesig, as far as the screen allows), the add-on, then „Meine Standards ▸“ folded every time the panel opens.
+
+**Built (2026-11-16)**
+- `wolfgang-app/src/desk.rs`: the normal-mode session without the conversation: `DeskView` (piles, known/new, unknown, keyword folders, defaults, last run, presets), name preview and estimate (now shared functions in `wolfgang_dialogue::context`, used by the conversation too), plan from the cards' `RunSettings` (piles not on the desk are dropped), and a plain `ResultView`. Commands `desk_drop` (with `add`), `desk_preview`, `desk_estimate`, `desk_start` (`progress`, `desk-finished`), `save_preset`, `app_prefs`, `set_normal_mode`, `office_size`, `set_office_size`.
+- UI: `ui/normal.js` + `ui/normal.css`; `app.js` hands over before loading any pixel art. Browser preview: `index.html?normal`, `&demo`, `&demo=photos`, `&pick=images:web,videos:mp4`, `&run`, `&panel=settings`, `&check`.
+

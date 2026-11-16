@@ -52,12 +52,25 @@ pub struct Preset {
     pub settings: RunSettings,
 }
 
+/// How one app (Wolfgang, Ully or Burgunde) looks on this Mac. The rest of the
+/// store is shared by all three; this is not, so each can keep its own mode.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct AppPrefs {
+    /// „Normaler Modus“: a plain conversion tool instead of the office.
+    pub normal_mode: bool,
+    /// Window size in normal mode (logical points); `None` = the app's default.
+    pub normal_size: Option<(u32, u32)>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct UserStore {
     pub defaults: Defaults,
     pub last_run: Option<RunSettings>,
     pub presets: Vec<Preset>,
+    /// Per app, by character key.
+    pub apps: std::collections::BTreeMap<String, AppPrefs>,
 }
 
 /// Result of loading: the store plus a note if a broken file had to be set aside.
@@ -132,6 +145,15 @@ impl UserStore {
         last.fonts = None;
     }
 
+    /// This app's own preferences (defaults if it never saved any).
+    pub fn app(&self, key: &str) -> AppPrefs {
+        self.apps.get(key).cloned().unwrap_or_default()
+    }
+
+    pub fn app_mut(&mut self, key: &str) -> &mut AppPrefs {
+        self.apps.entry(key.to_owned()).or_default()
+    }
+
     pub fn preset(&self, name: &str) -> Option<&Preset> {
         self.presets.iter().find(|p| p.name.eq_ignore_ascii_case(name.trim()))
     }
@@ -172,6 +194,23 @@ mod tests {
         store.save(&path).unwrap();
 
         assert_eq!(UserStore::load(&path).unwrap().store, store);
+    }
+
+    #[test]
+    fn each_app_keeps_its_own_mode() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("settings.json");
+        // A settings file from before normal mode loads with every app in game mode.
+        std::fs::write(&path, r#"{"defaults":{"quality":70}}"#).unwrap();
+        let mut store = UserStore::load(&path).unwrap().store;
+        assert!(!store.app("ully").normal_mode);
+        store.app_mut("ully").normal_mode = true;
+        store.app_mut("ully").normal_size = Some((900, 700));
+        store.save(&path).unwrap();
+        let store = UserStore::load(&path).unwrap().store;
+        assert!(store.app("ully").normal_mode && !store.app("wolfgang").normal_mode);
+        assert_eq!(store.app("ully").normal_size, Some((900, 700)));
+        assert_eq!(store.defaults.quality, 70);
     }
 
     #[test]

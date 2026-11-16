@@ -4,7 +4,9 @@
 use std::collections::BTreeMap;
 use std::path::PathBuf;
 use wolfgang_core::kind::FileKind;
-use wolfgang_core::settings::{AudioSettings, ImageSettings, TranscriptSettings, VideoSettings};
+use wolfgang_core::naming::{self, Separator};
+use wolfgang_core::settings::{AudioSettings, ImageSettings, TranscriptSettings, VideoSettings, WebSettings};
+use wolfgang_core::ImageFormat;
 use wolfgang_core::workspace::Piles;
 use wolfgang_core::{RunSettings, Summary, UserStore, Workspace};
 
@@ -169,6 +171,42 @@ impl Context {
         let p = self.piles();
         self.last_run().map(|r| describe_settings(r, p)).unwrap_or_default()
     }
+}
+
+/// How long the videos and transcripts will take, from what ffprobe found (`None`
+/// without either, or if a file couldn't be read). Other piles are quick in comparison.
+pub fn estimate(s: &Summary, settings: &RunSettings, only_new: bool) -> Option<std::time::Duration> {
+    let infos = |facts: &'_ [wolfgang_core::workspace::VideoFacts]| -> Option<Vec<wolfgang_core::media::MediaInfo>> {
+        facts.iter().filter(|f| !(only_new && f.known)).map(|f| f.info.clone()).collect()
+    };
+    let mut total = None;
+    if let Some(v) = &settings.videos {
+        let videos = infos(&s.video_facts)?;
+        total = Some(wolfgang_core::media::estimate(&videos.iter().collect::<Vec<_>>(), v)?);
+    }
+    let mut lengths = Vec::new();
+    for (on, facts) in [(settings.video_transcript.is_some(), &s.video_facts), (settings.audio_transcript.is_some(), &s.audio_facts)] {
+        if on {
+            lengths.extend(infos(facts)?.iter().map(|i| i.duration).collect::<Option<Vec<f64>>>()?);
+        }
+    }
+    if !lengths.is_empty() {
+        total = Some(total.unwrap_or_default() + wolfgang_core::transcribe::estimate(&lengths));
+    }
+    total
+}
+
+/// Example file name for the first image on the desk with these web settings.
+pub fn name_preview(ctx: &Context, web: &WebSettings, sep: Separator) -> String {
+    let n = &web.naming;
+    let (dir, stem) = ctx.sample_image.clone().unwrap_or_else(|| (String::new(), "bild".into()));
+    let keywords = match ctx.keyword_words.get(&dir).filter(|_| n.use_keyword_files) {
+        Some(words) => words.clone(),
+        None => naming::keyword_words(n.folder_keywords.get(&dir).filter(|k| !k.is_empty()).unwrap_or(&n.keywords_all)),
+    };
+    let original = n.append_original.then_some(stem.as_str());
+    let ext = ImageFormat::from(web.format).ext();
+    format!("{}.{ext}", naming::seo_name(&n.prefix, &keywords, original, &stem, 1, sep))
 }
 
 /// „42 Fotos, 3 Videos und eine Schrift“

@@ -259,3 +259,7 @@ body { display: grid; place-items: center; }
   padding: calc(0.5 * var(--u)) calc(2.5 * var(--u));
   white-space: nowrap;
 }
+
+/* „Meine Standards ▸“ in the settings: the heading of the folded defaults */
+.row.fold { margin-top: calc(2.5 * var(--u)); }
+.row.fold .label { cursor: pointer; font-weight: 600; }

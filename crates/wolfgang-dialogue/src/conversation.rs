@@ -7,7 +7,7 @@ use crate::template::{self, Var};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Arc;
-use wolfgang_core::naming::{self, Separator};
+use wolfgang_core::naming::Separator;
 use wolfgang_core::run::{Note, Report};
 use wolfgang_core::settings::{ImageSettings, PdfMode};
 use wolfgang_core::{ImageFormat, RerunPolicy, RunSettings, UserStore};
@@ -572,30 +572,9 @@ impl Conversation {
         }
     }
 
-    /// How long the videos and transcripts will take, from what ffprobe found (`None`
-    /// without either, or if a file couldn't be read). Other piles are quick in comparison.
+    /// How long the videos and transcripts will take (see [`crate::context::estimate`]).
     fn estimate(&self) -> Option<std::time::Duration> {
-        let settings = self.settings();
-        let only_new = self.state.draft.rerun == RerunPolicy::OnlyNew;
-        let s = &self.ctx.summary;
-        let infos = |facts: &'_ [wolfgang_core::workspace::VideoFacts]| -> Option<Vec<wolfgang_core::media::MediaInfo>> {
-            facts.iter().filter(|f| !(only_new && f.known)).map(|f| f.info.clone()).collect()
-        };
-        let mut total = None;
-        if let Some(v) = &settings.videos {
-            let videos = infos(&s.video_facts)?;
-            total = Some(wolfgang_core::media::estimate(&videos.iter().collect::<Vec<_>>(), v)?);
-        }
-        let mut lengths = Vec::new();
-        for (on, facts) in [(settings.video_transcript.is_some(), &s.video_facts), (settings.audio_transcript.is_some(), &s.audio_facts)] {
-            if on {
-                lengths.extend(infos(facts)?.iter().map(|i| i.duration).collect::<Option<Vec<f64>>>()?);
-            }
-        }
-        if !lengths.is_empty() {
-            total = Some(total.unwrap_or_default() + wolfgang_core::transcribe::estimate(&lengths));
-        }
-        total
+        crate::context::estimate(&self.ctx.summary, &self.settings(), self.state.draft.rerun == RerunPolicy::OnlyNew)
     }
 
     /// `Urlaub/wolfgang_output`: the output folder alone says too little.
@@ -610,16 +589,7 @@ impl Conversation {
 
     /// Example file name for the first image with the current naming choices.
     fn preview(&self, sep: Separator) -> String {
-        let w = &self.state.draft.web;
-        let n = &w.naming;
-        let (dir, stem) = self.ctx.sample_image.clone().unwrap_or_else(|| (String::new(), "bild".into()));
-        let keywords = match self.ctx.keyword_words.get(&dir).filter(|_| n.use_keyword_files) {
-            Some(words) => words.clone(),
-            None => naming::keyword_words(n.folder_keywords.get(&dir).filter(|k| !k.is_empty()).unwrap_or(&n.keywords_all)),
-        };
-        let original = n.append_original.then_some(stem.as_str());
-        let ext = ImageFormat::from(w.format).ext();
-        format!("{}.{ext}", naming::seo_name(&n.prefix, &keywords, original, &stem, 1, sep))
+        crate::context::name_preview(&self.ctx, &self.state.draft.web, sep)
     }
 
     /// „Also: 42 Fotos fürs Web als WebP, 1600 px, Qualität 80 …“

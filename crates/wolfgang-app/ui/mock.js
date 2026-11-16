@@ -10,6 +10,8 @@
 //   ?addon=installing                … or is being downloaded
 //   ?character=ully|burgunde         look at the office as Ully or Burgunde
 //   ?check                           paste example.com (⌘V) and get the printout
+//   ?normal                          „Normaler Modus“ (with &demo for a dropped pile,
+//                                    &demo=photos for photos only, &panel=settings)
 'use strict';
 
 if (!window.__TAURI__) {
@@ -54,7 +56,62 @@ if (!window.__TAURI__) {
       }, 90);
     };
 
+    // Normal mode: remembered per tab, so switching (which reloads) works in the preview.
+    const q = new URLSearchParams(location.search);
+    let normalMode = sessionStorage.getItem('normal') ? sessionStorage.getItem('normal') === '1' : q.has('normal');
+    const pile = (key, total, known = 0) => ({ key, total, known });
+    const deskViews = {
+      mixed: {
+        piles: [pile('images', 42, 12), pile('videos', 3), pile('audio', 1), pile('pdfs', 1), pile('fonts', 6)], csv_tables: 0, known: 12, fresh: 41,
+        unknown: ['Kunde/Notizen.pages', 'Kunde/.DS_Store-alt', 'Kunde/Logo.ai'], duplicates: 1,
+        keyword_folders: [{ dir: 'Team', words: 'team meeting koeln' }], folders_without_keywords: ['', 'Buero'], root_name: 'Kunde',
+        videos_with_sound: 2, animated_gifs: 1, transparent_gifs: 1, media_tools_missing: false, transcription: addonParam === '',
+        output_folder: 'Kunde/wolfgang_output',
+      },
+      photos: {
+        piles: [pile('images', 18)], csv_tables: 0, known: 0, fresh: 18, unknown: [], duplicates: 0,
+        keyword_folders: [], folders_without_keywords: [''], root_name: 'Urlaub', videos_with_sound: 0, animated_gifs: 0, transparent_gifs: 0,
+        media_tools_missing: false, transcription: false, output_folder: 'Urlaub/wolfgang_output',
+      },
+    };
+    let desk = null;
+    const seo = s => s.toLowerCase().replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss').split(/[^a-z0-9]+/).filter(Boolean);
+    const lastRun = { images: { mode: 'web', format: 'webp', max_side: 1600, quality: 80, naming: { prefix: 'Kunde Müller', use_keyword_files: true, folder_keywords: {}, keywords_all: '', separator: 'dash', append_original: false } } };
+
     const commands = {
+      app_prefs: () => ({ normal_mode: normalMode, normal_size: null }),
+      set_normal_mode: ({ on }) => { normalMode = on; sessionStorage.setItem('normal', on ? '1' : '0'); return { normal_mode: on }; },
+      office_size: () => ({ current: 4, max: 6, default: 4 }),
+      set_office_size: ({ scale }) => ({ current: scale, max: 6, default: 4 }),
+      desk_drop: ({ paths, add }) => {
+        if (add && desk && !paths.length) return desk;
+        const kind = (paths[0] || '').split('/').pop();
+        desk = { ...(deskViews[kind] || deskViews.mixed), defaults: settings, last_run: lastRun, presets: presets.map(p => ({ name: p.name, settings: lastRun })) };
+        return desk;
+      },
+      desk_clear: () => { desk = null; },
+      desk_preview: ({ web }) => {
+        const n = web.naming;
+        const words = [...seo(n.prefix), ...seo(n.keywords_all || ''), ...(n.append_original ? ['img', '4711'] : []), '0001'];
+        const name = n.separator === 'caps' ? words.map(w => w[0].toUpperCase() + w.slice(1)).join('') : words.join(n.separator === 'underscore' ? '_' : '-');
+        return `${name}.${web.format}`;
+      },
+      desk_estimate: ({ settings: s }) => (s.videos ? 'etwa 9 Minuten' : s.video_transcript || s.audio_transcript ? 'etwa 4 Minuten' : null),
+      desk_start: () => {
+        const total = 30;
+        let done = 0;
+        const t = setInterval(() => {
+          done++;
+          emit('progress', { done, total, current: `Kunde/Team/IMG_${4700 + done}.heic`, fraction: done / total, ok: true });
+          if (done === total) {
+            clearInterval(t);
+            emit('desk-finished', { converted: 29, cancelled: false, saved: '41,7 MB → 1,2 MB (97 % kleiner)', duration: '12 Sekunden',
+              lines: ['3 Bilder aus PDFs geholt.', '1 Video: Original übernommen, war schon gut gepackt.'],
+              failed: [['Kunde/kaputt.heic', 'Das Bild lässt sich nicht lesen']], output: '/Users/du/Kunde/wolfgang_output', output_folder: 'Kunde/wolfgang_output' });
+          }
+        }, 60);
+      },
+      save_preset: ({ name }) => { presets = [...presets.filter(p => p.name !== name), { name, description: 'fürs Web als WebP, 1600 px, Qualität 80' }]; return presets.map(p => ({ name: p.name, settings: lastRun })); },
       settings: () => settings,
       set_settings: ({ defaults }) => (settings = defaults),
       presets: () => presets,
@@ -85,11 +142,12 @@ if (!window.__TAURI__) {
       take_pending: () => [],
       character: () => character,
       clipboard_text: () => 'example.com',
+      frontend_ready: () => {},
       check_looking: ({ url }) => {
         if (!url.includes('.')) throw `„${url}“ ist keine Adresse, mit der ich was anfangen kann`;
         return `Moment, ich guck mir ${url} mal an …`;
       },
-      check_url: () => new Promise(ok => setTimeout(() => ok({ verdict: 'odd', mood: 'thinking', says: "Geht – aber guck mal: Die Seite bleibt auf http – es gibt keine Weiterleitung auf https.", report: exampleReport }), 2500)),
+      check_url: () => new Promise(ok => setTimeout(() => ok({ verdict: 'odd', mood: 'thinking', says: "Geht – aber guck mal: Die Seite bleibt auf http – es gibt keine Weiterleitung auf https.", finding: 'Die Seite bleibt auf http – es gibt keine Weiterleitung auf https.', report: exampleReport }), 2500)),
       transcription: () => addon,
       install_transcription: () => {
         // Pretends to download the add-on in about 8 seconds.

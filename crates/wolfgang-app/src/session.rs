@@ -2,12 +2,13 @@
 //! a drop starts a conversation, answers move it on, a run converts, and
 //! whatever should be remembered is saved when the conversation ends.
 
+use crate::desk::{Desk, DeskView, ResultView};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use wolfgang_core::run::Report;
-use wolfgang_core::store::Defaults;
-use wolfgang_core::{Plan, UserStore, Workspace};
+use wolfgang_core::store::{AppPrefs, Defaults, Preset};
+use wolfgang_core::{Plan, RunSettings, UserStore, Workspace};
 use wolfgang_core::workspace::Piles;
 use wolfgang_dialogue::context::describe_settings;
 use wolfgang_dialogue::{Context, Conversation, Script, Step};
@@ -39,13 +40,17 @@ pub struct Office {
     pub store: UserStore,
     script: Arc<Script>,
     session: Option<Session>,
+    /// Normal mode's drop (no conversation).
+    desk: Option<Desk>,
     rng: fastrand::Rng,
     pub running: bool,
+    /// The normal-mode window size changed and isn't saved yet.
+    size_changed: bool,
 }
 
 impl Office {
     pub fn new(store_path: PathBuf, store: UserStore, script: Arc<Script>) -> Self {
-        Self { store_path, store, script, session: None, rng: fastrand::Rng::new(), running: false }
+        Self { store_path, store, script, session: None, desk: None, rng: fastrand::Rng::new(), running: false, size_changed: false }
     }
 
     /// Something landed on the desk: look at it and start talking.
@@ -154,6 +159,86 @@ impl Office {
         self.store.remove_preset(name);
         self.save()?;
         Ok(self.presets())
+    }
+
+    // ── Normal mode ─────────────────────────────────────────────────────────
+
+    /// This app's mode and window (Wolfgang, Ully and Burgunde each keep their own).
+    pub fn app_prefs(&self) -> AppPrefs {
+        self.store.app(&wolfgang_core::character::current().key)
+    }
+
+    /// Switches between game and normal mode; whatever was on the desk is dropped.
+    pub fn set_normal_mode(&mut self, on: bool) -> Result<AppPrefs, String> {
+        if self.running {
+            return Err("Das geht nach dem Konvertieren.".into());
+        }
+        self.session = None;
+        self.desk = None;
+        self.store.app_mut(&wolfgang_core::character::current().key).normal_mode = on;
+        self.save()?;
+        Ok(self.app_prefs())
+    }
+
+    /// The normal-mode window was resized (saved with the next save, or on quit).
+    pub fn set_normal_size(&mut self, size: (u32, u32)) {
+        let prefs = self.store.app_mut(&wolfgang_core::character::current().key);
+        if prefs.normal_size != Some(size) {
+            prefs.normal_size = Some(size);
+            self.size_changed = true;
+        }
+    }
+
+    /// On quit: only if the window size changed, so the CLI's changes in the
+    /// meantime aren't overwritten for nothing.
+    pub fn save_window_size(&mut self) {
+        if std::mem::take(&mut self.size_changed) {
+            let _ = self.save();
+        }
+    }
+
+    /// Files dropped in normal mode; `add` keeps what's already there.
+    pub fn desk_drop(&mut self, paths: Vec<PathBuf>, add: bool) -> Result<DeskView, String> {
+        if self.running {
+            return Err("Bitte warten, bis das Konvertieren fertig ist.".into());
+        }
+        let desk = Desk::open(paths, self.desk.as_ref().filter(|_| add), &self.store)?;
+        let view = desk.view();
+        self.desk = Some(desk);
+        Ok(view)
+    }
+
+    pub fn desk_clear(&mut self) {
+        if !self.running {
+            self.desk = None;
+        }
+    }
+
+    pub fn desk(&self) -> Result<&Desk, String> {
+        self.desk.as_ref().ok_or_else(|| "Es liegt nichts bereit.".to_string())
+    }
+
+    pub fn desk_begin(&mut self, settings: RunSettings, again: bool) -> Result<Plan, String> {
+        if self.running {
+            return Err("Es läuft schon etwas.".into());
+        }
+        let plan = self.desk.as_mut().ok_or("Es liegt nichts bereit.")?.plan(settings, again)?;
+        self.running = true;
+        Ok(plan)
+    }
+
+    pub fn desk_finished(&mut self, report: &Report) -> Result<ResultView, String> {
+        self.running = false;
+        let desk = self.desk.as_mut().ok_or("Es liegt nichts bereit.")?;
+        let view = desk.finished(report, &mut self.store);
+        self.save()?;
+        Ok(view)
+    }
+
+    pub fn save_preset(&mut self, name: &str, settings: RunSettings) -> Result<Vec<Preset>, String> {
+        self.store.save_preset(name, settings).map_err(|e| e.to_string())?;
+        self.save()?;
+        Ok(self.store.presets.clone())
     }
 
     fn save(&self) -> Result<(), String> {

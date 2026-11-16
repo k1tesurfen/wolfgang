@@ -3,10 +3,15 @@
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod desk;
 mod session;
 
+use desk::{DeskView, ResultView};
 use serde::Serialize;
 use session::{About, Office, PresetView, View};
+use wolfgang_core::run::Report;
+use wolfgang_core::store::{AppPrefs, Preset};
+use wolfgang_core::{Plan, RunSettings};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -73,6 +78,26 @@ struct Progress {
 #[tauri::command]
 fn start(app: AppHandle, state: State<AppState>) -> Res<()> {
     let plan = lock(&state).begin_run()?;
+    run_in_background(app, &state, plan, |app, office, report| {
+        let view = match report {
+            Ok(r) => office.finished(&r),
+            Err(e) => {
+                office.running = false;
+                Err(e.to_string())
+            }
+        };
+        match view {
+            Ok(v) => app.emit("finished", v),
+            Err(e) => app.emit("failed", e),
+        }
+        .ok();
+    });
+    Ok(())
+}
+
+/// Runs a plan on a worker thread: `progress` events while it goes, then `done`
+/// with the office locked again.
+fn run_in_background(app: AppHandle, state: &AppState, plan: Plan, done: impl FnOnce(&AppHandle, &mut Office, wolfgang_core::Result<Report>) + Send + 'static) {
     let cancel = state.cancel.clone();
     cancel.store(false, Ordering::SeqCst);
     std::thread::spawn(move || {
@@ -102,21 +127,92 @@ fn start(app: AppHandle, state: State<AppState>) -> Res<()> {
         );
         let state = app.state::<AppState>();
         let mut office = state.office.lock().unwrap_or_else(|e| e.into_inner());
-        let view = match report {
-            Ok(r) => office.finished(&r),
+        done(&app, &mut office, report);
+    });
+}
+
+// ── Normal mode: cards instead of the conversation ───────────────────────────
+
+/// A drop in normal mode; `add` puts it next to what's already there.
+#[tauri::command]
+async fn desk_drop(state: State<'_, AppState>, paths: Vec<String>, add: bool) -> Res<DeskView> {
+    eprintln!("wolfgang-app: {} item(s) dropped (normal mode)", paths.len());
+    lock(&state).desk_drop(paths.into_iter().map(PathBuf::from).collect(), add)
+}
+
+#[tauri::command]
+fn desk_clear(state: State<AppState>) {
+    lock(&state).desk_clear();
+}
+
+/// The first photo's new name with these web settings.
+#[tauri::command]
+fn desk_preview(state: State<AppState>, web: wolfgang_core::settings::WebSettings) -> Res<String> {
+    Ok(lock(&state).desk()?.preview(&web))
+}
+
+/// „etwa 9 Minuten“, or nothing when it's quick.
+#[tauri::command]
+fn desk_estimate(state: State<AppState>, settings: RunSettings, again: bool) -> Res<Option<String>> {
+    Ok(lock(&state).desk()?.estimate(&settings, again))
+}
+
+/// „Konvertieren“: `progress` events, then `desk-finished` (or `failed`).
+#[tauri::command]
+fn desk_start(app: AppHandle, state: State<AppState>, settings: RunSettings, again: bool) -> Res<()> {
+    let plan = lock(&state).desk_begin(settings, again)?;
+    run_in_background(app, &state, plan, |app, office, report| {
+        let view: Res<ResultView> = match report {
+            Ok(r) => office.desk_finished(&r),
             Err(e) => {
                 office.running = false;
                 Err(e.to_string())
             }
         };
-        drop(office);
         match view {
-            Ok(v) => app.emit("finished", v),
+            Ok(v) => app.emit("desk-finished", v),
             Err(e) => app.emit("failed", e),
         }
         .ok();
     });
     Ok(())
+}
+
+#[tauri::command]
+fn save_preset(state: State<AppState>, name: String, settings: RunSettings) -> Res<Vec<Preset>> {
+    lock(&state).save_preset(&name, settings)
+}
+
+#[tauri::command]
+fn app_prefs(state: State<AppState>) -> AppPrefs {
+    lock(&state).app_prefs()
+}
+
+/// „Normaler Modus“ / „Spiel-Modus“: remembers it and reshapes the window; the
+/// UI then reloads into the other mode.
+#[tauri::command]
+fn set_normal_mode(window: tauri::WebviewWindow, state: State<AppState>, on: bool) -> Res<AppPrefs> {
+    let (prefs, scale) = {
+        let mut office = lock(&state);
+        let prefs = office.set_normal_mode(on)?;
+        (prefs, office.store.defaults.window_scale)
+    };
+    shape_window(&window, &prefs, scale);
+    Ok(prefs)
+}
+
+/// Normal mode: a plain window that can be resized. Game mode: exactly the office.
+fn shape_window(window: &tauri::WebviewWindow, prefs: &AppPrefs, scale: Option<u32>) {
+    if prefs.normal_mode {
+        let (w, h) = prefs.normal_size.unwrap_or(NORMAL_SIZE);
+        let _ = window.set_resizable(true);
+        let _ = window.set_min_size(Some(tauri::LogicalSize::new(NORMAL_MIN.0 as f64, NORMAL_MIN.1 as f64)));
+        let _ = window.set_size(tauri::LogicalSize::new(w.max(NORMAL_MIN.0) as f64, h.max(NORMAL_MIN.1) as f64));
+    } else {
+        let _ = window.set_min_size(Some(tauri::LogicalSize::new(SCENE.0 * 2.0, SCENE.1 * 2.0)));
+        let _ = window.set_resizable(false);
+        set_scale(window, start_scale(window, scale));
+    }
 }
 
 /// The Finder dialog (desk click, ⌘O): files and folders, several at once.
@@ -222,6 +318,8 @@ struct CheckView {
     verdict: &'static str,
     mood: wolfgang_dialogue::Mood,
     says: String,
+    /// The most important finding in plain words (normal mode shows this instead of `says`).
+    finding: String,
     /// The printout (plain text, monospace).
     report: String,
 }
@@ -241,6 +339,7 @@ async fn check_url(state: State<'_, AppState>, url: String) -> Res<CheckView> {
         verdict: c.verdict.key(),
         mood,
         says: script.check.say(c.verdict.key(), &c.host, &finding),
+        finding,
         report: wolfgang_check::report::text(&c, &wolfgang_core::character::current().name),
     })
 }
@@ -410,6 +509,10 @@ fn remove_transcription(state: State<AppState>) -> Res<Addon> {
     Ok(addon(&state))
 }
 
+/// Normal mode's window: first size and the smallest it may get.
+const NORMAL_SIZE: (u32, u32) = (900, 720);
+const NORMAL_MIN: (u32, u32) = (620, 520);
+
 /// Scene size in points; the window is always an exact whole multiple of it.
 const SCENE: (f64, f64) = (320.0, 180.0);
 /// 1280×720: comfortable on Full HD and on Retina screens alike.
@@ -453,6 +556,29 @@ fn zoom(window: tauri::WebviewWindow, state: State<AppState>, delta: i32) -> u32
     set_scale(&window, scale);
     let _ = lock(&state).set_window_scale(remember);
     scale
+}
+
+#[derive(Serialize)]
+struct OfficeSize {
+    current: u32,
+    max: u32,
+    default: u32,
+}
+
+/// „Bürogröße“ in the settings: the scale now, the largest that fits, the default.
+#[tauri::command]
+fn office_size(window: tauri::WebviewWindow) -> OfficeSize {
+    let max = max_scale(&window);
+    OfficeSize { current: current_scale(&window), max, default: DEFAULT_SCALE.min(max) }
+}
+
+#[tauri::command]
+fn set_office_size(window: tauri::WebviewWindow, state: State<AppState>, scale: u32) -> OfficeSize {
+    let s = scale.clamp(1, max_scale(&window));
+    set_scale(&window, s);
+    let _ = lock(&state).set_window_scale(Some(s));
+    let _ = window.center();
+    office_size(window)
 }
 
 /// The UI reports in after starting: errors go to the log, and with
@@ -530,22 +656,50 @@ fn main() {
             check_looking,
             check_url,
             clipboard_text,
-            copy_text
+            copy_text,
+            desk_drop,
+            desk_clear,
+            desk_preview,
+            desk_estimate,
+            desk_start,
+            save_preset,
+            app_prefs,
+            set_normal_mode,
+            office_size,
+            set_office_size
         ])
         .setup(|app| {
-            // Exactly the office, at the largest whole scale that fits this screen.
+            // Game mode: exactly the office, at the largest whole scale that fits this screen.
+            // Normal mode: a plain window at the size it had last time.
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.set_title(&wolfgang_core::character::current().name);
-                let saved = app.state::<AppState>().office.lock().map(|o| o.store.defaults.window_scale).unwrap_or(None);
-                set_scale(&window, start_scale(&window, saved));
+                let (prefs, scale) = app.state::<AppState>().office.lock().map(|o| (o.app_prefs(), o.store.defaults.window_scale)).unwrap_or_default();
+                shape_window(&window, &prefs, scale);
                 let _ = window.center();
                 let _ = window.show();
             }
             Ok(())
         })
+        .on_window_event(|window, event| {
+            // Normal mode remembers its window size (written on quit).
+            if let tauri::WindowEvent::Resized(size) = event {
+                let state = window.state::<AppState>();
+                let mut office = state.office.lock().unwrap_or_else(|e| e.into_inner());
+                if office.app_prefs().normal_mode && !window.is_minimized().unwrap_or(false) {
+                    let sf = window.scale_factor().unwrap_or(1.0);
+                    let l = size.to_logical::<f64>(sf);
+                    if l.width >= NORMAL_MIN.0 as f64 && l.height >= NORMAL_MIN.1 as f64 {
+                        office.set_normal_size((l.width.round() as u32, l.height.round() as u32));
+                    }
+                }
+            }
+        })
         .build(tauri::generate_context!())
         .expect("Wolfgang's office won't open")
         .run(|_app, _event| {
+            if let tauri::RunEvent::Exit = &_event {
+                _app.state::<AppState>().office.lock().unwrap_or_else(|e| e.into_inner()).save_window_size();
+            }
             // Files dropped on the Dock icon (or opened with Wolfgang).
             #[cfg(target_os = "macos")]
             if let tauri::RunEvent::Opened { urls } = &_event {

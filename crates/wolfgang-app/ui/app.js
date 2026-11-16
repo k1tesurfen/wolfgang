@@ -33,15 +33,23 @@ let token = 0;              // bumps on every new view; stale async work checks 
 let typing = null;          // { finish() } while the typewriter runs
 let choices = [], sel = 0;  // current answers: [{ label, current, small, run }]
 let hover = null;
+let normal = false;         // „Normaler Modus“: normal.js runs the window, none of the office
 
 /* ── Loading ───────────────────────────────────────────────────────────── */
 
 const load = src => new Promise((ok, err) => { const i = new Image(); i.onload = () => ok(i); i.onerror = err; i.src = src; });
 
 async function init() {
-  SCENE = await (await fetch('pixel/scene.json')).json();
   try { CHARACTER = await api.invoke('character'); } catch { /* keep Wolfgang */ }
   document.title = CHARACTER.name;
+  // Normal mode: no office at all. (In a browser: `?normal`.)
+  const prefs = await api.invoke('app_prefs').catch(() => ({}));
+  if (prefs.normal_mode) {
+    normal = true;
+    $('stage').remove();
+    return Normal.start({ api, tauri: !!T, character: CHARACTER, errors: uiErrors });
+  }
+  SCENE = await (await fetch('pixel/scene.json')).json();
   // This character's office, desk sprite and portraits (Wolfgang's stand in for what's missing).
   const art = SCENE.characters[CHARACTER.key] || SCENE.characters.wolfgang;
   Object.assign(SCENE, { background: art.background, wolfgang: art.desk, portraits: art.portraits });
@@ -291,7 +299,7 @@ const Wilma = (() => {
 })();
 
 // Now and then, when nobody needs him, Wolfgang has a sip of coffee.
-setInterval(() => { if (mode === 'idle' && anim === 'idle' && Math.random() < 0.35) { play('sip', 2300); Sound.sip(); } }, 20000);
+setInterval(() => { if (!normal && mode === 'idle' && anim === 'idle' && Math.random() < 0.35) { play('sip', 2300); Sound.sip(); } }, 20000);
 
 /* ── Speaking ──────────────────────────────────────────────────────────── */
 
@@ -434,6 +442,7 @@ function showInput(spec, others = []) {
    people, letters that do nothing otherwise: j k l h g G i / o s p q, Ctrl-[.
    None of it applies while typing in a text field. */
 addEventListener('keydown', e => {
+  if (normal) return;
   // ⌘+ / ⌘− / ⌘0: bigger, smaller, best fit (always whole pixel steps).
   if (e.metaKey && T && ['=', '+', '-', '0'].includes(e.key)) {
     e.preventDefault();
@@ -708,6 +717,7 @@ function reportKey(e, key) {
 
 // If macOS's Edit menu takes ⌘V before the keydown above sees it, the webview gets a paste event instead.
 addEventListener('paste', e => {
+  if (normal) return;
   if (e.target.tagName === 'INPUT' || mode !== 'idle') return;
   const text = e.clipboardData?.getData('text/plain')?.trim();
   if (!text) return;
@@ -717,6 +727,7 @@ addEventListener('paste', e => {
 
 $('report-close').onclick = closeReport;
 $('report-copy').onclick = copyReport;
+$('panel-close').onclick = () => { Sound.confirm(); closePanel(); };
 
 /* ── Updates ───────────────────────────────────────────────────────────── */
 
@@ -933,7 +944,6 @@ function closePanel() {
   mode = panelReturn === 'talk' ? 'talk' : 'idle';
   restyle();
 }
-$('panel-close').onclick = () => { Sound.confirm(); closePanel(); };
 
 function button(label, on, run) {
   const b = document.createElement('div');
@@ -943,16 +953,21 @@ function button(label, on, run) {
   return b;
 }
 
+// „Meine Standards“ start folded every time the settings open.
+let standardsOpen = false;
+
 async function settingsPanel() {
   $('panel-title').textContent = 'Einstellungen';
+  standardsOpen = false;
   let d = await api.invoke('settings');
+  let size = T ? await api.invoke('office_size').catch(() => null) : { current: 4, max: 6, default: 4 };
   const body = $('panel-body');
   const save = async patch => {
     d = await api.invoke('set_settings', { defaults: { ...d, ...patch } });
     Sound.enabled = d.sound;
     draw();
   };
-  const row = (label, options, value, key) => {
+  const row = (label, options, value, key, run = v => save({ [key]: v })) => {
     const r = document.createElement('div');
     r.className = 'row';
     r.innerHTML = `<div class="label">${label}</div>`;
@@ -960,27 +975,61 @@ async function settingsPanel() {
     seg.className = 'seg';
     const values = options.map(o => o[1]);
     if (!values.includes(value)) options = [...options, [value === null ? 'Original' : `${value}${key === 'video_size' ? 'p' : ''}`, value]];
-    options.forEach(([text, v]) => seg.appendChild(button(text, v === value, () => save({ [key]: v }))));
+    options.forEach(([text, v]) => seg.appendChild(button(text, v === value, () => run(v))));
     r.appendChild(seg);
     body.appendChild(r);
   };
+  // A row with one button that does something (rather than picking a value).
+  const action = (label, text, run) => {
+    const r = document.createElement('div');
+    r.className = 'row';
+    r.innerHTML = `<div class="label">${label}</div><div class="seg"></div>`;
+    r.lastChild.appendChild(button(text, false, run));
+    body.appendChild(r);
+    return r;
+  };
+  const toggle = () => { standardsOpen = !standardsOpen; draw(); };
+  // Bürogröße: Klein, Normal, Groß … as far as the screen allows (⌘+ / ⌘− do the same).
+  const sizes = () => {
+    const names = { 2: 'Winzig', 3: 'Klein', 4: 'Normal', 5: 'Groß', 6: 'Riesig' };
+    const list = Object.keys(names).map(Number).filter(n => n <= size.max).map(n => [names[n], n]);
+    return list.length ? list : [[`${size.current}×`, size.current]];
+  };
   const draw = () => {
     body.innerHTML = '';
-    row('Fürs Web am liebsten', [['WebP', 'webp'], ['AVIF', 'avif']], d.web_format, 'web_format');
-    row('Größe fürs Web', [['800', 800], ['1600', 1600], ['2400', 2400]], d.max_side, 'max_side');
-    row('Qualität fürs Web', [['65', 65], ['80', 80], ['90', 90]], d.quality, 'quality');
-    row('Hochwertig am liebsten', [['JPG', 'jpg'], ['WebP', 'webp'], ['AVIF', 'avif'], ['PNG', 'png']], d.hq_format, 'hq_format');
-    row('Wörter trennen mit', [['bild-name', 'dash'], ['bild_name', 'underscore'], ['BildName', 'caps']], d.separator, 'separator');
-    row('Videos am liebsten', [['MP4', 'mp4'], ['WebM', 'webm']], d.video_format, 'video_format');
-    row('Videogröße', [['720p', 720], ['1080p', 1080], ['Original', null]], d.video_size, 'video_size');
-    row('Videoqualität', [['Kleiner', 'smaller'], ['Ausgewogen', 'balanced'], ['Schöner', 'nicer']], d.video_quality, 'video_quality');
-    row('Audio am liebsten', [['MP3', 'mp3'], ['AAC', 'aac']], d.audio_format, 'audio_format');
+    action('Ansicht', 'Normaler Modus', switchToNormal);
     row('Geräusche', [['An', true], ['Aus', false]], d.sound, 'sound');
+    if (size) row('Bürogröße', sizes(), size.current, 'size', async v => { size = await api.invoke('set_office_size', { scale: v }).catch(() => size); draw(); });
     addonRow(body, draw);
+    const fold = action(`${standardsOpen ? '▾' : '▸'} Meine Standards`, standardsOpen ? 'Zuklappen' : 'Aufklappen', toggle);
+    fold.classList.add('fold');
+    fold.querySelector('.label').onclick = () => { Sound.confirm(); toggle(); };
+    if (standardsOpen) {
+      row('Fürs Web am liebsten', [['WebP', 'webp'], ['AVIF', 'avif']], d.web_format, 'web_format');
+      row('Größe fürs Web', [['800', 800], ['1600', 1600], ['2400', 2400]], d.max_side, 'max_side');
+      row('Qualität fürs Web', [['65', 65], ['80', 80], ['90', 90]], d.quality, 'quality');
+      row('Hochwertig am liebsten', [['JPG', 'jpg'], ['WebP', 'webp'], ['AVIF', 'avif'], ['PNG', 'png']], d.hq_format, 'hq_format');
+      row('Wörter trennen mit', [['bild-name', 'dash'], ['bild_name', 'underscore'], ['BildName', 'caps']], d.separator, 'separator');
+      row('Videos am liebsten', [['MP4', 'mp4'], ['WebM', 'webm']], d.video_format, 'video_format');
+      row('Videogröße', [['720p', 720], ['1080p', 1080], ['Original', null]], d.video_size, 'video_size');
+      row('Videoqualität', [['Kleiner', 'smaller'], ['Ausgewogen', 'balanced'], ['Schöner', 'nicer']], d.video_quality, 'video_quality');
+      row('Audio am liebsten', [['MP3', 'mp3'], ['AAC', 'aac']], d.audio_format, 'audio_format');
+    }
     restyle();
   };
   addon = await api.invoke('transcription');
   draw();
+}
+
+/** „Normaler Modus“: remembered for this app; the window reshapes and the page starts over. */
+async function switchToNormal() {
+  try {
+    await api.invoke('set_normal_mode', { on: true });
+    location.reload();
+  } catch (e) {
+    closePanel();
+    oops(e);
+  }
 }
 
 /* ── Add-on for „Nur aufschreiben“ (a row in the settings) ─────────────── */
