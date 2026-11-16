@@ -129,11 +129,11 @@ rüber – mit „📂 Im Finder zeigen“ bist du direkt da.
 | Eigene Antwort | „✎ Selbst eintippen …“, z. B. eine eigene Größe |
 | „So wie letztes Mal“ | Wolfgang merkt sich deine letzte Wahl – für Fotos, Videos und Audio jeweils einzeln |
 | Vorlagen | nach getaner Arbeit „Als Vorlage merken“; ansehen und löschen über das **Klemmbrett** |
-| Einstellungen | auf den **Computer** klicken: Lieblingsformate für Bilder, Videos und Audio, Größe, Qualität, Schreibweise, Geräusche – und das Zusatzmodul fürs Aufschreiben |
+| Einstellungen | auf den **Computer** klicken: Normaler Modus, Geräusche, Bürogröße, das Zusatzmodul fürs Aufschreiben – und eingeklappt unter „Meine Standards“ die Lieblingsformate für Bilder, Videos und Audio, Größe, Qualität und Schreibweise |
 | Über Wolfgang | auf **Wolfgang selbst** klicken – dort gibt's auch die Kommandozeile |
 | Kaffeepause | auf die **Tasse** klicken |
 | Wilma | die orange Bürokatze wohnt in ihrem Kissen unterm Schreibtisch. Meistens schläft sie, manchmal macht sie eine Runde durchs Büro. Streicheln: draufklicken |
-| Größer / kleiner | **⌘+** / **⌘−** (Wolfgang merkt sich die Größe), **⌘0** = Standard |
+| Größer / kleiner | **⌘+** / **⌘−** oder „Bürogröße“ in den Einstellungen (Wolfgang merkt sich die Größe), **⌘0** = Standard |
 | Alle Tastenkürzel | **?** |
 
 **Für Tastatur- und Vim-Leute:** Wolfgang lässt sich komplett ohne Maus bedienen. Zusätzlich zu den
@@ -142,6 +142,17 @@ Antwort), **i** oder **/** (selbst eintippen), **o** (Dateien auswählen), **s**
 **p** (Vorlagen), **q** (Fenster zu) und **Ctrl-[** wie Esc. In den Einstellungen gehen
 **j k** durch die Zeilen und **h l** durch die Knöpfe, **Enter** drückt. Wer nur die Maus nimmt,
 merkt davon nichts, und solange du in einem Textfeld tippst, sind die Buchstaben ganz normal Buchstaben.
+
+### Lieber ohne Spiel: der normale Modus
+
+Nicht jeder hat Lust auf Pixel-Büro und Gespräch. In den Einstellungen schaltet **„Normaler Modus“**
+Wolfgang zu einem schlichten, dunklen Werkzeug um – gleiche Umwandlung, kein Büro, keine Figur.
+Eine große Ablagefläche in der Mitte; nach dem Ablegen gibt es eine Karte pro Stapel (Fotos,
+Videos, Audio, PDFs …). Auf jeder Karte wählst du zuerst, was passieren soll – fürs Web,
+hochwertig, MP4, aufschreiben … –, dann klappen die passenden Einstellungen auf, vorbelegt wie
+beim letzten Mal. Oben gibt es die Vorlagen, unten rechts **Konvertieren**. **⌘V** auf der leeren
+Fläche prüft eine Webseite. Zurück ins Büro geht's in den Einstellungen (Zahnrad unten links,
+oder **⌘,**) mit „Spiel-Modus“. Jede App merkt sich ihren Modus und ihre Fenstergröße.
 
 ---
 

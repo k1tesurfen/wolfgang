@@ -459,10 +459,10 @@ Picking it writes the transcript only: the video/audio isn't converted and the p
 9. ✅ **Video + audio** (v2.2): MP4/WebM for the web, poster frames, MP3/AAC, on a bundled LGPL ffmpeg. See *Milestone 9* and *Milestone 9 result*.
 10. ✅ **Polish** (v2.3): video/audio settings, time estimates, well-packed videos, animated GIFs → videos, pictures from PDFs, releases from the Mac. See *Milestone 10*.
 11. ✅ **Transcription** (v2.3.5): meeting recordings (video/audio) → German `.txt`, locally with whisper.cpp; add-on installed in the settings, „Nur aufschreiben“ always the last answer. See *Milestone 11* and *Milestone 11 result*.
-12. **Settings panel tidy-up + „Bürogröße“** (planned): grouped settings, the defaults folded away, the window size as a setting. See section 10.
+12. ✅ **Settings panel tidy-up + „Bürogröße“** (released in 2.3.7 with milestone 15): grouped settings, the defaults folded away, the window size as a setting. See section 10.
 13. 🚧 **Three characters: Wolfgang, Ully and Burgunde** (**work in progress**: three apps from one source, decided 2026-11-11; waiting for the art; see section 10).
 14. **„Guck mal, die Seite“: URL check** (step 1 released in 2.3.6, step 2 planned): paste a URL, Wolfgang finds out whether DNS, the server or WordPress is the problem and prints a report. See section 10.
-15. 🚧 **„Normaler Modus“** (built 2026-11-16, waiting for the user's test): every app can also be a plain, dark conversion tool without the game. Includes milestone 12's „Meine Standards“ accordion and „Bürogröße“. See section 11.
+15. ✅ **„Normaler Modus“** (released in 2.3.7, 2026-11-16): every app can also be a plain, dark conversion tool without the game. Includes milestone 12's „Meine Standards“ accordion and „Bürogröße“. See section 11.
 
 Between 11 and 12 (2026-11-11, released in 2.3.6): **tables** (Excel/XLS/ODS → CSV per sheet, CSV → Excel without Excel's guessing), **PDFs smaller for downloads** (a question for PDFs: pictures out or smaller; oversized pictures → 2000 px JPEG, editor leftovers out, result read back), **speech evenly loud** (loudnorm −16 LUFS). Tested on real PDFs: a print magazine 30.5 → 21.8 MB, a scanned manual 20 → 8.8 MB, web PDFs left as they were.
 
