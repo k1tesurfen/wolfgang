@@ -642,10 +642,6 @@ const Normal = (() => {
     };
     const pick = (options, key) => seg(options, d[key], v => save({ [key]: v }));
 
-    const general = el('section.panel', {}, el('h2', { text: 'Allgemein' }),
-      el('div.control', {}, el('button.pill', { text: 'Spiel-Modus', disabled: running, onclick: toGame }),
-        el('span.hint', { text: running ? 'Geht nach dem Konvertieren.' : `Zurück in das Büro von ${character.name}` })));
-
     const head = el('button.fold-head', { 'aria-expanded': String(standardsOpen), onclick: () => { standardsOpen = !standardsOpen; redraw(); } },
       el('span.arrow', { text: '▸' }), el('span', { text: 'Meine Standards' }));
     const standards = el('section.panel', {}, head);
@@ -669,50 +665,52 @@ const Normal = (() => {
         el('button.pill', { text: 'Löschen', onclick: async () => { openSettings.presets = await api.invoke('remove_preset', { name: p.name }); redraw(); } })));
     }
 
+    // One card for the actual settings; the standards and the templates get their own.
     const mb = n => Math.round(n / 1e6);
-    const transcription = el('section.panel', {}, el('h2', { text: 'Besprechungen aufschreiben' }),
-      el('p.hint', { text: 'Ein Zusatzmodul, das auf diesem Mac aufschreibt, was in Video- und Audioaufnahmen gesagt wird. Nichts wird hochgeladen.' }));
+    const general = el('section.panel', {}, el('h2', { text: 'Einstellungen' }),
+      field('Ansicht', el('button.pill', { text: 'Spiel-Modus', disabled: running, onclick: toGame }),
+        el('span.hint', { text: running ? 'Geht nach dem Konvertieren.' : `Zurück in das Büro von ${character.name}` })));
+
+    // Besprechungen aufschreiben: the add-on (download, progress, remove).
+    const writing = 'Ein Zusatzmodul schreibt auf diesem Mac auf, was in Video- und Audioaufnahmen gesagt wird. Nichts wird hochgeladen.';
     if (addon.installed) {
-      transcription.append(field('Zusatzmodul', el('span', { text: 'Installiert ✓' }), el('button.pill', { text: 'Entfernen', onclick: async () => {
+      general.append(field('Besprechungen aufschreiben', el('span', { text: 'Installiert ✓' }), el('button.pill', { text: 'Entfernen', onclick: async () => {
         try { addon = await api.invoke('remove_transcription'); addonNote = ''; } catch (e) { addonNote = String(e); }
         redraw();
       } })));
     } else if (addon.installing) {
-      transcription.append(field('Zusatzmodul', el('div.bar', {}, el('div', { style: `width:${Math.round((addonDone / addon.size) * 100)}%` })),
+      general.append(field('Besprechungen aufschreiben', el('div.bar', {}, el('div', { style: `width:${Math.round((addonDone / addon.size) * 100)}%` })),
         el('span.hint', { text: `${mb(addonDone)} von ${mb(addon.size)} MB` }), el('button.pill', { text: 'Abbrechen', onclick: () => api.invoke('cancel_transcription_install') })));
     } else {
-      transcription.append(field('Zusatzmodul', el('button.pill', { text: `Installieren (${mb(addon.size)} MB)`, onclick: async () => {
+      general.append(field('Besprechungen aufschreiben', el('button.pill', { text: `Installieren (${mb(addon.size)} MB)`, onclick: async () => {
         addonNote = ''; addonDone = 0;
         addon = await api.invoke('install_transcription');
         redraw();
-      } })));
+      } }), el('span.hint', { text: writing })));
     }
-    if (addonNote) transcription.append(el('p', { text: addonNote, style: 'color:var(--error)' }));
+    if (addonNote) general.append(field('', el('span', { text: addonNote, style: 'color:var(--error)' })));
 
-    const cli = el('section.panel', {}, el('h2', { text: 'Kommandozeile' }),
-      field('wolfgang im Terminal', about.cli_installed ? el('span', { text: 'Installiert ✓' }) : el('button.pill', { text: 'Installieren', onclick: async () => {
-        try { openSettings.about = await api.invoke('install_cli'); openSettings.cliNote = 'Fertig! „wolfgang“ in einem neuen Terminalfenster ausprobieren.'; }
-        catch (e) { openSettings.cliNote = String(e); }
-        redraw();
-      } })),
-      openSettings.cliNote ? el('p.hint', { text: openSettings.cliNote }) : null);
+    general.append(field('Kommandozeile', about.cli_installed ? el('span', { text: 'wolfgang ist installiert ✓' }) : el('button.pill', { text: 'wolfgang installieren', onclick: async () => {
+      try { openSettings.about = await api.invoke('install_cli'); openSettings.cliNote = 'Fertig! „wolfgang“ in einem neuen Terminalfenster ausprobieren.'; }
+      catch (e) { openSettings.cliNote = String(e); }
+      redraw();
+    } }), openSettings.cliNote ? el('span.hint', { text: openSettings.cliNote }) : null));
 
-    const version = el('section.panel', {}, el('h2', { text: 'Version' }));
+    const name = el('span', { text: `${character.name} ${about.version}` });
     if (updating) {
       const pct = updating.total ? Math.round((updating.done / updating.total) * 100) : 50;
-      version.append(field(`${character.name} ${about.version}`, el('div.bar', {}, el('div', { style: `width:${pct}%` })), el('span.hint', { text: updating.total && updating.done >= updating.total ? 'Startet gleich neu …' : 'Wird geladen …' })));
+      general.append(field('Version', name, el('div.bar', {}, el('div', { style: `width:${pct}%` })), el('span.hint', { text: updating.total && updating.done >= updating.total ? 'Startet gleich neu …' : 'Wird geladen …' })));
     } else if (update) {
-      version.append(field(`${character.name} ${about.version}`, el('button.pill.primary', { text: `Version ${update.version} installieren`, disabled: running, onclick: installUpdate })));
+      general.append(field('Version', name, el('button.pill.primary', { text: `Version ${update.version} installieren`, disabled: running, onclick: installUpdate })));
     } else {
-      version.append(field(`${character.name} ${about.version}`, el('button.pill', { text: 'Nach neuer Version suchen', onclick: async e => {
+      general.append(field('Version', name, el('button.pill', { text: 'Nach neuer Version suchen', onclick: async e => {
         e.target.textContent = 'Suche …';
         update = await api.invoke('check_update').catch(() => null);
         if (!update) openSettings.versionNote = 'Das ist die neueste Version.';
         redraw();
-      } })));
-      if (openSettings.versionNote) version.append(el('p.hint', { text: openSettings.versionNote }));
+      } }), openSettings.versionNote ? el('span.hint', { text: openSettings.versionNote }) : null));
     }
-    return [general, standards, templates, transcription, cli, version];
+    return [general, standards, templates];
   }
 
   async function toGame() {

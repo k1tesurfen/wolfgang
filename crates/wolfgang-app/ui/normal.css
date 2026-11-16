@@ -131,8 +131,10 @@ body.normal {
 
 /* ── Fields ────────────────────────────────────────────────────────────── */
 
-.normal .field { display: grid; grid-template-columns: 160px 1fr; align-items: center; gap: 12px; min-height: var(--button-h); }
-.normal .field > .label { color: var(--muted); }
+/* Labels line up with the first row of buttons, also when a hint wraps below them. */
+.normal .field { display: grid; grid-template-columns: 200px 1fr; align-items: start; gap: 12px; min-height: var(--button-h); }
+.normal .field > .label { color: var(--muted); line-height: var(--button-h); }
+.normal .field > .control { min-height: var(--button-h); }
 .normal .field > .control, .normal .panel > .control { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .normal .hint { color: var(--faint); font-size: 12px; }
 .normal .preview { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; color: var(--text); background: var(--field); padding: 3px 10px; border-radius: var(--r-sm); word-break: break-all; }
