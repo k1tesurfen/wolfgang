@@ -4,6 +4,7 @@
 //   ?demo=mode|size|confirm|done   start with a dropped pile at that step
 //   ?demo=work                       watch Wolfgang work
 //   ?panel=settings|presets|about    open a panel
+//   ?panel=settings&standards        … with „Meine Standards“ open
 //   ?update                          pretend a newer Wolfgang is on GitHub
 //   ?update=install                  … and say yes to it
 //   ?addon                           the add-on for „Nur aufschreiben“ is installed

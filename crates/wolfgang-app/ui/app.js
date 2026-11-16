@@ -958,7 +958,7 @@ let standardsOpen = false;
 
 async function settingsPanel() {
   $('panel-title').textContent = 'Einstellungen';
-  standardsOpen = false;
+  standardsOpen = !T && new URLSearchParams(location.search).has('standards'); // preview: `?panel=settings&standards`
   let d = await api.invoke('settings');
   let size = T ? await api.invoke('office_size').catch(() => null) : { current: 4, max: 6, default: 4 };
   const body = $('panel-body');

@@ -171,7 +171,14 @@ body { display: grid; place-items: center; }
   flex-direction: column;
 }
 #panel h2 { margin: 0 0 calc(2 * var(--u)); font-size: calc(6.5 * var(--u)); font-weight: 600; }
-#panel-body { overflow-y: auto; flex: 1; }
+/* The scroll bar sits in the panel's right padding, not over the buttons: the body
+   reaches into the padding and gives the same room back on the inside (4 + the 2 of
+   the always-reserved bar), so the buttons line up with „Fertig“ either way. */
+#panel-body { overflow-y: auto; flex: 1; margin-right: calc(-6 * var(--u)); padding-right: calc(4 * var(--u)); scrollbar-gutter: stable; }
+#panel-body::-webkit-scrollbar { width: calc(2 * var(--u)); }
+#panel-body::-webkit-scrollbar-track { background: transparent; }
+#panel-body::-webkit-scrollbar-thumb { background: var(--wood); }
+#panel-body::-webkit-scrollbar-button { display: none; }
 #panel-close { align-self: flex-end; margin-top: calc(2 * var(--u)); font-size: calc(5.5 * var(--u)); padding: calc(1 * var(--u)) calc(6 * var(--u)); }
 .row { display: flex; align-items: center; justify-content: space-between; gap: calc(3 * var(--u)); margin-bottom: calc(1.5 * var(--u)); }
 .row .label { flex: 1; }
